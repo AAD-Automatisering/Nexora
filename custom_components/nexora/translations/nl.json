@@ -1,0 +1,100 @@
+{
+  "title": "Nexora",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Nexora-gebouw",
+        "description": "Eén Home Assistant, één Nexora, één gebouw. Fase 1 leest en simuleert alleen; bestaande regelingen blijven zelfstandig werken.",
+        "data": {
+          "name": "Gebouwnaam"
+        }
+      }
+    },
+    "error": {
+      "invalid_name": "Vul een naam in."
+    },
+    "abort": {
+      "single_instance_allowed": "Er is maximaal één Nexora-gebouw per Home Assistant-installatie toegestaan.",
+      "already_configured": "Nexora is al geconfigureerd."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Gebouwindeling",
+        "description": "Wijzigingen worden pas opgeslagen via Opslaan. Sluiten verwerpt de wijzigingen.",
+        "menu_options": {
+          "zone": "Ruimte toevoegen of bewerken",
+          "group": "Buitenunitgroep toevoegen of bewerken",
+          "equipment": "Apparatuur toevoegen of bewerken",
+          "finish": "Opslaan"
+        }
+      },
+      "zone": {
+        "title": "Ruimte",
+        "data": {
+          "record": "Bestaand item of nieuw toevoegen"
+        }
+      },
+      "zone_details": {
+        "title": "Ruimte",
+        "description": "Optionele koppelingen kunnen worden gewist. Bestaande IDs blijven vast. Apparatuur wordt niet aangestuurd.",
+        "data": {
+          "id": "Vast ID",
+          "name": "Naam",
+          "delete": "Dit item verwijderen",
+          "temperature_entity": "Ruimtetemperatuursensor",
+          "controller_entity": "Ruimteregelaar / VTherm (optioneel)",
+          "occupancy_entity": "Aanwezigheidssensor (optioneel)"
+        }
+      },
+      "group": {
+        "title": "Buitenunitgroep",
+        "data": {
+          "record": "Bestaand item of nieuw toevoegen"
+        }
+      },
+      "group_details": {
+        "title": "Buitenunitgroep",
+        "description": "Optionele koppelingen kunnen worden gewist. Bestaande IDs blijven vast. Apparatuur wordt niet aangestuurd.",
+        "data": {
+          "id": "Vast ID",
+          "name": "Naam",
+          "delete": "Dit item verwijderen"
+        }
+      },
+      "equipment": {
+        "title": "Apparatuur",
+        "data": {
+          "record": "Bestaand item of nieuw toevoegen"
+        }
+      },
+      "equipment_details": {
+        "title": "Apparatuur",
+        "description": "Optionele koppelingen kunnen worden gewist. Bestaande IDs blijven vast. Apparatuur wordt niet aangestuurd.",
+        "data": {
+          "id": "Vast ID",
+          "name": "Naam",
+          "delete": "Dit item verwijderen",
+          "kind": "Apparaattype",
+          "entity_id": "Fysieke entiteit",
+          "zone_id": "Ruimte",
+          "group_id": "Buitenunitgroep (alleen HVAC)"
+        }
+      }
+    },
+    "error": {
+      "invalid_name": "Vul een naam in.",
+      "duplicate_id": "Dit ID bestaat al.",
+      "invalid_id": "Gebruik kleine letters, cijfers, liggende streepjes of koppeltekens (1–64 tekens).",
+      "invalid_entity": "Kies een entiteit met het juiste domein, buiten Nexora.",
+      "invalid_kind": "Kies een ondersteund apparaattype.",
+      "invalid_reference": "Een ruimte of groep ontbreekt of wordt nog gebruikt. Verwijder eerst de apparatuurkoppelingen.",
+      "invalid_group": "Alleen HVAC-apparatuur kan een buitenunitgroep hebben.",
+      "duplicate_equipment_entity": "Deze fysieke entiteit is al als apparatuur geregistreerd.",
+      "id_immutable": "Een bestaand ID kan niet veranderen. Bewerk de naam.",
+      "entity_not_found": "De nieuwe entiteit moet bestaan in Home Assistant.",
+      "add_zone_first": "Voeg eerst een ruimte toe. Sluit dit venster en open Opties opnieuw."
+    }
+  }
+}
