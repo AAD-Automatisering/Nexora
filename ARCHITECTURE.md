@@ -1,6 +1,6 @@
 # Zonentra — architectuur
 
-Status: versie 0.3.0, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
+Status: versie 0.3.1, sensorvalidatiefix, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
 
 ## Projectnaam en integratie-identiteit
 
@@ -83,7 +83,8 @@ Alternatief: periodieke DataUpdateCoordinator. Er is geen extern endpoint om te
 pollen, dus dit voegt geen waarde toe. Tijdsafhankelijke beslissingen gebruiken één expliciete timer naar de eerstvolgende
 meetvervaldatum of omschakeldeadline. Een gefilterde state_reported-listener neemt
 ook nieuwe rapporten met dezelfde waarde mee; last_changed wordt niet als freshness
-gebruikt. Alle subscriptions en timers worden opgeruimd bij unload.
+gebruikt. Sinds 0.3.1 krijgen alleen bronnen met `update_based`-validatie een
+vervaldatum; standaard (`state_based`) keurt de timer geen geldige waarde af. Alle subscriptions en timers worden opgeruimd bij unload.
 
 ## Datamodellen (geïmplementeerd)
 
@@ -109,8 +110,8 @@ Status-sensor met fysieke hold-beslissingen. De nieuwe, pure analysemodellen zij
 
 | Model | Rol |
 |---|---|
-| SourceState | Gekopieerde HA-state, eenheid, last_reported, trustworthy-vlag |
-| Reading | Gevalideerde waarde met valid/missing/unknown/unavailable/stale/unreliable |
+| SourceState | Gekopieerde HA-state, eenheid, last_reported, last_changed (diagnostisch), trustworthy-vlag |
+| Reading | Gevalideerde waarde met valid/missing/unknown/unavailable/stale/unreliable, reden-code, strategie (state_based/update_based) en freshness_verified |
 | ZoneSnapshot | Temperatuur, analysegrenzen, context en gekoppelde equipment-IDs |
 | ZoneDemand | Hysteretische vraag, twee gewogen scores, kwaliteit en reden |
 | GroupMemory | Alleen laatst geobserveerde betrouwbare modus en waarnemingstijd |

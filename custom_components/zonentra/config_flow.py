@@ -23,6 +23,7 @@ from .migration import (
     migrate_options,
 )
 from .models import BuildingSettings, EquipmentGroup, Zone, build_model
+from .observations import VALIDATION_STRATEGIES
 
 
 def entity_selector(domain=None):
@@ -127,6 +128,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                 ["sensor", "number", "input_number"]
             ),
             vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
+            vol.Optional("sensor_validation"): choice(list(VALIDATION_STRATEGIES)),
             vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
         }
         defaults = {
@@ -220,6 +222,9 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                     ),
                     vol.Optional("weight"): numeric(0.1, 10),
                     vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
+                    vol.Optional("sensor_validation"): choice(
+                        list(VALIDATION_STRATEGIES)
+                    ),
                     vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
                     vol.Optional("group_id"): self._group_selector(),
                 }
@@ -266,6 +271,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                 "weight": zone.weight,
                 "hysteresis": zone.hysteresis,
                 "max_age_seconds": zone.max_age_seconds,
+                "sensor_validation": zone.sensor_validation,
                 "use_building_limits": True,
                 "use_building_parameters": True,
             }

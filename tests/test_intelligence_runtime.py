@@ -15,7 +15,9 @@ from custom_components.zonentra.const import DOMAIN
 from custom_components.zonentra.diagnostics import async_get_config_entry_diagnostics
 
 
-async def setup_intelligence(hass, topology, max_age=1800):
+async def setup_intelligence(hass, topology, max_age=1800, validation=None):
+    if validation:
+        topology["zones"][0]["sensor_validation"] = validation
     topology["zones"][0].update(
         heating_limit=21,
         cooling_limit=24,
@@ -91,7 +93,10 @@ async def test_sensors_restart_and_zero_commands(hass, topology, freezer):
 
 
 async def test_deadlines_and_unchanged_measurement_recovery(hass, topology, freezer):
-    entry = await setup_intelligence(hass, topology, max_age=20)
+    # Since 0.3.1 report age only expires with explicit update_based validation.
+    entry = await setup_intelligence(
+        hass, topology, max_age=20, validation="update_based"
+    )
     now = dt_util.utcnow()
     runtime = entry.runtime_data
     after = now + timedelta(seconds=21)

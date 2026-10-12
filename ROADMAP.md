@@ -52,6 +52,16 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] 92 tests inclusief migratie, UI, timers en nul hardwarecommando's.
 - [ ] Publicatie en praktijktest van 0.3 op de kantoorinstallatie.
 
+### Versie 0.3.1 — sensorvalidatie (geïmplementeerd)
+
+- [x] Root cause: rapportleeftijd van 1800 s keurde stabiele KNX-temperaturen af.
+- [x] `state_based` (standaard) en optioneel `update_based` via `last_reported`.
+- [x] Grensentiteiten verouderen niet meer op leeftijd.
+- [x] Diagnostiek: strategie, leeftijden, reden-code en `freshness_verified`.
+- [x] Bestaande configuraties zonder strategie werken zonder herconfiguratie.
+- [x] Regressietests voor stabiele, ongeldige, onbeschikbare en herstellende bronnen.
+- [ ] Praktijkcontrole: een stabiele KNX-temperatuur blijft `valid` na 44+ minuten stabiele waarde.
+
 ### Vervolg vóór actieve regeling
 
 Inventariseer de fysieke topologie, betrouwbare gatewayfeedback en huidige

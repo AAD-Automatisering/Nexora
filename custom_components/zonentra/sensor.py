@@ -8,6 +8,7 @@ from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 
 from . import ZonentraConfigEntry
 from .const import DOMAIN
+from .observations import describe
 
 
 async def async_setup_entry(
@@ -108,6 +109,7 @@ class ZoneDemandSensor(ZonentraDiagnosticSensor):
             "parameters_source": "building"
             if self.zone.use_building_parameters
             else "zone",
+            "sensor_validation": self.zone.sensor_validation,
             "heating_score": demand.heating_score,
             "cooling_score": demand.cooling_score,
             "temperature_c": snapshot.temperature.value,
@@ -118,6 +120,10 @@ class ZoneDemandSensor(ZonentraDiagnosticSensor):
             "reason": demand.reason,
             "sensor_health": demand.sensor_health,
             "source_health": health,
+            # Health, strategy, ages and whether freshness is actually verifiable.
+            "temperature_validation": describe(
+                snapshot.temperature, self.runtime.evaluated_at
+            ),
             "occupancy": snapshot.occupancy.value or "unknown",
             "open_contacts": sum(
                 contact.value == "open" for contact in snapshot.contacts

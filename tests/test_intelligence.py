@@ -127,6 +127,9 @@ def test_zone_hysteresis(temperature, previous, expected):
 def test_sensor_health(source, quality):
     assert read(source, "temperature", NOW, 1800).quality == quality
     building, sources = scenario()
+    # Since 0.3.1 report age is only enforced with explicit update_based validation.
+    zone = replace(building.zones[0], sensor_validation="update_based")
+    building = replace(building, zones=(zone,))
     if source:
         sources["sensor.room_0"] = source
     else:

@@ -54,7 +54,8 @@
           "contact_entities": "Raam- en deurcontacten (optioneel)",
           "weight": "Ruimteweging",
           "hysteresis": "Temperatuurhysterese (°C)",
-          "max_age_seconds": "Maximale meetleeftijd (seconden; 0 = uit)",
+          "sensor_validation": "Sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
+          "max_age_seconds": "Maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)",
           "group_id": "Buitenunitgroep (optioneel)",
           "use_building_limits": "Gebruik gebouwinstellingen voor klimaatgrenzen",
           "use_building_parameters": "Gebruik gebouwinstellingen voor regelparameters"
@@ -108,7 +109,8 @@
           "heating_limit_entity": "Centrale entiteit voor verwarmingsgrens (optioneel)",
           "cooling_limit_entity": "Centrale entiteit voor koelgrens (optioneel)",
           "hysteresis": "Centrale temperatuurhysterese (°C)",
-          "max_age_seconds": "Centrale maximale meetleeftijd (seconden; 0 = uit)"
+          "sensor_validation": "Centrale sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
+          "max_age_seconds": "Centrale maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)"
         }
       }
     },
@@ -123,7 +125,7 @@
       "duplicate_equipment_entity": "Deze fysieke entiteit is al als apparatuur geregistreerd.",
       "entity_not_found": "De nieuwe entiteit moet bestaan in Home Assistant.",
       "add_zone_first": "Voeg eerst een ruimte toe. Sluit dit venster en open Opties opnieuw.",
-      "invalid_parameters": "Ongeldige regelparameters: gebruik eindige waarden binnen de aangegeven grenzen.",
+      "invalid_parameters": "Ongeldige regelparameters: gebruik eindige waarden binnen de aangegeven grenzen. update_based vereist een maximale updateleeftijd groter dan 0.",
       "invalid_limits": "Configureer beide grenzen. Verwarmingsgrens + tweemaal hysterese moet lager zijn dan de koelgrens.",
       "conflicting_group": "De buitenunitgroep van het apparaat verschilt van die van de ruimte."
     }

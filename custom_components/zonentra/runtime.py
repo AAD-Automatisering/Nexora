@@ -13,7 +13,7 @@ from .decision import Observation, simulate
 from .demand import calculate_demand, collect_zone
 from .engine import GroupMemory, evaluate, observe_mode
 from .models import Building
-from .observations import Reading, SourceState, read
+from .observations import Reading, SourceState, max_age_for, read
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +31,7 @@ class BuildingRuntime:
         self.zone_snapshots = {}
         self.zone_demands = {}
         self.group_decisions = {}
+        self.evaluated_at = dt_util.utcnow()
         self.memories = {
             group.id: GroupMemory("unknown", dt_util.utcnow())
             for group in building.groups
@@ -63,6 +64,7 @@ class BuildingRuntime:
                         state.attributes.get("restored")
                         or state.attributes.get("assumed_state")
                     ),
+                    state.last_changed,
                 )
         decisions = simulate(self.building, observations)
         if decisions != self.decisions:
@@ -71,6 +73,7 @@ class BuildingRuntime:
             )
         self.observations = observations
         self.decisions = decisions
+        self.evaluated_at = now
         self.outdoor_temperature = read(
             sources.get(self.building.settings.outdoor_temperature_entity),
             "temperature",
@@ -124,18 +127,13 @@ class BuildingRuntime:
             self._cancel_deadline = None
         deadlines = []
         for zone in self.building.zones:
-            if zone.max_age_seconds:
-                for field in (
-                    "temperature_entity",
-                    "heating_limit_entity",
-                    "cooling_limit_entity",
-                    "humidity_entity",
-                    "co2_entity",
-                ):
+            # Only update_based measurements can expire; limit entities never do.
+            if max_age := max_age_for(zone.sensor_validation, zone.max_age_seconds):
+                for field in ("temperature_entity", "humidity_entity", "co2_entity"):
                     source = sources.get(getattr(zone, field))
                     if source and source.reported_at:
                         deadlines.append(
-                            source.reported_at + timedelta(seconds=zone.max_age_seconds)
+                            source.reported_at + timedelta(seconds=max_age)
                         )
         outside = sources.get(self.building.settings.outdoor_temperature_entity)
         if (
@@ -189,6 +187,10 @@ class BuildingRuntime:
             "read_only": True,
             "outdoor_temperature_c": self.outdoor_temperature.value,
             "outdoor_temperature_quality": self.outdoor_temperature.quality,
+            "outdoor_temperature_validation": self.outdoor_temperature.strategy,
+            "outdoor_temperature_freshness_verified": (
+                self.outdoor_temperature.freshness_verified
+            ),
             "outdoor_temperature_selection_required": bool(
                 self.building.settings.outdoor_temperature_candidates
             ),

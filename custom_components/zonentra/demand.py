@@ -5,7 +5,13 @@ from datetime import datetime
 from typing import Mapping
 
 from .models import Building, Zone
-from .observations import Reading, SourceState, configured_limit, read
+from .observations import (
+    Reading,
+    SourceState,
+    configured_limit,
+    max_age_for,
+    read,
+)
 
 
 @dataclass(frozen=True)
@@ -41,12 +47,20 @@ def collect_zone(
     now: datetime,
     outdoor_temperature: Reading | None = None,
 ) -> ZoneSnapshot:
+    # Measurements follow the zone strategy; state_based applies no age limit.
+    max_age = max_age_for(zone.sensor_validation, zone.max_age_seconds)
+
     def numeric(field, kind):
-        return read(sources.get(getattr(zone, field)), kind, now, zone.max_age_seconds)
+        entity = getattr(zone, field)
+        if entity is None:
+            return Reading(None, "missing", reason="not_configured")
+        return read(sources.get(entity), kind, now, max_age)
 
     def limits(entity, static):
+        # Limit entities are settings (number/input_number) that only change on
+        # demand; their age is never evidence of a fault.
         return (
-            read(sources.get(entity), "limit", now, zone.max_age_seconds)
+            read(sources.get(entity), "limit", now)
             if entity
             else configured_limit(static)
         )

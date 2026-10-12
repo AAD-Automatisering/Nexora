@@ -54,7 +54,8 @@
           "contact_entities": "Window and door contacts (optional)",
           "weight": "Zone weight",
           "hysteresis": "Temperature hysteresis (°C)",
-          "max_age_seconds": "Maximum measurement age (seconds; 0 = disabled)",
+          "sensor_validation": "Sensor validation (state_based = default; update_based only for periodically reporting sensors)",
+          "max_age_seconds": "Maximum update age for update_based (seconds; ignored by state_based)",
           "group_id": "Outdoor unit group (optional)",
           "use_building_limits": "Use building climate limits",
           "use_building_parameters": "Use building regulation parameters"
@@ -108,7 +109,8 @@
           "heating_limit_entity": "Central heating limit entity (optional)",
           "cooling_limit_entity": "Central cooling limit entity (optional)",
           "hysteresis": "Central temperature hysteresis (°C)",
-          "max_age_seconds": "Central maximum measurement age (seconds; 0 = disabled)"
+          "sensor_validation": "Central sensor validation (state_based = default; update_based only for periodically reporting sensors)",
+          "max_age_seconds": "Central maximum update age for update_based (seconds; ignored by state_based)"
         }
       }
     },
@@ -123,7 +125,7 @@
       "duplicate_equipment_entity": "This physical entity is already registered as equipment.",
       "entity_not_found": "The new entity link must exist in Home Assistant.",
       "add_zone_first": "Add a zone before registering equipment. Close this dialog and reopen Options.",
-      "invalid_parameters": "Invalid parameters: use finite values within the indicated ranges.",
+      "invalid_parameters": "Invalid parameters: use finite values within the indicated ranges. update_based requires a maximum update age above 0.",
       "invalid_limits": "Configure both limits. Heating limit plus twice the hysteresis must be lower than the cooling limit.",
       "conflicting_group": "The equipment group differs from its zone group."
     }

@@ -1,4 +1,4 @@
-# Zonentra 0.3 — uitlegbare klimaatintelligentie
+# Zonentra 0.3.1 — uitlegbare klimaatintelligentie
 
 Alles in dit document betreft **read-only analyse**. Een voorgestelde modus is
 geen commando, en verandert ook niet de intern bijgehouden actuele modus.
@@ -23,12 +23,17 @@ gevolgd en ingepland voor veroudering; buitenweer blijft optionele context.
 
 | Quality | Betekenis |
 |---|---|
-| valid | Waarde, eenheid en ingestelde leeftijd zijn geaccepteerd |
-| missing | Bron of vaste grens is niet geconfigureerd/aanwezig |
-| unknown | HA meldt expliciet unknown |
-| unavailable | HA meldt expliciet unavailable |
-| stale | Laatste HA-rapport is minstens zo oud als de ingestelde maximale leeftijd |
-| unreliable | Ongeldige waarde, eenheid, timestamp, bereik of restored/assumed status |
+| valid | Waarde en eenheid zijn geaccepteerd (bij update_based ook de rapportleeftijd) |
+| missing | Bron niet geconfigureerd (`not_configured`) of niet aanwezig in HA (`source_missing`) |
+| unknown | HA meldt expliciet unknown (`source_unknown`) |
+| unavailable | HA meldt expliciet unavailable (`source_unavailable`) |
+| stale | Alleen bij update_based: geen HA-rapport binnen de maximale updateleeftijd (`no_report_within_max_age`) |
+| unreliable | Ongeldige/niet-interpreteerbare waarde: `not_numeric`, `not_finite`, `unsupported_unit`, `out_of_range`, `invalid_timestamp`, `untrusted_source` (restored/assumed), `unsupported_state` |
+
+`unknown` en `unavailable` zijn samen de categorie “onbeschikbaar”; `unreliable`
+is de categorie “ongeldig”. De bestaande namen blijven behouden zodat automations
+op `sensor_health` en `source_health` niet breken. De reden-code staat in
+`temperature_validation.reason` en in de diagnostiek.
 
 Temperaturen met °C en °F worden naar Celsius genormaliseerd. Geen eenheid of een
 onbekende eenheid wordt niet geraden. Temperatuurmetingen moeten tussen −50 en
@@ -36,13 +41,47 @@ onbekende eenheid wordt niet geraden. Temperatuurmetingen moeten tussen −50 en
 waarden zijn ongeldig. Vochtigheid moet 0–100 % zijn en CO₂ 0–10.000 ppm. Deze
 bereiken zijn plausibiliteitschecks, geen garantie van sensorcalibratie.
 
-`last_reported` bepaalt leeftijd, **niet last_changed**. Een stabiele waarde die
-opnieuw gemeld wordt, blijft dus vers. Standaard is de maximale meetleeftijd
-1800 seconden; pas dit aan de werkelijke KNX-/gateway-rapportage aan. Met 0 is
-leeftijdcontrole expliciet uitgeschakeld. Een toekomsttimestamp >5 seconden of
-ontbrekende/tijdzoneloze timestamp is onbetrouwbaar. Een HA-rapport bewijst niet
-dat de fysieke sensor opnieuw gemeten heeft: gecachte gatewaydata blijft een
-beperking van deze bronkwaliteit.
+### Validatiestrategie (0.3.1)
+
+Home Assistant biedt drie timestamps: `last_changed` (alleen bij een andere
+state), `last_updated` (state of attributen veranderd) en `last_reported` (elke
+keer dat de integratie de state schrijft, ook als niets veranderde). Veel bronnen
+– KNX zonder `always_callback`, Modbus/MQTT met change-only publicatie, sommige
+Shelly-configuraties – schrijven **niets** zolang de waarde gelijk blijft. Dan
+blijven ook `last_reported` en `last_updated` staan. Ouderdom bewijst daar geen
+storing.
+
+| Strategie | Gebruik | Leeftijdcontrole |
+|---|---|---|
+| `state_based` (standaard) | Elke bron, ook change-only (KNX) | Geen. Een geldige, beschikbare HA-state is bruikbaar, hoe lang ongewijzigd ook |
+| `update_based` (optioneel) | Alleen bronnen die **aantoonbaar periodiek rapporteren** | `stale` als `now − last_reported ≥ max_age_seconds` |
+
+`update_based` gebruikt `last_reported`, nooit `last_changed`: een ongewijzigde
+waarde met een recent rapport blijft geldig en herstelt direct bij het volgende
+rapport. De strategie is per ruimte in te stellen, of centraal voor ruimtes die
+de centrale meetparameters gebruiken. `update_based` vereist een maximale
+updateleeftijd groter dan 0. Bij `state_based` wordt `max_age_seconds` bewaard
+maar genegeerd. De strategie geldt voor temperatuur, vochtigheid en CO₂ van de
+ruimte. Grensentiteiten (number/input_number) zijn instellingen en verouderen
+nooit op leeftijd. Buitentemperatuur gebruikt ongewijzigd de eigen
+`outdoor_max_age_seconds` (0 = geen leeftijdcontrole).
+
+Beide strategieën blijven unknown/unavailable/restored/assumed-states, ongeldige
+eenheden, NaN/infinity, waarden buiten bereik en ongeldige timestamps afkeuren.
+Een toekomsttimestamp >5 seconden of een ontbrekende/tijdzoneloze timestamp is
+onbetrouwbaar.
+
+**Versheid wordt niet geclaimd zonder bewijs.** `freshness_verified` is alleen
+`true` bij update_based met een rapport binnen de maximale leeftijd. Bij
+state_based is het altijd `false`: de waarde is bruikbaar, maar niet bewezen
+actueel. Ook een HA-rapport bewijst niet dat de fysieke sensor opnieuw gemeten
+heeft; gecachte gatewaydata blijft een beperking van de bron.
+
+Root cause 0.2/0.3.0: elke ruimtebron (ook grensentiteiten) werd na standaard
+1800 s zonder `last_reported`-update `stale`, en een deadline-timer dwong dat af.
+Een KNX-temperatuur die 44 minuten stabiel 20,7 °C bleef, viel daardoor uit de
+vraagberekening (`insufficient_data`, `reliable_zones 0`) en herstelde pas bij
+een nieuwe telegramwaarde.
 
 Aanwezigheid: on → occupied, off → unoccupied, ontbrekend/ongeldig → unknown.
 Contacten: on → open, off → closed. Voor statische binaire toestanden is er geen

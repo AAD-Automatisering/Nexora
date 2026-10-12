@@ -8,12 +8,13 @@ LIMIT_FIELDS = (
     "heating_limit_entity",
     "cooling_limit_entity",
 )
-PARAMETER_FIELDS = ("hysteresis", "max_age_seconds")
+PARAMETER_FIELDS = ("hysteresis", "max_age_seconds", "sensor_validation")
 NEW_BUILDING_DEFAULTS = {
     "heating_limit": 21.0,
     "cooling_limit": 24.0,
     "hysteresis": 0.3,
     "max_age_seconds": 1800.0,
+    "sensor_validation": "state_based",
 }
 
 

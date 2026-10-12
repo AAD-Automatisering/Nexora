@@ -3,8 +3,10 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.3.0** voegt centrale gebouwinstellingen met optionele ruimteafwijkingen
-toe aan de uitlegbare klimaatvraag en gewogen buitenunitvoorstellen. Alles blijft
+Versie **0.3.1** herstelt de sensorvalidatie: een geldige temperatuur die lang
+niet verandert (zoals bij KNX) wordt niet langer onterecht `stale`. Versie 0.3.0
+voegde centrale gebouwinstellingen met optionele ruimteafwijkingen toe aan de
+uitlegbare klimaatvraag en gewogen buitenunitvoorstellen. Alles blijft
 read-only simulatie. Zonentra roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
 zonwerings- of ventilatie-instellingen. De 16 °C-vloerverwarmingsgrens blijft intact.
 Bestaande regelingen en automations blijven zelfstandig werken.
@@ -37,9 +39,18 @@ niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
 
+### Bijwerken naar 0.3.1
+
+Werk bij via HACS en herstart Home Assistant; herconfiguratie is niet nodig.
+Bestaande ruimtes en centrale instellingen zonder validatiestrategie gebruiken
+automatisch `state_based`: een geldige, beschikbare temperatuur blijft bruikbaar,
+ook als hij uren niet verandert. Een eerder ingestelde maximale meetleeftijd blijft
+bewaard en wordt pas actief als je bewust `update_based` kiest (zie
+[ALGORITHM.md](ALGORITHM.md#validatiestrategie-031)).
+
 ### Bijwerken vanaf Zonentra 0.1 of 0.2
 
-Werk de bestaande integratie bij via HACS zodra 0.3.0 is gepubliceerd en herstart
+Werk de bestaande integratie bij via HACS zodra 0.3.x is gepubliceerd en herstart
 Home Assistant. **Verwijder je bestaande Zonentra-configuratie niet.** De automatische
 migratie naar configuratieversie 3 behoudt IDs, apparaatkoppelingen en sensoren.
 Bestaande eigen analysegrenzen, hysterese en meetleeftijd blijven actief als lokale
@@ -102,7 +113,8 @@ Begin via **Opties → Centrale configuratie**:
 | Verwarmingsgrens / koelgrens | 21 / 24 °C; analysegrenzen, geen apparaat-setpoints |
 | Grensentiteiten | Optionele sensor/number/input_number met °C/°F; gaan vóór vaste grenzen |
 | Temperatuurhysterese | 0,3 °C; ruimte tussen grenzen groter dan tweemaal hysterese |
-| Maximale meetleeftijd | 1800 s; afstemmen op sensorrapportage, 0 schakelt de check uit |
+| Sensorvalidatie | `state_based` (standaard): geldige state is bruikbaar, geen leeftijdcontrole. `update_based`: alleen voor bronnen die aantoonbaar periodiek rapporteren |
+| Maximale updateleeftijd | 1800 s; alleen actief bij `update_based` (moet dan > 0 zijn) |
 
 Bewerk daarna een ruimte via **Opties → Ruimte toevoegen of bewerken**:
 
@@ -110,7 +122,7 @@ Bewerk daarna een ruimte via **Opties → Ruimte toevoegen of bewerken**:
 |---|---|
 | Ruimtetemperatuursensor | De externe KNX-temperatuursensor |
 | Centrale klimaatgrenzen gebruiken | Standaard aan voor nieuwe ruimtes; neemt beide grenzen en grensentiteiten over |
-| Centrale meetparameters gebruiken | Standaard aan; neemt hysterese en maximale meetleeftijd over |
+| Centrale meetparameters gebruiken | Standaard aan; neemt hysterese, sensorvalidatie en maximale updateleeftijd over |
 | Ruimteweging | Standaard 1; belangrijkere ruimtes kunnen zwaarder meewegen |
 | Buitenunitgroep | Optionele standaard voor HVAC-apparatuur in deze ruimte |
 | Optionele ruimtecontext | Vochtigheid, CO₂, aanwezigheid en raam-/deurcontacten |
@@ -157,8 +169,8 @@ niet voor elke score een aparte entiteit nodig is.
 
 | Sensor | State | Belangrijkste attributen |
 |---|---|---|
-| Status | read_only / degraded / conflict | zones, groups, equipment, unavailable_inputs, unknown_zone_demands, outdoor_temperature_c, outdoor_temperature_quality, outdoor_temperature_selection_required; maximaal 20 fysieke hold-beslissingen |
-| Ruimte Klimaatvraag | heating_demand / cooling_demand / neutral / unknown | temperature_c, heating_limit_c, cooling_limit_c, heating_score, cooling_score, reason, sensor_health, source_health, occupancy, limits_source, parameters_source |
+| Status | read_only / degraded / conflict | zones, groups, equipment, unavailable_inputs, unknown_zone_demands, outdoor_temperature_c, outdoor_temperature_quality, outdoor_temperature_validation, outdoor_temperature_freshness_verified, outdoor_temperature_selection_required; maximaal 20 fysieke hold-beslissingen |
+| Ruimte Klimaatvraag | heating_demand / cooling_demand / neutral / unknown | temperature_c, heating_limit_c, cooling_limit_c, heating_score, cooling_score, reason, sensor_health, source_health, sensor_validation, temperature_validation, occupancy, limits_source, parameters_source |
 | Buitenunit Voorgestelde HVAC-modus | heat / cool / off / unknown | current_mode, desired_mode, heating_score, cooling_score, reason, blocked_reason, blocked_until, mode_change_proposed, mode_quality, reliable_zones |
 
 `read_only` bevestigt observatie/simulatie, ook bij een leeg gebouw. `degraded`
@@ -174,7 +186,16 @@ bruikbaar voorstel; kijk dan naar blocked_reason. `off` is een simulatie van gee
 actieve vraag, nooit een uitschakelcommando. De fysieke hold-beslissingen op de
 Status-sensor blijven voor alle apparatuur gelden.
 
-Sensor health: valid, missing, unknown, unavailable, stale of unreliable. Scores
+Sensor health: valid, missing, unknown, unavailable, stale of unreliable. Het
+attribuut `temperature_validation` verklaart de temperatuurbron: `health`,
+`strategy`, `value`, `reason` (waarom afgekeurd), `seconds_since_change`
+(sinds `last_changed`), `seconds_since_report` (sinds `last_reported`),
+`max_update_age_seconds`, `freshness_verified` en `evaluated_at`. Leeftijden
+gelden op `evaluated_at`, het moment van de laatste evaluatie. Een stabiele
+20,7 °C met `freshness_verified: false` is bruikbaar en **niet defect**: het
+betekent alleen dat de bron geen periodieke rapportage levert om actualiteit te
+bewijzen. De diagnostiekexport bevat dezelfde verklaring per bron, zonder waarden.
+Scores
 zijn gewogen graden afwijking, geen energie- of vermogensmetingen. Afwezige
 klimaatdata geven null-scores, geen verzonnen nulvraag. Zie
 [ALGORITHM.md](ALGORITHM.md) voor alle formules, drempels en reden-codes.
@@ -183,7 +204,7 @@ Download diagnostiek via het integratiemenu. Namen, IDs en bronkoppelingen worde
 geredigeerd. De export bevat scores en verklaringen, geen ruwe sensorstates.
 Debuglogging kan via de standaard HA-functie worden ingeschakeld. Bronlisteners
 volgen wijzigingen én rapporten met dezelfde waarde; één deadline-timer houdt
-sensorleeftijd en wachttijden bij. Er is geen periodieke polling.
+sensorleeftijd (alleen update_based) en wachttijden bij. Er is geen periodieke polling.
 
 ## Veilig testen naast de bestaande regeling
 

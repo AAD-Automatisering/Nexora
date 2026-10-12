@@ -8,6 +8,7 @@ from typing import Any
 
 from .const import KINDS
 from .migration import LIMIT_FIELDS, PARAMETER_FIELDS, migrate_options
+from .observations import STATE_BASED, UPDATE_BASED, VALIDATION_STRATEGIES
 
 ZONE_ENTITY_FIELDS = (
     "temperature_entity",
@@ -35,7 +36,9 @@ class Zone:
     group_id: str | None = None
     weight: float = 1.0
     hysteresis: float = 0.3
+    # Only enforced with update_based; state_based never ages out a valid value.
     max_age_seconds: float = 1800.0
+    sensor_validation: str = STATE_BASED
     use_building_limits: bool = False
     use_building_parameters: bool = False
 
@@ -72,6 +75,7 @@ class BuildingSettings:
     cooling_limit_entity: str | None = None
     hysteresis: float = 0.3
     max_age_seconds: float = 1800.0
+    sensor_validation: str = STATE_BASED
     outdoor_temperature_candidates: tuple[str, ...] = ()
 
 
@@ -170,6 +174,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _range(settings.hysteresis, 0.1, 2)
     _range(settings.max_age_seconds, 0, 86400)
     _range(settings.outdoor_max_age_seconds, 0, 86400)
+    _validate_sensor_validation(settings)
     _validate_limits(settings)
     zones, groups, equipment = (
         topology.get(key, []) for key in ("zones", "groups", "equipment")
@@ -206,6 +211,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         _range(zone.weight, 0.1, 10)
         _range(zone.hysteresis, 0.1, 2)
         _range(zone.max_age_seconds, 0, 86400)
+        _validate_sensor_validation(zone)
         _validate_limits(zone)
     for group in group_models:
         _entity(group.mode_entity, ("sensor", "select", "climate"))
@@ -245,6 +251,13 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     return Building(
         building_id, name, zone_models, group_models, tuple(equipment_models), settings
     )
+
+
+def _validate_sensor_validation(config) -> None:
+    if config.sensor_validation not in VALIDATION_STRATEGIES:
+        raise ValueError("invalid_parameters")
+    if config.sensor_validation == UPDATE_BASED and not config.max_age_seconds:
+        raise ValueError("invalid_parameters")  # update_based needs a maximum age
 
 
 def _validate_limits(config) -> None:
