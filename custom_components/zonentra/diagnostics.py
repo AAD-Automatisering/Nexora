@@ -27,6 +27,10 @@ SOURCE_FIELDS = (
 )
 
 
+def _iso(value):
+    return value.isoformat() if value else None
+
+
 def _source_validation(runtime) -> list[dict]:
     """Per-zone validation explanations without values, entity IDs or names."""
     return [
@@ -83,6 +87,35 @@ async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -
                 }
                 for group_id, observation in runtime.group_observations.items()
             ],
+            "control_simulation": {
+                "simulation": True,
+                "coordinations": [
+                    {
+                        **{
+                            key: value
+                            for key, value in asdict(item).items()
+                            if key not in ("planned_actions", "waiting_until")
+                        },
+                        "waiting_until": _iso(item.waiting_until),
+                        "planned_actions": [
+                            action for _, action in item.planned_actions
+                        ],
+                    }
+                    for item in runtime.coordinations.values()
+                ],
+                "unit_intents": [
+                    {
+                        **{
+                            key: value
+                            for key, value in asdict(intent).items()
+                            if key not in ("blocked_until", "override_expires_at")
+                        },
+                        "blocked_until": _iso(intent.blocked_until),
+                        "override_expires_at": _iso(intent.override_expires_at),
+                    }
+                    for intent in runtime.unit_intents.values()
+                ],
+            },
             "group_decisions": [
                 {
                     **asdict(item),

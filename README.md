@@ -3,7 +3,12 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.4.0** observeert de bestaande binnenunits (climate-entiteiten): per
+Versie **0.5.0** simuleert de volledige regelstrategie: per buitenunitgroep een
+leidende modus met een veilige omschakelprocedure, per binnenunit de actie die
+Zonentra zou nemen (verwarmen, koelen, uit, modus corrigeren, ongewijzigd of
+geblokkeerd), handmatige bediening via de KNX-roomcontroller (Manual Override,
+standaard 30 minuten) en anti-pendelbeveiliging. **Er wordt niets aangestuurd:**
+alle acties zijn zichtbaar als simulatie. Versie 0.4.0 observeert de bestaande binnenunits (climate-entiteiten): per
 binnenunit de ingestelde modus en `hvac_action`, en per buitenunitgroep een
 **afgeleide** groepsmodus met conflictdetectie, naast de gewenste modus uit de
 klimaatvraag. Een afgeleide modus is nooit fysieke buitenunitfeedback. Versie
@@ -42,6 +47,14 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.5.0
+
+Werk bij via HACS en herstart Home Assistant; herconfiguratie is niet nodig.
+Bestaande configuraties krijgen de standaardinstellingen voor handmatige
+bediening en anti-pendel (zie **Opties → Centrale configuratie**). Per binnenunit
+en per buitenunitgroep verschijnt een nieuwe simulatiesensor. Herlaad daarna de
+browserpagina volledig, zodat de nieuwe vertalingen worden geladen.
 
 ### Bijwerken naar 0.4.0
 
@@ -126,6 +139,11 @@ Begin via **Opties → Centrale configuratie**:
 | Temperatuurhysterese | 0,3 °C; ruimte tussen grenzen groter dan tweemaal hysterese |
 | Sensorvalidatie | `state_based` (standaard): geldige state is bruikbaar, geen leeftijdcontrole. `update_based`: alleen voor bronnen die aantoonbaar periodiek rapporteren |
 | Maximale updateleeftijd | 1800 s; alleen actief bij `update_based` (moet dan > 0 zijn) |
+| Handmatige bediening toestaan | Aan; Manual Override via de roomcontroller (simulatie) |
+| Duur handmatige bediening | 30 minuten (5–120) |
+| Minimale inschakeltijd | 600 s (comfort) |
+| Minimale uitschakeltijd | 180 s (veiligheid; controleer fabrikant) |
+| Wachttijd groepsomschakeling | 300 s (veiligheid; tussen stoppen en tegengestelde modus) |
 
 Bewerk daarna een ruimte via **Opties → Ruimte toevoegen of bewerken**:
 
@@ -174,8 +192,9 @@ Optionele context beïnvloedt de klimaatscores in 0.3 nog niet.
 
 ## Status en diagnostiek
 
-Er zijn **één gebouwsensor, één klimaatsensor per ruimte, één modussensor per
-binnenunit en per buitenunitgroep een modusvoorstel- en een afgeleide-modussensor**. Scores en verklaringen staan in compacte attributen, zodat
+Er zijn **één gebouwsensor, één klimaatsensor per ruimte, per binnenunit een
+modus- en een gesimuleerde-actiesensor, en per buitenunitgroep een modusvoorstel-,
+een afgeleide-modus- en een gesimuleerde-coördinatiesensor**. Scores en verklaringen staan in compacte attributen, zodat
 niet voor elke score een aparte entiteit nodig is.
 
 | Sensor | State | Belangrijkste attributen |
@@ -185,6 +204,37 @@ niet voor elke score een aparte entiteit nodig is.
 | Buitenunit Voorgestelde HVAC-modus | heat / cool / off / unknown | current_mode, desired_mode, heating_score, cooling_score, reason, blocked_reason, blocked_until, mode_change_proposed, mode_quality, reliable_zones, physical_mode, mode_feedback_quality, physical_mode_feedback_available, derived_group_mode, observation_reason |
 | Binnenunit-modus | heat / cool / heat_cool / auto / dry / fan_only / off / unknown | indoor_unit_entity, selected_mode, reported_action, current_temperature, target_temperature, temperature_unit, fan_mode, availability, observation_quality, selected_action_mismatch, observed_at |
 | Buitenunit Modus afgeleid van binnenunits | heat / cool / inactive / mixed / unknown | member_indoor_units, available_indoor_units, usable_selected_modes, usable_hvac_actions, selected_modes, selected_mode_consensus, reported_activity, conflict_detected, conflicts, completeness, quality, reason, notes, desired_mode, physical_mode, physical_mode_feedback_available, observation_reason |
+
+| Binnenunit Gesimuleerde actie | turn_on_heat / turn_on_cool / turn_off / correct_mode / hold / blocked | simulation, zone, observed_mode, desired_mode, zone_demand, intended_action, steps, reason, blocked_reason, blocked_until, manual_override_active, override_remaining_seconds, override_expires_at, seconds_since_transition, group_coordination_phase, availability, evaluated_at |
+| Buitenunit Gesimuleerde coördinatie | idle / preparing / stopping / waiting / applying / verifying / completed / blocked / failed | simulation, desired_mode, group_mode, group_mode_reason, coordinated_mode, derived_mode, member_indoor_units, available_indoor_units, conflicts, switch_needed, switch_from, switch_to, switch_allowed_in_simulation, active_switch_permitted (altijd false), phase_reason, waiting_until, blockers, planned_actions |
+
+### Gesimuleerde regeling en handmatige bediening (0.5)
+
+De groepsmodus (heat / cool / neutral / unknown) volgt uit de bestaande gewogen
+klimaatvraag en is leidend voor alle binnenunits in de groep. Per binnenunit:
+warmtevraag → verwarmen, koelvraag → koelen, geen vraag → uit, verkeerde modus →
+corrigeren, onvoldoende informatie → geblokkeerd.
+
+**Handmatige bediening.** Zet een medewerker de airco via de KNX-roomcontroller
+aan (`off` → actieve modus), dan start een Manual Override van standaard 30
+minuten (5–120, centraal instelbaar of uit te zetten). De airco mag dan aan
+blijven, maar de groepsmodus blijft leidend: `cool` in een `heat`-groep wordt
+gecorrigeerd naar `heat`. Uitzetten beëindigt de override; daarna geldt de
+normale regeling weer. Attribuutwijzigingen, herstarts en overgangen vanuit
+`unknown`/`unavailable` starten nooit een override. Een override overleeft een
+herstart niet. **Let op:** Home Assistant kan niet zien wie een state wijzigt;
+ook een eigen automatisering die een airco aanzet, start een override.
+
+**Anti-pendel en omschakeling.** Minimale aan-tijd (comfort, 600 s), minimale
+uit-tijd (veiligheid, 180 s) en wachttijd bij heat↔cool (veiligheid, 300 s) zijn
+centraal instelbaar; de bestaande groepsparameter "minimale tijd tussen
+moduswisselingen" geldt ook hier. Controleer de veiligheidswaarden met de
+Mitsubishi-documentatie. Een omschakeling doorloopt idle → preparing → stopping →
+waiting → applying → verifying → completed, alleen op basis van waarnemingen.
+Zonder aansturing blijft die in read-only bijvoorbeeld op `stopping` staan.
+
+Details, alle reason codes en de beperkingen staan in
+[ALGORITHM.md](ALGORITHM.md#gesimuleerde-regelstrategie-05).
 
 ### Binnenunits en afgeleide groepsmodus (0.4)
 
@@ -249,7 +299,9 @@ de KNX-temperatuur, ingestelde analysegrenzen en weergegeven klimaatscores.
 Controleer per buitenunit current/desired/proposed en de blokkeerreden. Test een
 onbeschikbare bron en het herstel daarvan; Zonentra moet unknown melden in plaats
 van een nieuwe modus bedenken. **Koppel de voorgestelde modi niet aan eigen
-actuator-automations** als je deze versie read-only wilt testen.
+actuator-automations** als je deze versie read-only wilt testen. Dat geldt ook
+voor de gesimuleerde acties uit 0.5: ze zijn bedoeld om te vergelijken met wat de
+installatie werkelijk doet.
 
 Aanwezigheid, ramen, vloerverwarming, zonwering en ventilatie worden niet bediend.
 De gasvloergrens van 16 °C blijft intact. Een HA-herstart moet bij een bekend
@@ -294,6 +346,8 @@ custom_components/zonentra/
   decision.py                   pure read-only simulator
   runtime.py                    HA-observatie en update-dispatch
   indoor.py                     binnenunitobservatie en afgeleide groepsmodus
+  override.py                   Manual Override-detectie en command tracking
+  control.py                    groepscoördinatie en gesimuleerde acties per unit
   sensor.py                     diagnostische sensoren
   diagnostics.py                geredigeerde diagnostiekdownload
   strings.json                  UI-teksten

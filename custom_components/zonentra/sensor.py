@@ -26,6 +26,14 @@ async def async_setup_entry(
     entities.extend(
         DerivedGroupModeSensor(entry, group) for group in runtime.building.groups
     )
+    entities.extend(
+        UnitControlSensor(entry, item)
+        for item in runtime.building.equipment
+        if item.kind == "hvac"
+    )
+    entities.extend(
+        GroupCoordinationSensor(entry, group) for group in runtime.building.groups
+    )
     # Options reload removes obsolete diagnostics; renames retain stable IDs.
     expected = {entity.unique_id for entity in entities}
     registry = er.async_get(hass)
@@ -282,4 +290,119 @@ class DerivedGroupModeSensor(ZonentraDiagnosticSensor):
             "physical_mode": decision.current_mode,
             "physical_mode_feedback_available": decision.mode_quality == "valid",
             "observation_reason": self.runtime.mode_comparisons[self.group.id],
+        }
+
+
+def _iso(value):
+    return value.isoformat() if value else None
+
+
+class UnitControlSensor(ZonentraDiagnosticSensor):
+    """Simulated next action for one indoor unit — never executed in 0.5."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "turn_on_heat",
+        "turn_on_cool",
+        "turn_off",
+        "correct_mode",
+        "hold",
+        "blocked",
+    ]
+    _attr_icon = "mdi:play-box-outline"
+    _attr_translation_key = "unit_control"
+
+    def __init__(self, entry, item):
+        super().__init__(entry)
+        self.item = item
+        self._attr_translation_placeholders = {"unit": item.name}
+        self._attr_unique_id = f"{entry.entry_id}_equipment_{item.id}_control"
+
+    @property
+    def native_value(self):
+        return self.runtime.unit_intents[self.item.id].action
+
+    @property
+    def extra_state_attributes(self):
+        intent = self.runtime.unit_intents[self.item.id]
+        return {
+            "simulation": True,
+            "read_only": True,
+            "zone": next(
+                (z.name for z in self.runtime.building.zones if z.id == intent.zone_id),
+                None,
+            ),
+            "observed_mode": intent.observed_mode,
+            "desired_mode": intent.desired_mode,
+            "zone_demand": intent.zone_demand,
+            "intended_action": intent.action,
+            "steps": list(intent.steps),
+            "reason": intent.reason,
+            "blocked_reason": intent.blocked_reason,
+            "blocked_until": _iso(intent.blocked_until),
+            "manual_override_active": intent.manual_override_active,
+            "override_remaining_seconds": intent.override_remaining_seconds,
+            "override_expires_at": _iso(intent.override_expires_at),
+            "seconds_since_transition": intent.seconds_since_transition,
+            "group_coordination_phase": intent.coordination_phase,
+            "availability": intent.availability,
+            "evaluated_at": _iso(self.runtime.evaluated_at),
+        }
+
+
+class GroupCoordinationSensor(ZonentraDiagnosticSensor):
+    """Simulated group coordination and switch phase — never executed in 0.5."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "idle",
+        "preparing",
+        "stopping",
+        "waiting",
+        "applying",
+        "verifying",
+        "completed",
+        "blocked",
+        "failed",
+    ]
+    _attr_icon = "mdi:swap-horizontal-circle-outline"
+    _attr_translation_key = "group_coordination"
+
+    def __init__(self, entry, group):
+        super().__init__(entry)
+        self.group = group
+        self._attr_translation_placeholders = {"group": group.name}
+        self._attr_unique_id = f"{entry.entry_id}_group_{group.id}_coordination"
+
+    @property
+    def native_value(self):
+        return self.runtime.coordinations[self.group.id].phase
+
+    @property
+    def extra_state_attributes(self):
+        item = self.runtime.coordinations[self.group.id]
+        names = {e.id: e.name for e in self.runtime.building.equipment}
+        return {
+            "simulation": True,
+            "read_only": True,
+            "desired_mode": item.desired_mode,
+            "group_mode": item.group_mode,
+            "group_mode_reason": item.group_mode_reason,
+            "coordinated_mode": item.coordinated_mode,
+            "derived_mode": item.derived_mode,
+            "member_indoor_units": item.member_units,
+            "available_indoor_units": item.available_units,
+            "conflicts": list(item.conflicts),
+            "switch_needed": item.switch_needed,
+            "switch_from": item.switch_from,
+            "switch_to": item.switch_to,
+            "switch_allowed_in_simulation": item.switch_allowed_in_simulation,
+            "active_switch_permitted": item.active_switch_permitted,
+            "phase_reason": item.phase_reason,
+            "waiting_until": _iso(item.waiting_until),
+            "blockers": list(item.blockers),
+            "planned_actions": {
+                names.get(unit, unit): action for unit, action in item.planned_actions
+            },
+            "evaluated_at": _iso(self.runtime.evaluated_at),
         }

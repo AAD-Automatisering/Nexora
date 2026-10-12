@@ -77,6 +77,13 @@ class BuildingSettings:
     max_age_seconds: float = 1800.0
     sensor_validation: str = STATE_BASED
     outdoor_temperature_candidates: tuple[str, ...] = ()
+    # 0.5 simulated control. Building-wide now; per-zone overrides could later
+    # be resolved like effective_zone() without changing these names.
+    manual_override_enabled: bool = True
+    manual_override_duration_minutes: float = 30.0
+    min_on_seconds: float = 600.0  # comfort: avoid short runs
+    min_off_seconds: float = 180.0  # safety: restart protection (verify per make)
+    changeover_wait_seconds: float = 300.0  # safety: stop -> other mode delay
 
 
 def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
@@ -174,6 +181,11 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _range(settings.hysteresis, 0.1, 2)
     _range(settings.max_age_seconds, 0, 86400)
     _range(settings.outdoor_max_age_seconds, 0, 86400)
+    if not isinstance(settings.manual_override_enabled, bool):
+        raise ValueError("invalid_parameters")
+    _range(settings.manual_override_duration_minutes, 5, 120)
+    for key in ("min_on_seconds", "min_off_seconds", "changeover_wait_seconds"):
+        _range(getattr(settings, key), 0, 3600)
     _validate_sensor_validation(settings)
     _validate_limits(settings)
     zones, groups, equipment = (

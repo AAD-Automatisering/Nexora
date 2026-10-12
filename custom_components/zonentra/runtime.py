@@ -4,15 +4,17 @@ import logging
 from dataclasses import asdict
 from datetime import timedelta
 
+from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
 
+from .control import plan
 from .decision import Observation, simulate
 from .demand import calculate_demand, collect_zone
 from .engine import GroupMemory, evaluate, observe_mode
-from .indoor import compare_modes, observe_group
+from .indoor import compare_modes, observe_group, observe_unit
 from .models import Building
 from .observations import (
     ClimateAttributes,
@@ -21,6 +23,7 @@ from .observations import (
     max_age_for,
     read,
 )
+from .override import CommandTracker, classify_transition, update_override
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -43,6 +46,14 @@ class BuildingRuntime:
         self.group_observations = {}
         self.mode_comparisons = {}
         self.evaluated_at = dt_util.utcnow()
+        # 0.5 simulated control. In memory only: nothing survives a restart.
+        self.overrides = {}
+        self.last_transitions = {}
+        self.coordination_memories = {}
+        self.coordinations = {}
+        self.unit_intents = {}
+        # Records Zonentra-initiated changes; stays empty while read-only.
+        self.command_tracker = CommandTracker()
         self.memories = {
             group.id: GroupMemory("unknown", dt_util.utcnow())
             for group in building.groups
@@ -78,6 +89,7 @@ class BuildingRuntime:
                     state.last_changed,
                     self._climate(state) if entity_id.startswith("climate.") else None,
                 )
+        transitions = self._transitions(event, now)
         decisions = simulate(self.building, observations)
         if decisions != self.decisions:
             _LOGGER.debug(
@@ -126,6 +138,9 @@ class BuildingRuntime:
             units, observation = observe_group(self.building, group, sources)
             indoor_units.update({unit.equipment_id: unit for unit in units})
             group_observations[group.id] = observation
+        for item in self.building.equipment:
+            if item.kind == "hvac" and item.id not in indoor_units:
+                indoor_units[item.id] = observe_unit(item, sources.get(item.entity_id))
         self.indoor_units = indoor_units
         self.group_observations = group_observations
         self.mode_comparisons = {
@@ -148,6 +163,7 @@ class BuildingRuntime:
                     for d in self.group_decisions.values()
                 ],
             )
+        self._plan(transitions, sources, now)
         if self._cancel_deadline:
             self._cancel_deadline()
             self._cancel_deadline = None
@@ -179,12 +195,97 @@ class BuildingRuntime:
                 )
             if deadline := self.group_decisions[group.id].blocked_until:
                 deadlines.append(deadline)
+        # Override expiry and anti-cycling ends re-evaluate without new events.
+        deadlines.extend(override.expires_at for override in self.overrides.values())
+        deadlines.extend(
+            intent.blocked_until
+            for intent in self.unit_intents.values()
+            if intent.blocked_until
+        )
+        deadlines.extend(
+            item.waiting_until
+            for item in self.coordinations.values()
+            if item.waiting_until
+        )
         future = [deadline for deadline in deadlines if deadline > now]
         if future:
             self._cancel_deadline = async_track_point_in_utc_time(
                 self.hass, self.refresh, min(future)
             )
         async_dispatcher_send(self.hass, self.signal)
+
+    def _transitions(self, event, now) -> dict[str, str]:
+        """Classify a state_changed event of a linked indoor unit, if any."""
+        if getattr(event, "event_type", None) != EVENT_STATE_CHANGED:
+            return {}  # Setup, timers and same-value reports are no transitions.
+        entity_id = event.data.get("entity_id")
+        old, new = event.data.get("old_state"), event.data.get("new_state")
+        transitions = {}
+        for item in self.building.equipment:
+            if item.kind != "hvac" or item.entity_id != entity_id:
+                continue
+            old_value = old.state if old else None
+            new_value = new.state if new else None
+            initiated = (
+                old is not None
+                and old_value != new_value
+                and self.command_tracker.confirm(entity_id, new_value, now)
+            )
+            transitions[item.id] = classify_transition(
+                old_value,
+                new_value,
+                old_present=old is not None,
+                trusted=new is not None
+                and not (
+                    new.attributes.get("restored")
+                    or new.attributes.get("assumed_state")
+                ),
+                zonentra_initiated=initiated,
+            )
+            self.last_transitions[item.id] = (transitions[item.id], now)
+        return transitions
+
+    def _plan(self, transitions, sources, now) -> None:
+        """Update manual overrides and simulate group coordination and intents."""
+        settings = self.building.settings
+        overrides, events = {}, {}
+        for item in self.building.equipment:
+            if item.kind != "hvac":
+                continue
+            source = sources.get(item.entity_id)
+            override, event = update_override(
+                self.overrides.get(item.id),
+                transitions.get(item.id),
+                item.id,
+                source.state if source else None,
+                now,
+                enabled=settings.manual_override_enabled,
+                duration_minutes=settings.manual_override_duration_minutes,
+            )
+            if override:
+                overrides[item.id] = override
+            if event:
+                events[item.id] = event
+                _LOGGER.debug("Manual override %s: %s", item.id, event)
+        self.overrides = overrides
+        self.command_tracker.expire(now)
+        changed_at = {
+            item.id: sources[item.entity_id].changed_at
+            for item in self.building.equipment
+            if item.kind == "hvac" and item.entity_id in sources
+        }
+        self.coordinations, self.unit_intents, self.coordination_memories = plan(
+            self.building,
+            self.group_decisions,
+            self.group_observations,
+            self.indoor_units,
+            changed_at,
+            self.zone_demands,
+            overrides,
+            events,
+            self.coordination_memories,
+            now,
+        )
 
     def _climate(self, state) -> ClimateAttributes:
         """Copy only the read-only climate attributes Zonentra explains."""

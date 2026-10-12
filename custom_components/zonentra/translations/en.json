@@ -100,7 +100,7 @@
       },
       "building": {
         "title": "Central configuration",
-        "description": "These analysis limits and parameters apply to zones that select building settings. Outdoor temperature always belongs to the whole building. Older outdoor sources still awaiting a choice: {outdoor_candidates}. No equipment is controlled.",
+        "description": "These analysis limits and parameters apply to zones that select building settings. Outdoor temperature always belongs to the whole building. Older outdoor sources still awaiting a choice: {outdoor_candidates}. No equipment is controlled. Manual override and anti-cycling settings only affect the simulated control plan; Zonentra 0.5 sends no commands.",
         "data": {
           "outdoor_temperature_entity": "Outdoor temperature sensor (whole building)",
           "outdoor_max_age_seconds": "Maximum outdoor temperature age (seconds; 0 = disabled)",
@@ -110,7 +110,12 @@
           "cooling_limit_entity": "Central cooling limit entity (optional)",
           "hysteresis": "Central temperature hysteresis (°C)",
           "sensor_validation": "Central sensor validation (state_based = default; update_based only for periodically reporting sensors)",
-          "max_age_seconds": "Central maximum update age for update_based (seconds; ignored by state_based)"
+          "max_age_seconds": "Central maximum update age for update_based (seconds; ignored by state_based)",
+          "manual_override_enabled": "Allow manual override via the room controller",
+          "manual_override_duration_minutes": "Manual override duration (minutes, 5–120)",
+          "min_on_seconds": "Minimum indoor unit on-time before switching off (seconds; comfort)",
+          "min_off_seconds": "Minimum indoor unit off-time before switching on (seconds; safety, check manufacturer)",
+          "changeover_wait_seconds": "Wait between stopping and the opposite mode on a group switch (seconds; safety)"
         }
       }
     },
@@ -171,6 +176,31 @@
           "inactive": "Inactive",
           "mixed": "Mixed (conflict)",
           "unknown": "Unknown"
+        }
+      },
+      "unit_control": {
+        "name": "{unit} Simulated action",
+        "state": {
+          "turn_on_heat": "Turn on heating",
+          "turn_on_cool": "Turn on cooling",
+          "turn_off": "Turn off",
+          "correct_mode": "Correct mode",
+          "hold": "Hold",
+          "blocked": "Blocked"
+        }
+      },
+      "group_coordination": {
+        "name": "{group} Simulated coordination",
+        "state": {
+          "idle": "Idle",
+          "preparing": "Preparing",
+          "stopping": "Stopping",
+          "waiting": "Waiting",
+          "applying": "Applying",
+          "verifying": "Verifying",
+          "completed": "Completed",
+          "blocked": "Blocked",
+          "failed": "Failed"
         }
       }
     }

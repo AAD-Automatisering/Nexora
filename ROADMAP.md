@@ -72,6 +72,17 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] `current_mode_unknown` blijft zonder betrouwbare fysieke feedback gehandhaafd.
 - [ ] Praktijkcontrole met de airco's van de kantoorinstallatie.
 
+### Versie 0.5.0 — gesimuleerde regelstrategie (geïmplementeerd)
+
+- [x] Leidende groepsmodus (heat/cool/neutral/unknown) uit de bestaande gewogen vraag.
+- [x] Control Intent Engine per binnenunit met reason codes en tussenstappen.
+- [x] Manual Override via state-events van de KNX-climate-entiteit (standaard 30 min).
+- [x] CommandTracker met begrensde bevestiging voor toekomstige aansturing.
+- [x] Anti-pendel (min. aan/uit) en heat↔cool-omschakeling als state machine.
+- [x] Simulatiesensoren per binnenunit en per groep; uitgebreide diagnostiek.
+- [x] Geen enkele servicecall; `active_switch_permitted` altijd false.
+- [ ] Veiligheidswaarden verifiëren met Mitsubishi en praktijkvergelijking met de installatie.
+
 ### Vervolg vóór actieve regeling
 
 Inventariseer de fysieke topologie, betrouwbare gatewayfeedback en huidige

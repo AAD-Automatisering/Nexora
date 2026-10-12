@@ -130,10 +130,27 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
             vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
             vol.Optional("sensor_validation"): choice(list(VALIDATION_STRATEGIES)),
             vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
+            # Simulated control (0.5): building-wide, no device is controlled.
+            vol.Optional("manual_override_enabled"): selector.BooleanSelector(),
+            vol.Optional("manual_override_duration_minutes"): numeric(5, 120, 1, "min"),
+            vol.Optional("min_on_seconds"): numeric(0, 3600, 1, "s"),
+            vol.Optional("min_off_seconds"): numeric(0, 3600, 1, "s"),
+            vol.Optional("changeover_wait_seconds"): numeric(0, 3600, 1, "s"),
         }
+        default_settings = BuildingSettings()
         defaults = {
             **NEW_BUILDING_DEFAULTS,
-            "outdoor_max_age_seconds": BuildingSettings().outdoor_max_age_seconds,
+            **{
+                key: getattr(default_settings, key)
+                for key in (
+                    "outdoor_max_age_seconds",
+                    "manual_override_enabled",
+                    "manual_override_duration_minutes",
+                    "min_on_seconds",
+                    "min_off_seconds",
+                    "changeover_wait_seconds",
+                )
+            },
         }
         current = self.topology.get("building", {})
         schema = self.add_suggested_values_to_schema(

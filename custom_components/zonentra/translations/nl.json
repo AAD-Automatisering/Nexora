@@ -100,7 +100,7 @@
       },
       "building": {
         "title": "Centrale configuratie",
-        "description": "Deze analysegrenzen en regelparameters worden gebruikt door ruimtes die gebouwinstellingen kiezen. Buitentemperatuur geldt altijd voor het hele gebouw. Oudere buitensensoren die nog om een keuze vragen: {outdoor_candidates}. Er worden geen apparaten aangestuurd.",
+        "description": "Deze analysegrenzen en regelparameters worden gebruikt door ruimtes die gebouwinstellingen kiezen. Buitentemperatuur geldt altijd voor het hele gebouw. Oudere buitensensoren die nog om een keuze vragen: {outdoor_candidates}. Er worden geen apparaten aangestuurd. Instellingen voor handmatige bediening en anti-pendel beïnvloeden alleen het gesimuleerde regelplan; Zonentra 0.5 verstuurt geen commando's.",
         "data": {
           "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
           "outdoor_max_age_seconds": "Maximale buitentemperatuurleeftijd (seconden; 0 = uit)",
@@ -110,7 +110,12 @@
           "cooling_limit_entity": "Centrale entiteit voor koelgrens (optioneel)",
           "hysteresis": "Centrale temperatuurhysterese (°C)",
           "sensor_validation": "Centrale sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
-          "max_age_seconds": "Centrale maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)"
+          "max_age_seconds": "Centrale maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)",
+          "manual_override_enabled": "Handmatige bediening via de roomcontroller toestaan",
+          "manual_override_duration_minutes": "Duur handmatige bediening (minuten, 5–120)",
+          "min_on_seconds": "Minimale inschakeltijd binnenunit vóór uitschakelen (seconden; comfort)",
+          "min_off_seconds": "Minimale uitschakeltijd binnenunit vóór inschakelen (seconden; veiligheid, controleer fabrikant)",
+          "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)"
         }
       }
     },
@@ -171,6 +176,31 @@
           "inactive": "Inactief",
           "mixed": "Gemengd (conflict)",
           "unknown": "Onbekend"
+        }
+      },
+      "unit_control": {
+        "name": "{unit} Gesimuleerde actie",
+        "state": {
+          "turn_on_heat": "Verwarmen inschakelen",
+          "turn_on_cool": "Koelen inschakelen",
+          "turn_off": "Uitschakelen",
+          "correct_mode": "Modus corrigeren",
+          "hold": "Ongewijzigd",
+          "blocked": "Geblokkeerd"
+        }
+      },
+      "group_coordination": {
+        "name": "{group} Gesimuleerde coördinatie",
+        "state": {
+          "idle": "Rust",
+          "preparing": "Voorbereiden",
+          "stopping": "Stoppen",
+          "waiting": "Wachten",
+          "applying": "Toepassen",
+          "verifying": "Verifiëren",
+          "completed": "Voltooid",
+          "blocked": "Geblokkeerd",
+          "failed": "Mislukt"
         }
       }
     }

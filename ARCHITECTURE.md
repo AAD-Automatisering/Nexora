@@ -1,6 +1,6 @@
 # Zonentra — architectuur
 
-Status: versie 0.4.0, binnenunitobservatie, sensorvalidatie, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
+Status: versie 0.5.0, gesimuleerde regelstrategie en Manual Override, binnenunitobservatie, sensorvalidatie, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
 
 ## Projectnaam en integratie-identiteit
 
@@ -119,6 +119,16 @@ Status-sensor met fysieke hold-beslissingen. De nieuwe, pure analysemodellen zij
 | ClimateAttributes | Gekopieerde hvac_action, temperaturen, fan_mode en last_updated van een climate-entiteit |
 | IndoorUnitObservation | Beschikbaarheid, selected mode, reported action, kwaliteit en mismatch per binnenunit |
 | GroupModeObservation | Consensus, activiteit, afgeleide modus, conflicten, volledigheid, kwaliteit en reden per groep |
+| ManualOverride | Start, absolute eindtijd en startmodus per binnenunit (alleen in geheugen) |
+| PendingCommand / CommandTracker | Verwachte state van een Zonentra-commando met begrensde bevestigingsperiode (ontwerp voor actieve aansturing; leeg in 0.5) |
+| CoordinationMemory | Gecoördineerde groepsmodus, sinds wanneer, en voortgang van een omschakeling |
+| GroupCoordination | Leidende groepsmodus, omschakelfase, blockers, geplande acties; `simulation=True`, `active_switch_permitted=False` |
+| UnitIntent | Waargenomen en gewenste modus, eerstvolgende actie, stappen, reden, blokkade, override en resterende tijd |
+
+`control.plan()` is de Control Intent Engine: een pure functie van klimaatvraag,
+groepsbesluit, binnenunitobservaties, overrides, tijdsparameters en `now`. Er is
+geen uitvoeradapter; een toekomstige adapter zou intents vertalen naar services en
+elk commando eerst in de CommandTracker registreren.
 
 De runtime verzamelt één snapshot op één UTC-tijdstip. `collect_zone` bouwt pure
 snapshots, `calculate_demand` berekent behoeften, `evaluate`/`decide_group`
@@ -289,6 +299,11 @@ stale-detectie zijn nu wel geïmplementeerd; optionele context heeft nog geen be
   horen bij het kantoor? Alarmstatus onbekend betekent geen bewezen afwezigheid.
 - Welke gevels, dakramen en KNX-windbeveiligingen zijn werkelijk aanwezig?
 - Welke meters zijn echte metingen, wat zijn hun eenheden en actualisatiepatronen?
+
+- Voor de 0.5-simulatie: welke minimale aan-/uittijden en heat↔cool-wachttijd
+  schrijft Mitsubishi voor (de standaarden 600/180/300 s zijn aannames)? Rapporteren
+  de Intesis/KNX-entities een betrouwbare modus na een commando, en hoe snel?
+  Welke automations zetten airco's aan (die starten nu ook een override)?
 
 Deze vragen blokkeren read-only analyse niet, maar moeten vóór actieve regeling worden beantwoord. Er worden geen fysieke aannames automatisch als
 configuratie ingevuld.

@@ -1,4 +1,4 @@
-# Zonentra 0.4.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.5.0 — uitlegbare klimaatintelligentie
 
 Alles in dit document betreft **read-only analyse**. Een voorgestelde modus is
 geen commando, en verandert ook niet de intern bijgehouden actuele modus.
@@ -246,6 +246,127 @@ uit de expliciet ingestelde modus-feedback van de groep. De afgeleide modus vult
 die nooit in, verandert `desired_mode`, scores of `proposed_mode` niet, en kan
 `current_mode_unknown` niet opheffen of een omschakeling vrijgeven.
 
+## Gesimuleerde regelstrategie (0.5)
+
+**Alles in dit hoofdstuk is simulatie.** De pure modules `override.py` en
+`control.py` importeren geen Home Assistant en roepen geen services aan. Elk
+resultaat draagt `simulation: true`; stappen worden nooit als uitgevoerd of
+bevestigd gerapporteerd. De Decision Engine (0.2–0.4) is ongewijzigd.
+
+### Niveau A — leidende groepsmodus
+
+| Decision Engine | Groepsmodus |
+|---|---|
+| desired heat / cool | heat / cool |
+| desired off (geen significante vraag) | neutral |
+| score-deadband (gebalanceerd) | huidige gecoördineerde modus als die zelf ≥ minimale vraagscore heeft, anders neutral |
+| observed_group_conflict (units al in heat én cool) | de complete zonevraag beslist met dezelfde drempels (minimale score, deadband), zodat afwijkende units gecorrigeerd kunnen worden |
+| insufficient_data, onbeschikbare units, ontbrekende sensoren | unknown → alle nieuwe acties geblokkeerd |
+
+De groepsmodus is leidend voor iedere binnenunit in de groep, ook tijdens een
+handmatige override. Bij neutral kiest Zonentra nooit zelf heat of cool. Een
+"laatst bekende modus als voorkeur" bij neutral is bewust niet geïmplementeerd.
+
+### Niveau B — actie per binnenunit
+
+Volgorde (de eerste regel die geldt beslist):
+
+1. Unit onbeschikbaar/ontbrekend/onbetrouwbaar → `blocked` (`indoor_unit_unavailable`).
+2. Groepsmodus unknown → `blocked` (`group_mode_unknown`).
+3. Groepsomschakeling bezig → zie state machine; een override omzeilt die niet.
+4. Manual override actief:
+   - groep heat/cool: compatibele modus → `hold` (`manual_override`), anders
+     `correct_mode` naar de groepsmodus (`manual_override_mode_corrected`);
+   - groep neutral: als geen andere unit in de tegengestelde modus draait →
+     `hold` (`manual_override_neutral`); `auto` volgt draaiende units of wordt
+     `blocked` (`mode_undetermined`); tegengestelde draaiende units → `blocked`
+     (`group_conflict`), nooit willekeurig een kant kiezen.
+5. Zonevraag unknown (sensorfout) → `blocked` (`zone_demand_unknown`).
+6. Zonevraag gelijk aan groepsmodus → `turn_on_heat` / `turn_on_cool`, `hold`
+   (`following_group_mode`) of `correct_mode`.
+7. Anders gewenst `off`: `no_zone_demand`, `group_mode_neutral`,
+   `zone_demand_conflicts_group_mode` of `override_expired` → `turn_off` of `hold`.
+
+Compatibele modi: bij heat → heat, fan_only; bij cool → cool, dry, fan_only.
+`desired_mode` is de eindtoestand, `action` alleen de eerstvolgende stap en
+`steps` de volledige reeks (bijv. `turn_off → wait_changeover → turn_on_cool`).
+
+### Anti-pendel
+
+| Instelling | Standaard | Soort | Regel |
+|---|---|---|---|
+| `min_on_seconds` | 600 s | comfort | geen `turn_off` binnen deze tijd na inschakelen |
+| `min_off_seconds` | 180 s | veiligheid | geen `turn_on` binnen deze tijd na uitschakelen |
+| `changeover_wait_seconds` | 300 s | veiligheid | wachttijd tussen stoppen en de tegengestelde modus |
+| groep `min_switch_seconds` | 900 s | comfort | bestaande parameter, hergebruikt: minimale tijd per groepsmodus |
+
+De tijd sinds de laatste overgang is HA `last_changed` van de climate-state; na een
+herstart begint die opnieuw (conservatief). Een geblokkeerde actie toont
+`blocked_until`, en de runtime plant daarop een herbeoordeling. De standaard
+veiligheidswaarden zijn **niet geverifieerd** met Mitsubishi-documentatie.
+
+### Groepsomschakeling (state machine)
+
+| Fase | Wanneer |
+|---|---|
+| idle / completed | geen omschakeling nodig (completed blijft staan na de laatste omschakeling) |
+| preparing | omschakeling gewenst, minimale groepsmodusduur nog niet verstreken (`waiting_until`) |
+| blocked | groepsmodus unknown, units onbeschikbaar of harde conflicten |
+| stopping | units in een incompatibele modus draaien nog → gepland `turn_off` |
+| waiting | niets meer te stoppen; veiligheidswachttijd vanaf het eerste moment zonder draaiende units |
+| applying | units met vraag of override staan nog niet in de nieuwe modus |
+| verifying | units staan in de nieuwe modus, afgeleide groepsmodus nog niet consistent |
+| failed | geselecteerde modus en gemelde activiteit spreken elkaar tegen |
+
+De fase volgt **uitsluitend waarnemingen**: zonder commando's blijft een
+omschakeling in read-only bijvoorbeeld in `stopping` staan zolang units in de oude
+modus draaien. `switch_allowed_in_simulation` zegt of de voorwaarden in de
+simulatie vervuld zijn; `active_switch_permitted` is in 0.5 altijd `false`
+(blockers `read_only_simulation` en, zonder fysieke modusfeedback,
+`current_mode_unknown`). Voor toekomstige coördinatie zonder buitenunitfeedback
+zijn de voorwaarden: alle units beschikbaar, geen harde conflicten, verlopen
+anti-pendeltijden, en een geverifieerde (selected én reported) eindtoestand.
+
+### Manual override
+
+Bron: de state-events van de gekoppelde climate-entiteit. Classificatie van één
+`state_changed`-event:
+
+| Overgang | Classificatie | Override |
+|---|---|---|
+| off → heat/cool/dry/fan_only/auto/heat_cool | manual_on | start (tenzij uitgeschakeld) |
+| actief → off | manual_off | eindigt |
+| actief → andere actieve modus | mode_change | ongewijzigd (timer niet verlengd) |
+| zelfde state, andere attributen | attribute_update | ongewijzigd |
+| unknown/unavailable → actief | from_unavailable | nooit |
+| entiteit verschijnt / HA-start / setup | initial / geen event | nooit |
+| restored of assumed_state | untrusted | nooit |
+| overeenkomend met een Zonentra-commando | zonentra_initiated | nooit |
+
+Same-value-rapporten (`state_reported`) en timers zijn geen overgangen.
+**Beperking:** HA-events bewijzen de herkomst niet. Een externe automatisering
+die een unit aanzet is niet te onderscheiden van de roomcontroller en start dus
+ook een override.
+
+`CommandTracker` (voor toekomstige aansturing) registreert per entiteit de
+verwachte state met een begrensde bevestigingsperiode (60 s). Alleen een
+overgang naar precies die state binnen die periode telt als Zonentra-initiatief;
+daarna is elke overgang weer extern. Er is geen open tijdsvenster dat echte
+gebruikersacties onderdrukt. In 0.5 blijft de tracker leeg.
+
+Timer: `expires_at = start + manual_override_duration_minutes` (standaard 30,
+5–120). Alleen een nieuwe off→aan-overgang start een nieuwe override; updates,
+moduscorrecties en rapporten verlengen niets. De runtime plant een herbeoordeling
+op `expires_at`, zodat de override ook zonder nieuwe events afloopt. Daarna geldt
+de normale regeling (`override_expired` → `turn_off` zonder vraag). Tijd komt uit
+één expliciete bron (`dt_util.utcnow` in de runtime, `now` als parameter in de
+pure kern), waardoor alles deterministisch testbaar is.
+
+**Herstart:** overrides staan alleen in het geheugen en overleven een herstart
+niet. Een verlopen override kan dus nooit terugkomen en een herstart start nooit
+een override. Een unit die na een herstart aan staat zonder vraag krijgt de normale
+`turn_off`-intentie (met minimale aan-tijd vanaf de herstart).
+
 ## Events en herbeoordeling
 
 Bronveranderingen gebruiken `async_track_state_change_event`. Voor rapporten met
@@ -254,6 +375,8 @@ actuele HA-API voorschrijft. De runtime plant slechts één timer naar de eerstv
 sensorvervaldatum of geblokkeerde omschakeldeadline. Er is geen periodieke polling.
 Binnenunits zijn al gevolgde apparatuurentiteiten: een `hvac_action`-wijziging
 is een attribuutwijziging en komt via hetzelfde state_changed-event binnen.
+Override-afloop, anti-pendelblokkades en wachttijden van de omschakeling worden
+als deadlines in dezelfde ene timer meegenomen.
 Bij unload worden zowel bronlisteners als de timer verwijderd.
 
 De beslisengine importeert geen Home Assistant en heeft geen uitvoerinterface.
