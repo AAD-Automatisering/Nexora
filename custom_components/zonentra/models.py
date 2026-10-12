@@ -2,20 +2,20 @@
 
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from dataclasses import field as dataclass_field
 from typing import Any
 
 from .const import KINDS
+from .migration import LIMIT_FIELDS, PARAMETER_FIELDS, migrate_options
 
 ZONE_ENTITY_FIELDS = (
     "temperature_entity",
-    "controller_entity",
     "occupancy_entity",
     "heating_limit_entity",
     "cooling_limit_entity",
     "humidity_entity",
     "co2_entity",
-    "outdoor_temperature_entity",
 )
 
 
@@ -24,7 +24,6 @@ class Zone:
     id: str
     name: str
     temperature_entity: str | None = None
-    controller_entity: str | None = None
     occupancy_entity: str | None = None
     heating_limit: float | None = None
     cooling_limit: float | None = None
@@ -32,12 +31,13 @@ class Zone:
     cooling_limit_entity: str | None = None
     humidity_entity: str | None = None
     co2_entity: str | None = None
-    outdoor_temperature_entity: str | None = None
     contact_entities: tuple[str, ...] = ()
     group_id: str | None = None
     weight: float = 1.0
     hysteresis: float = 0.3
     max_age_seconds: float = 1800.0
+    use_building_limits: bool = False
+    use_building_parameters: bool = False
 
 
 @dataclass(frozen=True)
@@ -63,12 +63,35 @@ class Equipment:
 
 
 @dataclass(frozen=True)
+class BuildingSettings:
+    outdoor_temperature_entity: str | None = None
+    outdoor_max_age_seconds: float = 1800.0
+    heating_limit: float | None = None
+    cooling_limit: float | None = None
+    heating_limit_entity: str | None = None
+    cooling_limit_entity: str | None = None
+    hysteresis: float = 0.3
+    max_age_seconds: float = 1800.0
+    outdoor_temperature_candidates: tuple[str, ...] = ()
+
+
+def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
+    values = {}
+    if zone.use_building_limits:
+        values.update({key: getattr(settings, key) for key in LIMIT_FIELDS})
+    if zone.use_building_parameters:
+        values.update({key: getattr(settings, key) for key in PARAMETER_FIELDS})
+    return replace(zone, **values)
+
+
+@dataclass(frozen=True)
 class Building:
     id: str
     name: str
     zones: tuple[Zone, ...]
     groups: tuple[EquipmentGroup, ...]
     equipment: tuple[Equipment, ...]
+    settings: BuildingSettings = dataclass_field(default_factory=BuildingSettings)
 
     @property
     def entity_ids(self) -> frozenset[str]:
@@ -83,6 +106,15 @@ class Building:
             ]
             + [entity for zone in self.zones for entity in zone.contact_entities]
             + [group.mode_entity for group in self.groups if group.mode_entity]
+            + [
+                entity
+                for key in (
+                    "outdoor_temperature_entity",
+                    "heating_limit_entity",
+                    "cooling_limit_entity",
+                )
+                if (entity := getattr(self.settings, key))
+            ]
         )
 
 
@@ -122,6 +154,23 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     """Validate references, parameters and exclusive physical equipment ownership."""
     if not name.strip():
         raise ValueError("invalid_name")
+    topology = migrate_options(topology)
+    settings_data = topology.get("building", {})
+    settings = BuildingSettings(
+        **{
+            **settings_data,
+            "outdoor_temperature_candidates": tuple(
+                settings_data.get("outdoor_temperature_candidates", ())
+            ),
+        }
+    )
+    _entity(settings.outdoor_temperature_entity, ("sensor",))
+    for key in ("heating_limit_entity", "cooling_limit_entity"):
+        _entity(getattr(settings, key), ("sensor", "number", "input_number"))
+    _range(settings.hysteresis, 0.1, 2)
+    _range(settings.max_age_seconds, 0, 86400)
+    _range(settings.outdoor_max_age_seconds, 0, 86400)
+    _validate_limits(settings)
     zones, groups, equipment = (
         topology.get(key, []) for key in ("zones", "groups", "equipment")
     )
@@ -131,15 +180,19 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         Zone(**{**item, "contact_entities": tuple(item.get("contact_entities", ()))})
         for item in zones
     )
+    for zone in zone_models:
+        if not isinstance(zone.use_building_limits, bool) or not isinstance(
+            zone.use_building_parameters, bool
+        ):
+            raise ValueError("invalid_parameters")
+    zone_models = tuple(effective_zone(zone, settings) for zone in zone_models)
     group_models = tuple(EquipmentGroup(**item) for item in groups)
     zone_by_id = {zone.id: zone for zone in zone_models}
     group_ids = {group.id for group in group_models}
     for zone in zone_models:
         for field in ZONE_ENTITY_FIELDS:
             domains = (
-                ("climate",)
-                if field == "controller_entity"
-                else ("binary_sensor",)
+                ("binary_sensor",)
                 if field == "occupancy_entity"
                 else ("sensor", "number", "input_number")
                 if field.endswith("limit_entity")
@@ -153,23 +206,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         _range(zone.weight, 0.1, 10)
         _range(zone.hysteresis, 0.1, 2)
         _range(zone.max_age_seconds, 0, 86400)
-        for limit in (zone.heating_limit, zone.cooling_limit):
-            if limit is not None:
-                _range(limit, 5, 35)
-        heat_configured = (
-            zone.heating_limit is not None or zone.heating_limit_entity is not None
-        )
-        cool_configured = (
-            zone.cooling_limit is not None or zone.cooling_limit_entity is not None
-        )
-        if heat_configured != cool_configured:
-            raise ValueError("invalid_limits")
-        if (
-            zone.heating_limit is not None
-            and zone.cooling_limit is not None
-            and zone.heating_limit + 2 * zone.hysteresis >= zone.cooling_limit
-        ):
-            raise ValueError("invalid_limits")
+        _validate_limits(zone)
     for group in group_models:
         _entity(group.mode_entity, ("sensor", "select", "climate"))
         _range(group.min_switch_seconds, 0, 86400)
@@ -206,5 +243,21 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
             Equipment(**{**item, "group_id": item.get("group_id") or zone_group})
         )
     return Building(
-        building_id, name, zone_models, group_models, tuple(equipment_models)
+        building_id, name, zone_models, group_models, tuple(equipment_models), settings
     )
+
+
+def _validate_limits(config) -> None:
+    for limit in (config.heating_limit, config.cooling_limit):
+        if limit is not None:
+            _range(limit, 5, 35)
+    heat = config.heating_limit is not None or config.heating_limit_entity is not None
+    cool = config.cooling_limit is not None or config.cooling_limit_entity is not None
+    if heat != cool:
+        raise ValueError("invalid_limits")
+    if (
+        config.heating_limit is not None
+        and config.cooling_limit is not None
+        and config.heating_limit + 2 * config.hysteresis >= config.cooling_limit
+    ):
+        raise ValueError("invalid_limits")

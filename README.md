@@ -3,10 +3,11 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.2.0** voegt uitlegbare klimaatvraag per ruimte en gewogen
-buitenunitvoorstellen toe, volledig in read-only simulatie. Zonentra roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
+Versie **0.3.0** voegt centrale gebouwinstellingen met optionele ruimteafwijkingen
+toe aan de uitlegbare klimaatvraag en gewogen buitenunitvoorstellen. Alles blijft
+read-only simulatie. Zonentra roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
 zonwerings- of ventilatie-instellingen. De 16 °C-vloerverwarmingsgrens blijft intact.
-Bestaande VTherm-regeling en automations blijven zelfstandig werken.
+Bestaande regelingen en automations blijven zelfstandig werken.
 
 ## Installatie
 
@@ -36,19 +37,27 @@ niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
 
-### Bijwerken vanaf Zonentra 0.1
+### Bijwerken vanaf Zonentra 0.1 of 0.2
 
-Werk de bestaande integratie bij via HACS en herstart Home Assistant. **Verwijder
-je bestaande Zonentra-configuratie niet.** Het domain, de opgeslagen structuur,
-IDs, apparaatkoppelingen en de Status-sensor blijven behouden. De nieuwe velden
-zijn additief en hebben achterwaarts compatibele modeldefaults: er is geen
-config-entry-versiemigratie nodig (Config Flow VERSION blijft 1).
+Werk de bestaande integratie bij via HACS zodra 0.3.0 is gepubliceerd en herstart
+Home Assistant. **Verwijder je bestaande Zonentra-configuratie niet.** De automatische
+migratie naar configuratieversie 3 behoudt IDs, apparaatkoppelingen en sensoren.
+Bestaande eigen analysegrenzen, hysterese en meetleeftijd blijven actief als lokale
+instellingen. Nieuwe ruimtes gebruiken standaard de centrale instellingen.
 
-Open daarna Opties, bewerk iedere ruimte en configureer de twee klimaatgrenzen.
-Een oude ruimte zonder klimaatgrenzen blijft laden maar heeft demand=unknown.
-Er wordt geen VTherm-setpoint automatisch als verwarmings- én koelgrens gebruikt.
-De veel eerdere testintegratie onder domain `nexora` is een andere integratie;
-zoals afgesproken bij de naamswijziging is daarvoor geen migratie toegevoegd.
+De vroegere `controller_entity`-koppeling wordt bij migratie verwijderd. Zonentra
+heeft geen ruimteregelaar of VTherm nodig: de externe temperatuur en analysegrenzen
+bepalen de vraag. Een ontbrekende oude thermostaat telt niet meer als bronprobleem.
+
+Een bestaande buitentemperatuurbron wordt naar het gebouw verplaatst. Wanneer
+verschillende ruimtes verschillende bronnen hadden, kiest Zonentra geen bron:
+selecteer de juiste via **Opties → Centrale configuratie**. De kandidaten staan
+in het formulier; Status meldt `outdoor_temperature_selection_required`.
+
+Oude ruimtes zonder grenzen blijven unknown zolang geen centrale grenzen zijn
+opgeslagen. Configureer centraal de gewenste grenzen en vink bij bestaande ruimtes
+**Centrale klimaatgrenzen gebruiken** aan om ze over te nemen. De veel eerdere
+testintegratie onder domain `nexora` heeft geen migratie naar `zonentra`.
 
 Bronnen: [HACS custom repositories](https://www.hacs.dev/docs/faq/custom_repositories/),
 [repositorystructuur](https://www.hacs.dev/docs/publish/integration/) en
@@ -63,13 +72,13 @@ aan; dit verschijnt niet in de formulieren en blijft behouden als je de naam wij
 Bestaande, eerder handmatig ingevulde IDs blijven ook behouden. Alle wijzigingen worden pas opgeslagen via
 **Opslaan**. Sluiten verwerpt de transactie.
 
-Maak eerst ruimtes aan, daarna buitenunitgroepen, daarna apparatuur. Voor het
+Stel eerst de centrale configuratie in, maak daarna ruimtes, buitenunitgroepen en apparatuur aan. Voor het
 kantoor kunnen twee groepen met de namen `Buitenunit 1` en `Buitenunit 2` worden gemaakt. Koppel
 elke binnenunit aan zijn werkelijke ruimte en buitenunit; Zonentra raadt die relatie
 niet. Groepen modelleren maximaal één heat/cool-modus tegelijk.
 
-Een ruimte heeft optioneel een aparte KNX-temperatuursensor, een climate-
-ruimtecontroller (bijvoorbeeld VTherm) en een binary_sensor voor ruimtebezetting.
+Een ruimte heeft optioneel een aparte KNX-temperatuursensor en een binary_sensor
+voor ruimtebezetting.
 Registreer de fysieke Mitsubishi-climate als HVAC-apparatuur. Meerdere apparaten
 per ruimte en groep zijn mogelijk. Floor heating, shading, ventilation en other
 kunnen ook worden geregistreerd; buitenunitgroepen zijn uitsluitend voor HVAC.
@@ -84,21 +93,41 @@ in latere fases. Optionele CO₂ en buitentemperatuur kunnen nu al als context w
 
 ## Klimaatintelligentie configureren
 
-Bewerk een ruimte via **Opties → Ruimte toevoegen of bewerken**:
+Begin via **Opties → Centrale configuratie**:
 
-| Veld | Gebruik / voorgestelde beginwaarde |
+| Centrale instelling | Gebruik / voorgestelde beginwaarde |
 |---|---|
-| Ruimtetemperatuursensor | De externe KNX-temperatuursensor, met °C of °F |
-| Verwarmingsgrens / koelgrens | Bijvoorbeeld 21 / 24 °C; analysegrenzen, geen apparaat-setpoints |
+| Buitentemperatuursensor | Eén sensor voor het hele gebouw, met °C of °F |
+| Maximale leeftijd buitentemperatuur | 1800 s; onafhankelijk van de ruimtesensoren |
+| Verwarmingsgrens / koelgrens | 21 / 24 °C; analysegrenzen, geen apparaat-setpoints |
 | Grensentiteiten | Optionele sensor/number/input_number met °C/°F; gaan vóór vaste grenzen |
-| Ruimteweging | 1; grotere of belangrijkere ruimtes kunnen zwaarder meewegen |
-| Temperatuurhysterese | 0,3 °C; ruimte tussen grenzen moet groter zijn dan tweemaal hysterese |
-| Maximale meetleeftijd | 1800 s; afstemmen op de werkelijke sensorrapportage, 0 schakelt de check uit |
-| Buitenunitgroep | Optioneel als standaard voor HVAC-apparatuur in deze ruimte |
-| Optionele context | Vochtigheid, CO₂, aanwezigheid, raam-/deurcontacten, buitentemperatuur |
+| Temperatuurhysterese | 0,3 °C; ruimte tussen grenzen groter dan tweemaal hysterese |
+| Maximale meetleeftijd | 1800 s; afstemmen op sensorrapportage, 0 schakelt de check uit |
 
-De VTherm-climate blijft de ruimteregelaar; registreer de fysieke Mitsubishi-climate
-als HVAC-apparatuur. Een expliciete groep bij een apparaat mag niet afwijken van
+Bewerk daarna een ruimte via **Opties → Ruimte toevoegen of bewerken**:
+
+| Ruimte-instelling | Gebruik |
+|---|---|
+| Ruimtetemperatuursensor | De externe KNX-temperatuursensor |
+| Centrale klimaatgrenzen gebruiken | Standaard aan voor nieuwe ruimtes; neemt beide grenzen en grensentiteiten over |
+| Centrale meetparameters gebruiken | Standaard aan; neemt hysterese en maximale meetleeftijd over |
+| Ruimteweging | Standaard 1; belangrijkere ruimtes kunnen zwaarder meewegen |
+| Buitenunitgroep | Optionele standaard voor HVAC-apparatuur in deze ruimte |
+| Optionele ruimtecontext | Vochtigheid, CO₂, aanwezigheid en raam-/deurcontacten |
+
+Vink een centrale keuze uit en klik **Volgende** om de eigen velden te tonen.
+De twee keuzes werken onafhankelijk. Terugschakelen naar centraal bewaart eerder
+opgeslagen eigen waarden voor later, maar gebruikt ze niet als fallback wanneer
+een centrale bron ontbreekt. Een wijziging centraal geldt voor alle ruimtes die
+dat blok overnemen. De sensorattributen `limits_source` en `parameters_source`
+tonen `building` of `zone`.
+
+Deze opzet volgt het configuratieprincipe van VTherm: één centrale configuratie en
+lokale instanties die parameterblokken overnemen. In Zonentra blijft alles binnen
+één gebouw-entry. De fysieke climate-entiteit wordt als apparatuur aan een ruimte gekoppeld,
+onafhankelijk van de centrale parameterkeuzes.
+
+Registreer de fysieke Mitsubishi-climate als HVAC-apparatuur. Een expliciete groep bij een apparaat mag niet afwijken van
 de groep van de ruimte. Meerdere binnenunits in dezelfde ruimte tellen in de
 vraagscore van hun groep maar één keer mee.
 
@@ -106,7 +135,7 @@ Bewerk vervolgens een **Buitenunitgroep**:
 
 - **Actuele modus-feedback:** alleen een betrouwbare entiteit die de actuele modus
   van de gedeelde installatie meldt als `heat`, `cool` of `off`. Selecteer hier
-  niet zonder verificatie de gewenste VTherm-modus. Heb je geen betrouwbare
+  niet zonder verificatie een gewenste modus. Heb je geen betrouwbare
   terugmelding, laat de bron leeg: desired kan berekend worden, proposed blijft
   unknown en `current_mode_unknown` verklaart de blokkering.
 - **Minimuminterval:** 900 s tussen waargenomen modusveranderingen. Herstart en
@@ -118,7 +147,7 @@ Bewerk vervolgens een **Buitenunitgroep**:
 
 Klik tenslotte **Opslaan**. De ingestelde analysegrenzen wijzigen geen airco- of
 vloerverwarmingssetpoints. Optionele aanwezigheid ontbreekt → unknown, nooit away.
-Optionele context beïnvloedt de klimaatscores in 0.2 nog niet.
+Optionele context beïnvloedt de klimaatscores in 0.3 nog niet.
 
 ## Status en diagnostiek
 
@@ -128,8 +157,8 @@ niet voor elke score een aparte entiteit nodig is.
 
 | Sensor | State | Belangrijkste attributen |
 |---|---|---|
-| Status | read_only / degraded / conflict | zones, groups, equipment, unavailable_inputs, unknown_zone_demands; maximaal 20 fysieke hold-beslissingen |
-| Ruimte Klimaatvraag | heating_demand / cooling_demand / neutral / unknown | temperature_c, heating_limit_c, cooling_limit_c, heating_score, cooling_score, reason, sensor_health, source_health, occupancy |
+| Status | read_only / degraded / conflict | zones, groups, equipment, unavailable_inputs, unknown_zone_demands, outdoor_temperature_c, outdoor_temperature_quality, outdoor_temperature_selection_required; maximaal 20 fysieke hold-beslissingen |
+| Ruimte Klimaatvraag | heating_demand / cooling_demand / neutral / unknown | temperature_c, heating_limit_c, cooling_limit_c, heating_score, cooling_score, reason, sensor_health, source_health, occupancy, limits_source, parameters_source |
 | Buitenunit Voorgestelde HVAC-modus | heat / cool / off / unknown | current_mode, desired_mode, heating_score, cooling_score, reason, blocked_reason, blocked_until, mode_change_proposed, mode_quality, reliable_zones |
 
 `read_only` bevestigt observatie/simulatie, ook bij een leeg gebouw. `degraded`
@@ -156,7 +185,7 @@ Debuglogging kan via de standaard HA-functie worden ingeschakeld. Bronlisteners
 volgen wijzigingen én rapporten met dezelfde waarde; één deadline-timer houdt
 sensorleeftijd en wachttijden bij. Er is geen periodieke polling.
 
-## Veilig testen naast VTherm
+## Veilig testen naast de bestaande regeling
 
 Laat de bestaande regeling en automations gewoon draaien. Vergelijk per ruimte
 de KNX-temperatuur, ingestelde analysegrenzen en weergegeven klimaatscores.
@@ -182,7 +211,7 @@ python3.14 -m venv .venv
 .venv/bin/pytest -q
 ```
 
-De suite omvat 79 tests. Pure kernfuncties worden zonder HomeAssistant-instance
+De suite omvat 92 tests. Pure kernfuncties worden zonder HomeAssistant-instance
 getest. Integratietests gebruiken de echte Home Assistant flow manager, state machine, sensorplatform
 en lifecycle-fixtures. Ze controleren ook dat geen servicecalls plaatsvinden bij
 setup, bronwijzigingen, unload en opnieuw laden. CI voert dezelfde checks op Linux
@@ -200,7 +229,8 @@ custom_components/zonentra/
   manifest.json                 custom integration metadata, singleton
   const.py                      domein en types
   config_flow.py                gebouwsetup en topologie-editor
-  models.py                     pure, immutable topologie en validatie
+  models.py                     pure topologie, centrale instellingen en validatie
+  migration.py                  versiecompatibiliteit en behoud van ruimtebeleid
   observations.py               bronkwaliteit, leeftijd en eenheden
   demand.py                     ruimtesnapshots en klimaatvraag
   engine.py                     gewogen groepsarbitrage en verklaringen

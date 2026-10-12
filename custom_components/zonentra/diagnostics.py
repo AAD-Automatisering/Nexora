@@ -13,7 +13,11 @@ async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -
         {
             "configuration": {"data": dict(entry.data), "options": dict(entry.options)},
             "status": entry.runtime_data.status,
-            "summary": entry.runtime_data.summary(),
+            "summary": {
+                key: value
+                for key, value in entry.runtime_data.summary().items()
+                if key != "outdoor_temperature_c"
+            },
             "zone_demands": [
                 asdict(item) for item in entry.runtime_data.zone_demands.values()
             ],
@@ -38,6 +42,8 @@ async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -
             "controller_entity",
             "occupancy_entity",
             "mode_entity",
+            "outdoor_temperature_entity",
+            "outdoor_temperature_candidates",
             "contact_entities",
             "member_zone_ids",
             *ZONE_ENTITY_FIELDS,

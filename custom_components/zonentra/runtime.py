@@ -13,7 +13,7 @@ from .decision import Observation, simulate
 from .demand import calculate_demand, collect_zone
 from .engine import GroupMemory, evaluate, observe_mode
 from .models import Building
-from .observations import SourceState
+from .observations import Reading, SourceState, read
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -27,6 +27,7 @@ class BuildingRuntime:
         self.signal = f"zonentra_{building.id}_updated"
         self.observations: dict[str, Observation] = {}
         self.decisions = ()
+        self.outdoor_temperature = Reading(None, "missing")
         self.zone_snapshots = {}
         self.zone_demands = {}
         self.group_decisions = {}
@@ -70,8 +71,16 @@ class BuildingRuntime:
             )
         self.observations = observations
         self.decisions = decisions
+        self.outdoor_temperature = read(
+            sources.get(self.building.settings.outdoor_temperature_entity),
+            "temperature",
+            now,
+            self.building.settings.outdoor_max_age_seconds,
+        )
         self.zone_snapshots = {
-            zone.id: collect_zone(self.building, zone, sources, now)
+            zone.id: collect_zone(
+                self.building, zone, sources, now, self.outdoor_temperature
+            )
             for zone in self.building.zones
         }
         self.zone_demands = {
@@ -122,13 +131,22 @@ class BuildingRuntime:
                     "cooling_limit_entity",
                     "humidity_entity",
                     "co2_entity",
-                    "outdoor_temperature_entity",
                 ):
                     source = sources.get(getattr(zone, field))
                     if source and source.reported_at:
                         deadlines.append(
                             source.reported_at + timedelta(seconds=zone.max_age_seconds)
                         )
+        outside = sources.get(self.building.settings.outdoor_temperature_entity)
+        if (
+            outside
+            and outside.reported_at
+            and self.building.settings.outdoor_max_age_seconds
+        ):
+            deadlines.append(
+                outside.reported_at
+                + timedelta(seconds=self.building.settings.outdoor_max_age_seconds)
+            )
         for group in self.building.groups:
             source = sources.get(group.mode_entity)
             if group.max_age_seconds and source and source.reported_at:
@@ -169,6 +187,11 @@ class BuildingRuntime:
         """Return bounded metadata; do not expose alarm states or raw attributes."""
         return {
             "read_only": True,
+            "outdoor_temperature_c": self.outdoor_temperature.value,
+            "outdoor_temperature_quality": self.outdoor_temperature.quality,
+            "outdoor_temperature_selection_required": bool(
+                self.building.settings.outdoor_temperature_candidates
+            ),
             "zones": len(self.building.zones),
             "groups": len(self.building.groups),
             "equipment": len(self.building.equipment),

@@ -158,7 +158,14 @@ async def test_referenced_delete_blocked_and_optional_link_removed(hass, topolog
             result["flow_id"], {"next_step_id": "finish"}
         )
         await hass.async_block_till_done()
-    assert entry.options["zones"] == [{"id": "office", "name": "Renamed"}]
+    assert entry.options["zones"] == [
+        {
+            "id": "office",
+            "name": "Renamed",
+            "use_building_limits": True,
+            "use_building_parameters": True,
+        }
+    ]
 
 
 async def test_group_edit_delete_and_cancel(hass, topology):

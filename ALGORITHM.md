@@ -1,4 +1,4 @@
-# Zonentra 0.2 — uitlegbare klimaatintelligentie
+# Zonentra 0.3 — uitlegbare klimaatintelligentie
 
 Alles in dit document betreft **read-only analyse**. Een voorgestelde modus is
 geen commando, en verandert ook niet de intern bijgehouden actuele modus.
@@ -9,6 +9,15 @@ HA-states worden op de eventloop gekopieerd naar immutable `SourceState`-waarden
 De pure kern bouwt daaruit per ruimte een `ZoneSnapshot`: temperatuur, twee
 grenzen, optionele vochtigheid/CO₂/buitentemperatuur, aanwezigheid, contacten en
 IDs van gekoppelde HVAC-, vloerverwarmings- en zonweringsapparatuur.
+
+Vooraf lost het model per ruimte de twee centrale keuzes op. Grenzen en grensentiteiten
+komen samen uit het gebouw of uit de ruimte; hysterese en meetleeftijd vormen een
+apart blok. Alleen actieve instellingen worden voor klimaatvraag gebruikt. Inactieve
+lokale waarden zijn nooit een fallback bij ontbrekende centrale grensentiteiten.
+
+Buitentemperatuur komt uitsluitend uit het gebouw, met een eigen maximale leeftijd.
+Eén gevalideerde Reading wordt gedeeld door alle ruimtes. De bron wordt eenmaal
+gevolgd en ingepland voor veroudering; buitenweer blijft optionele context.
 
 `Reading.quality` onderscheidt:
 
@@ -38,7 +47,7 @@ beperking van deze bronkwaliteit.
 Aanwezigheid: on → occupied, off → unoccupied, ontbrekend/ongeldig → unknown.
 Contacten: on → open, off → closed. Voor statische binaire toestanden is er geen
 leeftijdtimeout; unavailable/unknown/restored/assumed blijven wel ongeldig.
-Afwezigheid, open ramen, CO₂, vochtigheid en buitenweer beïnvloeden in 0.2 de
+Afwezigheid, open ramen, CO₂, vochtigheid en buitenweer beïnvloeden in 0.3 de
 klimaatvraag nog niet: dit is verzamelde context voor volgende modules.
 
 Een gekoppelde grensentiteit gaat vóór de vaste UI-grens. Als die entiteit faalt,

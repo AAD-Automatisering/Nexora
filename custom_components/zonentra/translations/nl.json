@@ -24,6 +24,7 @@
         "title": "Gebouwindeling",
         "description": "Wijzigingen worden pas opgeslagen via Opslaan. Sluiten verwerpt de wijzigingen.",
         "menu_options": {
+          "building": "Centrale configuratie",
           "zone": "Ruimte toevoegen of bewerken",
           "group": "Buitenunitgroep toevoegen of bewerken",
           "equipment": "Apparatuur toevoegen of bewerken",
@@ -38,12 +39,11 @@
       },
       "zone_details": {
         "title": "Ruimte",
-        "description": "Dit zijn analysegrenzen, geen apparaat-setpoints. Grensentiteiten gaan vóór vaste waarden en moeten °C of °F rapporteren. Optionele sensoren verzamelen alleen context. Zonentra stuurt niets aan.",
+        "description": "Standaard gebruiken ruimtes de centrale configuratie. Schakel een gebouwkeuze uit en klik Verder om eigen waarden in te vullen. Bestaande eigen waarden blijven beschikbaar bij terugschakelen. Zonentra stuurt niets aan.",
         "data": {
           "name": "Naam",
           "delete": "Dit item verwijderen",
           "temperature_entity": "Ruimtetemperatuursensor",
-          "controller_entity": "Ruimteregelaar / VTherm (optioneel)",
           "occupancy_entity": "Aanwezigheidssensor (optioneel)",
           "heating_limit": "Verwarmingsgrens (°C)",
           "cooling_limit": "Koelgrens (°C)",
@@ -51,12 +51,13 @@
           "cooling_limit_entity": "Entiteit voor koelgrens (optioneel)",
           "humidity_entity": "Luchtvochtigheid (optioneel)",
           "co2_entity": "CO₂-sensor (optioneel)",
-          "outdoor_temperature_entity": "Buitentemperatuur (optioneel)",
           "contact_entities": "Raam- en deurcontacten (optioneel)",
           "weight": "Ruimteweging",
           "hysteresis": "Temperatuurhysterese (°C)",
           "max_age_seconds": "Maximale meetleeftijd (seconden; 0 = uit)",
-          "group_id": "Buitenunitgroep (optioneel)"
+          "group_id": "Buitenunitgroep (optioneel)",
+          "use_building_limits": "Gebruik gebouwinstellingen voor klimaatgrenzen",
+          "use_building_parameters": "Gebruik gebouwinstellingen voor regelparameters"
         }
       },
       "group": {
@@ -67,7 +68,7 @@
       },
       "group_details": {
         "title": "Buitenunitgroep",
-        "description": "De feedbackbron moet heat, cool of off melden. Gebruik alleen betrouwbare terugmelding, geen gewenste modus van VTherm. Zonder feedback blijft de actuele modus unknown. Alle voorstellen zijn read-only.",
+        "description": "De feedbackbron moet heat, cool of off melden. Gebruik alleen betrouwbare terugmelding, geen gewenste modus. Zonder feedback blijft de actuele modus unknown. Alle voorstellen zijn read-only.",
         "data": {
           "name": "Naam",
           "delete": "Dit item verwijderen",
@@ -94,6 +95,20 @@
           "entity_id": "Fysieke entiteit",
           "zone_id": "Ruimte",
           "group_id": "Buitenunitgroep (alleen HVAC)"
+        }
+      },
+      "building": {
+        "title": "Centrale configuratie",
+        "description": "Deze analysegrenzen en regelparameters worden gebruikt door ruimtes die gebouwinstellingen kiezen. Buitentemperatuur geldt altijd voor het hele gebouw. Oudere buitensensoren die nog om een keuze vragen: {outdoor_candidates}. Er worden geen apparaten aangestuurd.",
+        "data": {
+          "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
+          "outdoor_max_age_seconds": "Maximale buitentemperatuurleeftijd (seconden; 0 = uit)",
+          "heating_limit": "Centrale verwarmingsgrens (°C)",
+          "cooling_limit": "Centrale koelgrens (°C)",
+          "heating_limit_entity": "Centrale entiteit voor verwarmingsgrens (optioneel)",
+          "cooling_limit_entity": "Centrale entiteit voor koelgrens (optioneel)",
+          "hysteresis": "Centrale temperatuurhysterese (°C)",
+          "max_age_seconds": "Centrale maximale meetleeftijd (seconden; 0 = uit)"
         }
       }
     },

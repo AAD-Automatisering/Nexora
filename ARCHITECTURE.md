@@ -1,6 +1,6 @@
 # Zonentra — architectuur
 
-Status: versie 0.2.0, Building Intelligence in read-only simulatie, 12 oktober 2026.
+Status: versie 0.3.0, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
 
 ## Projectnaam en integratie-identiteit
 
@@ -8,7 +8,7 @@ Vanaf versie 0.1.2 heet het project **Zonentra**. De Home Assistant-domain is
 `zonentra` en alle runtime-bestanden staan in `custom_components/zonentra`.
 Config-entry unique ID, apparaatidentifiers en interne signalen gebruiken deze
 domain. Omdat het project in de testfase zit, is er geen compatibiliteitslaag of
-migratie van eerdere testconfiguraties. Installeer en configureer deze integratie
+migratie van eerdere Nexora-testconfiguraties. Installeer en configureer deze integratie
 opnieuw; de README beschrijft de overgang.
 
 ## Scope en belangrijkste keuzes
@@ -20,7 +20,7 @@ Er is geen multi-building beheerlaag. Het entry-ID vormt alleen een stabiele
 namespace voor runtime en diagnostische entiteiten.
 
 Zonentra coördineert uiteindelijk comfort, energie en installatiebeperkingen, maar
-versie 0.2 observeert bestaande Home Assistant-entiteiten en berekent vraag en
+versie 0.3 observeert bestaande Home Assistant-entiteiten en berekent vraag en
 groepsvoorstellen. De gepubliceerde entiteiten zijn uitsluitend diagnostische sensoren. Er zijn geen actuatorservices,
 climate-platform, serviceregistraties of serviceaanroepen. De vloerverwarmingsgrens
 van 16 °C wordt nergens als verstelbaar setpoint opgeslagen of geschreven.
@@ -42,12 +42,11 @@ als ze eigen gedrag nodig hebben. Geen lege implementaties voor toekomstige modu
 
 Een toekomstige module mag alleen een voorstel indienen. Eén Decision Engine
 beoordeelt alle voorstellen uit dezelfde snapshot en maakt één plan. Eén toekomstige
-uitvoerlaag bezit de bevoegdheid om HA-services aan te roepen. Ook versie 0.2 bevat die laag
+uitvoerlaag bezit de bevoegdheid om HA-services aan te roepen. Ook versie 0.3 bevat die laag
 niet. Meerdere apparaten met hetzelfde fysieke entity-ID worden afgewezen.
-Een ruimtecontroller en de fysieke binnenunit zijn aparte rollen: bij VTherm wordt
-VTherm gekoppeld als `controller_entity` en de Mitsubishi-climate als apparatuur.
-Een climate-entiteit mag beide rollen hebben als deze zelf de ruimtecontroller is;
-het toekomstige eigenaarschapsbeleid moet dan één aansturingspad kiezen.
+De fysieke Mitsubishi-climate wordt als apparatuur aan een ruimte gekoppeld.
+Er is geen aparte ruimteregelaarkoppeling of VTherm-adapter. Klimaatvraag gebruikt
+de externe ruimtetemperatuur en effectieve analysegrenzen.
 
 Alternatief: elke module rechtstreeks climate/cover/fan laten bedienen. Dat kan
 tegengestelde acties, KNX-verkeer en onverklaarbare prioriteiten veroorzaken.
@@ -90,7 +89,8 @@ gebruikt. Alle subscriptions en timers worden opgeruimd bij unload.
 
 | Model | Belangrijkste velden | Invariant |
 | --- | --- | --- |
-| Building | id, name, zones, groups, equipment | Eén gebouw per installatie |
+| Building | id, name, settings, zones, groups, equipment | Eén gebouw per installatie |
+| BuildingSettings | buitentemperatuurbron/leeftijd, centrale grenzen/entiteiten, hysterese, meetleeftijd | Eén gedeelde bron; geen verzonnen migratiegrenzen |
 | Zone | id, name, bronkoppelingen, analysegrenzen, weight, hysteresis, max_age_seconds, group_id | Geen implicit setpoint; optionele context blokkeert niet |
 | EquipmentGroup | id, name, mode_entity, single_hvac_mode, min_switch_seconds, scoreparameters | Eén gewogen voorstel; actuele modus niet raden |
 | Equipment | id, name, kind, entity_id, zone_id, group_id | Eén zone per apparaat; groep alleen bij HVAC; fysieke entiteit uniek |
@@ -130,16 +130,35 @@ worden nooit door een voorstel zelf gereset. Optionele context blokkeert niet.
 Herstart/reload begint met een conservatieve wachttijd; er wordt geen uitvoerplan
 of hypothetische modus opgeslagen/hersteld.
 
-### Compatibiliteit met Zonentra 0.1
+### Centrale configuratie en compatibiliteit
 
-Config Flow VERSION blijft 1. De bestaande data/options-structuur en de status-
-unique ID blijven behouden. Nieuwe dataclassvelden zijn additief; opgeslagen 0.1-
-records laden zonder wijziging. Ongeconfigureerde analysegrenzen blijven None,
-zodat geen gewenste temperatuur wordt verzonnen. Bij bewerken biedt de UI begin-
-waarden, die pas bij expliciet Opslaan persistente configuratie worden.
+Config Flow VERSION is 3. `options.building` bevat centrale instellingen;
+`use_building_limits` en `use_building_parameters` bepalen onafhankelijk welke
+blokken een ruimte overneemt. `effective_zone` bouwt een immutable runtimeprofiel;
+de opgeslagen lokale waarden blijven beschikbaar wanneer de gebruiker terugschakelt.
+Er is geen fallback naar inactieve lokale waarden bij ontbrekende centrale data.
 
-Geen opslagmigratie nodig omdat geen bestaand veld wordt vervangen of anders
-geïnterpreteerd. Dit is getest met oude topologieën en echte Options Flow/reload.
+| Niveau | Instellingen | Reden |
+|---|---|---|
+| Gebouw | Buitenbron + eigen leeftijd; standaard grenzen/entiteiten, hysterese en meetleeftijd | Gedeelde weerbron en herbruikbaar ruimtebeleid |
+| Ruimte | Optioneel eigen grenzen/parameters; temperatuur, bezetting, vocht, CO₂, contacten, gewicht | Lokale metingen en comfortafwijkingen |
+| Buitenunitgroep | Modusfeedback, feedbackleeftijd, minimuminterval, scoregrens en deadband | Eigenschappen van de gedeelde fysieke installatie |
+| Apparatuur | Fysieke entiteit, ruimte en groep | Expliciete topologie en eigenaarschap |
+
+De v1/v2→v3-migratie behoudt bestaande eigen grenzen en meetparameters, zonder ze
+stilzwijgend door een centraal profiel te vervangen. Oude ongeconfigureerde grenzen
+blijven None. Eén unieke oude buitenbron wordt centraal gezet; verschillende oude
+bronnen worden kandidaten totdat de gebruiker er één selecteert. De bronleeftijd
+wordt de kleinste positieve ingestelde leeftijd (0 als alle checks uit stonden).
+De oude `controller_entity` wordt verwijderd en niet meer gevolgd; ontbrekende
+VTherm-states beïnvloeden de gebouwstatus niet. De normalisatie is idempotent en verandert de invoer niet. IDs, configuratie-entry,
+apparaatkoppelingen en diagnostische sensor-identiteiten blijven behouden.
+
+Nieuwe gebouwen krijgen expliciete UI-beginwaarden; nieuwe ruimtes nemen centraal
+over. De bestaande klimaatanalyse werkt op de effectieve profielen. Buitentemperatuur
+wordt eenmaal per evaluatie gevalideerd en als dezelfde Reading gedeeld met alle
+ruimtes; de runtime plant ook maar één vervaldeadline voor deze bron.
+
 Nieuw toegevoegde zones en groepen krijgen automatisch diagnostische entiteiten.
 Verwijderde zones/groepen verliezen uitsluitend hun eigen diagnostische registry-
 records; fysieke bronentiteiten blijven bestaan. Een naamwijziging houdt hetzelfde
@@ -156,7 +175,7 @@ of al geïmplementeerde managers:
 | Building Manager | Topologie, planning, snapshots | Coördinatie van één gebouw en evaluatierondes |
 | Zone Manager | Sensoren, gewenste comfortband, bezetting | ZoneSnapshot met kwaliteit en wensen |
 | Equipment Manager | Topologie, gemelde modi, tijden, capabilities | EquipmentSnapshot en harde beperkingen |
-| Climate Module | ZoneSnapshot, controllerdata | Warmte-/koelvoorstellen; later room-controller adapter |
+| Climate Module | ZoneSnapshot | Warmte-/koelvoorstellen |
 | Shading Module | Zon, weer, gevel, lokale veiligheid | Schaduwvoorstel, invloed op koelvraag |
 | Ventilation Module | CO₂, bezetting, beschikbaarheid | Ventilatievoorstel; luchtkwaliteit vóór kosten |
 | Occupancy Module | Alarm, mmWave, timers | occupied / unoccupied / unknown per niveau |
@@ -167,9 +186,7 @@ of al geïmplementeerde managers:
 Een module krijgt een immutable snapshot en levert `Proposal`-waarden (module,
 resource, intent, prioriteit, reden, geldig-tot); geen `hass` of uitvoeradapter.
 `evaluate(snapshot, now) -> proposals` wordt de pure testbare grens. De Engine levert
-`DecisionPlan` met gekozen én afgewezen voorstellen en reason codes. Een
-RoomController-adapter observeert VTherm of een toekomstige eigen controller via
-hetzelfde contract. Dependencies blijven één richting op: HA-adapter → kern.
+`DecisionPlan` met gekozen én afgewezen voorstellen en reason codes. Dependencies blijven één richting op: HA-adapter → kern.
 
 ## Prioriteiten en conflictpreventie voor toekomstige actieve regeling
 
@@ -201,7 +218,7 @@ gebruikt. Er worden geen oude plannen blind opnieuw uitgevoerd.
 VTherm en bestaande automations mogen in fase 2 niet tegelijkertijd met Zonentra de
 bedrijfsmodus van dezelfde fysieke unit schrijven. Eigenaarsoverdracht is een
 expliciete installatiekeuze; op basis van HA-context alleen kan Zonentra niet alle
-handmatige bediening betrouwbaar herkennen. Zonentra 0.2 claimt geen eigenaarschap van apparaatbesturing.
+handmatige bediening betrouwbaar herkennen. Zonentra 0.3 claimt geen eigenaarschap van apparaatbesturing.
 
 ## VTherm-analyse en hergebruik
 
@@ -211,6 +228,14 @@ Onderzocht op 12 oktober 2026: upstream manifest meldt VTherm 10.5.1. Zie
 [self-regulation](https://github.com/jmcollin78/versatile_thermostat/blob/main/documentation/en/self-regulation.md),
 [PI-algoritme](https://github.com/jmcollin78/versatile_thermostat/blob/main/custom_components/versatile_thermostat/pi_algorithm.py)
 en [climate-controller](https://github.com/jmcollin78/versatile_thermostat/blob/main/custom_components/versatile_thermostat/thermostat_climate.py).
+
+Ook de [configuratiehandleiding](https://github.com/jmcollin78/versatile_thermostat/blob/main/documentation/en/creation.md),
+[basisinstellingen](https://github.com/jmcollin78/versatile_thermostat/blob/main/documentation/en/base-attributes.md)
+en [Config Flow](https://github.com/jmcollin78/versatile_thermostat/blob/main/custom_components/versatile_thermostat/config_flow.py)
+zijn onderzocht voor 0.3. VTherm scheidt centrale configuratie van het thermostaat-type
+(zoals over_climate) en laat lokale instanties per parameterblok centraal overnemen
+of eigen waarden kiezen. Zonentra gebruikt dat principe voor twee blokken, binnen
+zijn bestaande singleton-entry. Het centrale configuratieprincipe blijft bruikbaar zonder VTherm-koppeling.
 
 VTherm gebruikt een MIT-licentie, copyright Jean-Marc Collin (2022). Overname vereist
 behoud van de copyright- en licentietekst. **Er is geen VTherm-code overgenomen.**
@@ -230,8 +255,8 @@ recorder/http als after_dependencies en numpy, scipy en vtherm_api>=0.5.0 als Py
 requirements. Zonentra importeert deze niet. Private VTherm-klassen zijn geen stabiel
 contract. Gebruik eerst de standaard climate-entiteit voor observatie; eventuele
 vtherm_api-integratie vereist een afzonderlijke compatibiliteits- en licentieaudit.
-De huidige fanautomation blijft buiten Zonentra. Een eigen room controller kan later
-dezelfde adaptergrens invullen zonder een VTherm-fork.
+De huidige fanautomation blijft buiten Zonentra. VTherm-koppeling maakt geen deel
+uit van het verdere implementatieplan.
 
 ## Diagnostiek en grenzen
 
@@ -245,7 +270,7 @@ er worden geen ruwe SourceStates geëxporteerd. Lokale sensoren bevatten wel de
 relevante waarden en apparatuur-IDs voor uitleg.
 
 Geen afzonderlijke buitenunitmeters: later zijn energie-inschattingen altijd als
-estimated gemarkeerd, zonder HA measurement-statistieken te claimen. Zonentra 0.2 bevat
+estimated gemarkeerd, zonder HA measurement-statistieken te claimen. Zonentra 0.3 bevat
 geen energiegetallen; gewogen klimaatscores zijn geen energiemetingen. Alarm → gebouwbezetting, mmWave-debounce, CO₂-regeling,
 weerstation en planning worden pas in latere fases gebouwd. Meetvalidatie en
 stale-detectie zijn nu wel geïmplementeerd; optionele context heeft nog geen beleidswerking.

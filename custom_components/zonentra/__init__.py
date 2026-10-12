@@ -7,6 +7,7 @@ from homeassistant.exceptions import ConfigEntryError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
 
+from .migration import migrate_options
 from .models import build_model
 from .runtime import BuildingRuntime
 
@@ -53,3 +54,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
 async def async_unload_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> bool:
     """Unload diagnostic entities; HA removes entry callbacks on success."""
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> bool:
+    """Upgrade 0.1/0.2 config entries without changing room policy or identities."""
+    if entry.version > 3:
+        return False
+    if entry.version < 3:
+        hass.config_entries.async_update_entry(
+            entry, options=migrate_options(dict(entry.options)), version=3
+        )
+    return True

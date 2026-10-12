@@ -24,6 +24,7 @@
         "title": "Building topology",
         "description": "Edits remain provisional until Save. Closing the dialog discards them.",
         "menu_options": {
+          "building": "Central configuration",
           "zone": "Add or edit a zone",
           "group": "Add or edit an outdoor unit group",
           "equipment": "Add or edit equipment",
@@ -38,12 +39,11 @@
       },
       "zone_details": {
         "title": "Zone",
-        "description": "These are analysis limits, not device setpoints. Limit entities override static values and must report °C or °F. Optional sensors collect context only. Zonentra does not control equipment.",
+        "description": "Zones use the central configuration by default. Disable a building choice and press Next to enter local values. Existing local values remain available when switching back. Zonentra does not control equipment.",
         "data": {
           "name": "Name",
           "delete": "Delete this record",
           "temperature_entity": "Room temperature sensor",
-          "controller_entity": "Room controller / VTherm (optional)",
           "occupancy_entity": "Room occupancy sensor (optional)",
           "heating_limit": "Heating limit (°C)",
           "cooling_limit": "Cooling limit (°C)",
@@ -51,12 +51,13 @@
           "cooling_limit_entity": "Cooling limit entity (optional)",
           "humidity_entity": "Humidity (optional)",
           "co2_entity": "CO₂ sensor (optional)",
-          "outdoor_temperature_entity": "Outdoor temperature (optional)",
           "contact_entities": "Window and door contacts (optional)",
           "weight": "Zone weight",
           "hysteresis": "Temperature hysteresis (°C)",
           "max_age_seconds": "Maximum measurement age (seconds; 0 = disabled)",
-          "group_id": "Outdoor unit group (optional)"
+          "group_id": "Outdoor unit group (optional)",
+          "use_building_limits": "Use building climate limits",
+          "use_building_parameters": "Use building regulation parameters"
         }
       },
       "group": {
@@ -67,7 +68,7 @@
       },
       "group_details": {
         "title": "Outdoor unit group",
-        "description": "The feedback source must report heat, cool or off. Use reliable feedback, not a VTherm desired mode. Without feedback the actual mode stays unknown. Every proposal is read-only.",
+        "description": "The feedback source must report heat, cool or off. Use reliable feedback, not a requested mode. Without feedback the actual mode stays unknown. Every proposal is read-only.",
         "data": {
           "name": "Name",
           "delete": "Delete this record",
@@ -94,6 +95,20 @@
           "entity_id": "Physical entity",
           "zone_id": "Zone",
           "group_id": "Outdoor unit group (HVAC only)"
+        }
+      },
+      "building": {
+        "title": "Central configuration",
+        "description": "These analysis limits and parameters apply to zones that select building settings. Outdoor temperature always belongs to the whole building. Older outdoor sources still awaiting a choice: {outdoor_candidates}. No equipment is controlled.",
+        "data": {
+          "outdoor_temperature_entity": "Outdoor temperature sensor (whole building)",
+          "outdoor_max_age_seconds": "Maximum outdoor temperature age (seconds; 0 = disabled)",
+          "heating_limit": "Central heating limit (°C)",
+          "cooling_limit": "Central cooling limit (°C)",
+          "heating_limit_entity": "Central heating limit entity (optional)",
+          "cooling_limit_entity": "Central cooling limit entity (optional)",
+          "hysteresis": "Central temperature hysteresis (°C)",
+          "max_age_seconds": "Central maximum measurement age (seconds; 0 = disabled)"
         }
       }
     },

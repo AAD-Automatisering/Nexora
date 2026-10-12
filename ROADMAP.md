@@ -34,18 +34,31 @@ verificatie: unit/integratietests vervangen geen echte KNX/Mitsubishi-omgeving.
 - [x] UI-configuratie, twee compacte typen diagnostische entiteiten en export.
 - [x] Additieve compatibiliteit met Zonentra 0.1 zonder nieuwe Config Flow.
 - [x] 79 tests, linting, formatting en controles op nul hardwarecommando's.
-- [ ] Publicatie en praktijktest van 0.2 op de kantoorinstallatie.
+- [x] Gebruiker heeft 0.2 via HACS bijgewerkt op de kantoorinstallatie.
 
 Zie [ALGORITHM.md](ALGORITHM.md) voor de concrete formules en beperkingen. In deze
 versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
+
+### Versie 0.3 — centrale configuratie (geïmplementeerd)
+
+- [x] VTherm-centralisatie en lokale parameterkeuzes onderzocht.
+- [x] Eén buitentemperatuurbron met eigen bronleeftijd voor het gebouw.
+- [x] Centrale klimaatgrenzen/entiteiten en meetparameters.
+- [x] Twee onafhankelijke keuzes per ruimte om centraal over te nemen of lokaal af te wijken.
+- [x] Effectieve profielen en zichtbare herkomst in ruimteattributen.
+- [x] Ruimteregelaarkoppeling verwijderd; oude koppelingen automatisch opgeschoond.
+- [x] Configuratieversie 3 met behoud van bestaand ruimtebeleid en stabiele IDs.
+- [x] Tegenstrijdige oude buitenbronnen vereisen expliciete selectie.
+- [x] 92 tests inclusief migratie, UI, timers en nul hardwarecommando's.
+- [ ] Publicatie en praktijktest van 0.3 op de kantoorinstallatie.
 
 ### Vervolg vóór actieve regeling
 
 Inventariseer de fysieke topologie, betrouwbare gatewayfeedback en huidige
 schrijvers. Kies expliciet de eigenaar van elke installatie. Verifieer Mitsubishi-
 minimumlooptijden, break-before-make, veilige omschakeling en bevestiging/timeouts.
-Voeg handmatige override en een publieke room-controlleradapter voor VTherm toe.
-Een eigen room controller volgt alleen bij aangetoonde behoefte.
+Voeg handmatige override toe. Een eigen room controller volgt alleen bij
+aangetoonde behoefte; VTherm-koppeling is uit het plan verwijderd.
 
 Pas na expliciete keuze voor actieve regeling komt één executor met deduplicatie,
 rate limits, lifecyclebeleid, overrides en feedback. De 16 °C-vloerverwarmingsgrens

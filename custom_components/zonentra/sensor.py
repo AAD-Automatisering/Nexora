@@ -104,6 +104,10 @@ class ZoneDemandSensor(ZonentraDiagnosticSensor):
         }
         return {
             "read_only": True,
+            "limits_source": "building" if self.zone.use_building_limits else "zone",
+            "parameters_source": "building"
+            if self.zone.use_building_parameters
+            else "zone",
             "heating_score": demand.heating_score,
             "cooling_score": demand.cooling_score,
             "temperature_c": snapshot.temperature.value,

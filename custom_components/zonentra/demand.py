@@ -35,7 +35,11 @@ class ZoneDemand:
 
 
 def collect_zone(
-    building: Building, zone: Zone, sources: Mapping[str, SourceState], now: datetime
+    building: Building,
+    zone: Zone,
+    sources: Mapping[str, SourceState],
+    now: datetime,
+    outdoor_temperature: Reading | None = None,
 ) -> ZoneSnapshot:
     def numeric(field, kind):
         return read(sources.get(getattr(zone, field)), kind, now, zone.max_age_seconds)
@@ -61,7 +65,14 @@ def collect_zone(
         limits(zone.cooling_limit_entity, zone.cooling_limit),
         numeric("humidity_entity", "humidity"),
         numeric("co2_entity", "co2"),
-        numeric("outdoor_temperature_entity", "temperature"),
+        outdoor_temperature
+        if outdoor_temperature is not None
+        else read(
+            sources.get(building.settings.outdoor_temperature_entity),
+            "temperature",
+            now,
+            building.settings.outdoor_max_age_seconds,
+        ),
         read(sources.get(zone.occupancy_entity), "occupancy", now),
         tuple(
             read(sources.get(entity), "contact", now)
