@@ -18,7 +18,7 @@ class BuildingRuntime:
     def __init__(self, hass: HomeAssistant, building: Building) -> None:
         self.hass = hass
         self.building = building
-        self.signal = f"nexora_{building.id}_updated"
+        self.signal = f"zonentra_{building.id}_updated"
         self.observations: dict[str, Observation] = {}
         self.decisions = ()
 

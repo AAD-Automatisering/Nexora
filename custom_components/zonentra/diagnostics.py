@@ -2,10 +2,10 @@
 
 from homeassistant.components.diagnostics import async_redact_data
 
-from . import NexoraConfigEntry
+from . import ZonentraConfigEntry
 
 
-async def async_get_config_entry_diagnostics(hass, entry: NexoraConfigEntry) -> dict:
+async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -> dict:
     return async_redact_data(
         {
             "configuration": {"data": dict(entry.data), "options": dict(entry.options)},

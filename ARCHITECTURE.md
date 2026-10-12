@@ -1,16 +1,25 @@
-# Nexora — architectuur
+# Zonentra — architectuur
 
 Status: fase 1, read-only fundament, 12 oktober 2026.
 
+## Projectnaam en integratie-identiteit
+
+Vanaf versie 0.1.2 heet het project **Zonentra**. De Home Assistant-domain is
+`zonentra` en alle runtime-bestanden staan in `custom_components/zonentra`.
+Config-entry unique ID, apparaatidentifiers en interne signalen gebruiken deze
+domain. Omdat het project in de testfase zit, is er geen compatibiliteitslaag of
+migratie van eerdere testconfiguraties. Installeer en configureer deze integratie
+opnieuw; de README beschrijft de overgang.
+
 ## Scope en belangrijkste keuzes
 
-**Eén Home Assistant-installatie = één Nexora = één gebouw.** De Config Flow,
+**Eén Home Assistant-installatie = één Zonentra = één gebouw.** De Config Flow,
 vaste unique ID en `single_config_entry` in het manifest begrenzen dit expliciet.
 Meerdere ruimtes en fysieke installaties worden binnen dat gebouw gemodelleerd.
 Er is geen multi-building beheerlaag. Het entry-ID vormt alleen een stabiele
 namespace voor runtime en diagnostische entiteiten.
 
-Nexora coördineert uiteindelijk comfort, energie en installatiebeperkingen, maar
+Zonentra coördineert uiteindelijk comfort, energie en installatiebeperkingen, maar
 fase 1 observeert uitsluitend bestaande Home Assistant-entiteiten. De enige
 gepubliceerde entiteit is een diagnostische sensor. Er zijn geen actuatorservices,
 climate-platform, serviceregistraties of serviceaanroepen. De vloerverwarmingsgrens
@@ -49,11 +58,12 @@ indeling. De Options Flow bewerkt een diepe kopie, valideert verwijzingen bij el
 bewerking en slaat uitsluitend bij Opslaan op. `OptionsFlowWithReload` vervangt
 listeners en runtime na een wijziging. Sluiten annuleert de transactie.
 
-Zones, buitenunitgroepen en apparatuur hebben stabiele, door de gebruiker gekozen
-IDs; namen mogen veranderen. Verwijderen van een nog gebruikte ruimte of groep is
+Zones, buitenunitgroepen en apparatuur krijgen automatisch een stabiel intern
+UUID (hexnotatie). De UI vraagt alleen om namen en koppelingen; namen mogen
+veranderen. Bestaande, eerder handmatig gekozen IDs blijven ongewijzigd. Verwijderen van een nog gebruikte ruimte of groep is
 geblokkeerd. Optionele koppelingen zijn te wissen. Nieuwe entiteiten moeten in de
 HA state machine of registry bestaan; reeds gekoppelde offline entiteiten blijven
-bewerkbaar. Eigen Nexora-entiteiten kunnen geen input worden.
+bewerkbaar. Eigen Zonentra-entiteiten kunnen geen input worden.
 
 Alternatief: Config Subentries per ruimte. De officiële HA-architectuur ondersteunt
 ze, maar onderlinge groep-/apparatuurverwijzingen vragen dan extra beheer over
@@ -84,8 +94,8 @@ expliciete timers bij een deadline, niet een onnodige algemene polling-loop.
 | Observation | state, quality | missing, unknown, unavailable of observed |
 | Decision | equipment_id, action, reason | Fase 1: action uitsluitend hold |
 
-Dataclasses voor de topologie zijn immutable en verzamelingen zijn tuples. IDs zijn
-uniek per categorie en bestaan uit kleine letters/cijfers/`_`/`-` (maximaal 64 tekens).
+Dataclasses voor de topologie zijn immutable en verzamelingen zijn tuples. Nieuwe IDs zijn automatisch gegenereerde UUIDs in hexnotatie. Bestaande IDs blijven
+geldig en uniek per categorie: kleine letters/cijfers/`_`/`-` (maximaal 64 tekens).
 Groepslidmaatschap loopt via apparatuur, zodat meerdere binnenunits per ruimte en
 per buitenunit mogelijk zijn. Niet-HVAC-apparatuur kan zonder groep geregistreerd
 worden als floor_heating, shading, ventilation of other. Equipment is een logisch
@@ -95,7 +105,7 @@ De huidige observation is een eenvoudige statusobservatie, **geen verklaring dat
 sensorwaarden betrouwbaar, recent of correct gekalibreerd zijn**. Fase 1 rekent geen
 warmtevraag uit. Alleen expliciete states heat/cool tellen voor een waargenomen
 buitenunitconflict; auto/heat_cool/hvac_action geven geen betrouwbaar bewijs van de
-werkelijke buitenunitmodus. Nexora corrigeert zo'n conflict niet.
+werkelijke buitenunitmodus. Zonentra corrigeert zo'n conflict niet.
 
 Voor fase 2 wordt Observation uitgebreid met tijdstip, genormaliseerde eenheid,
 bronkwaliteit en geldigheidsduur. Temperatuur krijgt checks op numerieke/finitie
@@ -104,7 +114,7 @@ temperatuur mag niet zomaar als defect worden beschouwd omdat `last_changed` oud
 
 ## Modulegrenzen (ontwerp voor volgende fases)
 
-De onderstaande interfaces zijn **Nexora-ontwerpcontracten**, geen bestaande HA-API's
+De onderstaande interfaces zijn **Zonentra-ontwerpcontracten**, geen bestaande HA-API's
 of al geïmplementeerde managers:
 
 | Onderdeel | Input | Output / verantwoordelijkheid |
@@ -130,7 +140,7 @@ hetzelfde contract. Dependencies blijven één richting op: HA-adapter → kern.
 ## Prioriteiten en conflictpreventie (fase 2-ontwerp)
 
 1. Harde veiligheids- en installatiebeperkingen worden altijd toegepast. Lokale
-   KNX-windveiligheid blijft leidend; Nexora mag die niet uitschakelen. De 16 °C-
+   KNX-windveiligheid blijft leidend; Zonentra mag die niet uitschakelen. De 16 °C-
    ondergrens van gasvloerverwarming is beschermd en niet automatisch te wijzigen.
 2. Handmatige override blokkeert automatisch beheer van de betrokken resource.
    Een override mag geen gedeelde buitenunitbeperking omzeilen. Bij zo'n conflict
@@ -154,9 +164,9 @@ werkelijke toestand afzonderlijk; een succesvolle servicecall bewijst geen uitvo
 Op herstart worden timer-/overridegegevens hersteld of conservatieve wachttijden
 gebruikt. Er worden geen oude plannen blind opnieuw uitgevoerd.
 
-VTherm en bestaande automations mogen in fase 2 niet tegelijkertijd met Nexora de
+VTherm en bestaande automations mogen in fase 2 niet tegelijkertijd met Zonentra de
 bedrijfsmodus van dezelfde fysieke unit schrijven. Eigenaarsoverdracht is een
-expliciete installatiekeuze; op basis van HA-context alleen kan Nexora niet alle
+expliciete installatiekeuze; op basis van HA-context alleen kan Zonentra niet alle
 handmatige bediening betrouwbaar herkennen. Fase 1 claimt geen eigenaarschap.
 
 ## VTherm-analyse en hergebruik
@@ -170,7 +180,7 @@ en [climate-controller](https://github.com/jmcollin78/versatile_thermostat/blob/
 
 VTherm gebruikt een MIT-licentie, copyright Jean-Marc Collin (2022). Overname vereist
 behoud van de copyright- en licentietekst. **Er is geen VTherm-code overgenomen.**
-Daarmee krijgt Nexora geen runtime- of forkafhankelijkheid van VTherm. Voor latere
+Daarmee krijgt Zonentra geen runtime- of forkafhankelijkheid van VTherm. Voor latere
 codeovername moet de exacte upstream revisie worden vastgelegd en de betreffende
 bestanden en transitieve dependencies opnieuw worden beoordeeld.
 
@@ -183,10 +193,10 @@ heat/cool-beperking van twee buitenunits niet vanzelf op.
 
 Het upstream manifest heeft geen verplichte HA-integratiedependencies, noemt
 recorder/http als after_dependencies en numpy, scipy en vtherm_api>=0.5.0 als Python-
-requirements. Nexora importeert deze niet. Private VTherm-klassen zijn geen stabiel
+requirements. Zonentra importeert deze niet. Private VTherm-klassen zijn geen stabiel
 contract. Gebruik eerst de standaard climate-entiteit voor observatie; eventuele
 vtherm_api-integratie vereist een afzonderlijke compatibiliteits- en licentieaudit.
-De huidige fanautomation blijft buiten Nexora. Een eigen room controller kan later
+De huidige fanautomation blijft buiten Zonentra. Een eigen room controller kan later
 dezelfde adaptergrens invullen zonder een VTherm-fork.
 
 ## Diagnostiek en grenzen

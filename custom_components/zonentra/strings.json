@@ -1,10 +1,10 @@
 {
-  "title": "Nexora",
+  "title": "Zonentra",
   "config": {
     "step": {
       "user": {
-        "title": "Nexora building",
-        "description": "One Home Assistant, one Nexora, one building. Phase 1 only observes and simulates; existing equipment control continues independently.",
+        "title": "Zonentra building",
+        "description": "One Home Assistant, one Zonentra, one building. Phase 1 only observes and simulates; existing equipment control continues independently.",
         "data": {
           "name": "Building name"
         }
@@ -14,8 +14,8 @@
       "invalid_name": "Enter a non-empty name."
     },
     "abort": {
-      "single_instance_allowed": "Only one Nexora building is allowed per Home Assistant installation.",
-      "already_configured": "Nexora is already configured."
+      "single_instance_allowed": "Only one Zonentra building is allowed per Home Assistant installation.",
+      "already_configured": "Zonentra is already configured."
     }
   },
   "options": {
@@ -38,9 +38,8 @@
       },
       "zone_details": {
         "title": "Zone",
-        "description": "Optional links can be cleared. IDs stay fixed after creation. No equipment is controlled.",
+        "description": "Optional links can be cleared. No equipment is controlled.",
         "data": {
-          "id": "Stable ID",
           "name": "Name",
           "delete": "Delete this record",
           "temperature_entity": "Room temperature sensor",
@@ -56,9 +55,8 @@
       },
       "group_details": {
         "title": "Outdoor unit group",
-        "description": "Optional links can be cleared. IDs stay fixed after creation. No equipment is controlled.",
+        "description": "Optional links can be cleared. No equipment is controlled.",
         "data": {
-          "id": "Stable ID",
           "name": "Name",
           "delete": "Delete this record"
         }
@@ -71,9 +69,8 @@
       },
       "equipment_details": {
         "title": "Equipment",
-        "description": "Optional links can be cleared. IDs stay fixed after creation. No equipment is controlled.",
+        "description": "Optional links can be cleared. No equipment is controlled.",
         "data": {
-          "id": "Stable ID",
           "name": "Name",
           "delete": "Delete this record",
           "kind": "Equipment type",
@@ -87,12 +84,11 @@
       "invalid_name": "Enter a non-empty name.",
       "duplicate_id": "This ID already exists.",
       "invalid_id": "Use lowercase letters, digits, underscores or hyphens (1–64 characters).",
-      "invalid_entity": "Choose an entity with the correct domain, outside Nexora.",
+      "invalid_entity": "Choose an entity with the correct domain, outside Zonentra.",
       "invalid_kind": "Choose a supported equipment type.",
       "invalid_reference": "A zone or group is missing or is still referenced. Remove equipment links first.",
       "invalid_group": "Only HVAC equipment can belong to an outdoor unit group.",
       "duplicate_equipment_entity": "This physical entity is already registered as equipment.",
-      "id_immutable": "An existing ID cannot change. Edit the name instead.",
       "entity_not_found": "The new entity link must exist in Home Assistant.",
       "add_zone_first": "Add a zone before registering equipment. Close this dialog and reopen Options."
     }

@@ -43,7 +43,7 @@ class Building:
 
     @property
     def entity_ids(self) -> frozenset[str]:
-        """Return only configured inputs, never Nexora's diagnostic outputs."""
+        """Return only configured inputs, never Zonentra's diagnostic outputs."""
         return frozenset(
             [item.entity_id for item in self.equipment]
             + [
@@ -75,7 +75,9 @@ def _entity(value: str | None, domains: tuple[str, ...] | None = None) -> None:
         return
     if not re.fullmatch(r"[a-z0-9_]+\.[a-z0-9_]+", value):
         raise ValueError("invalid_entity")
-    if value.startswith("nexora.") or (domains and value.split(".")[0] not in domains):
+    if value.startswith("zonentra.") or (
+        domains and value.split(".")[0] not in domains
+    ):
         raise ValueError("invalid_entity")
 
 

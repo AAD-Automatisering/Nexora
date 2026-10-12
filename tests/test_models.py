@@ -4,8 +4,8 @@ from copy import deepcopy
 
 import pytest
 
-from custom_components.nexora.decision import Observation, simulate
-from custom_components.nexora.models import build_model
+from custom_components.zonentra.decision import Observation, simulate
+from custom_components.zonentra.models import build_model
 
 
 def test_empty_building():

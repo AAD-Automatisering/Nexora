@@ -1,15 +1,16 @@
 """Real config/options flow manager tests."""
 
 from unittest.mock import patch
+from uuid import UUID
 
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.nexora.const import DOMAIN
+from custom_components.zonentra.const import DOMAIN
 
 
 async def test_user_and_singleton(hass):
-    with patch("custom_components.nexora.async_setup_entry", return_value=True):
+    with patch("custom_components.zonentra.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}
         )
@@ -63,29 +64,29 @@ async def test_create_topology_and_save(hass):
         result,
         "zone",
         "__new__",
-        {
-            "id": "office",
-            "name": "Office",
-            "temperature_entity": "sensor.office_temperature",
-        },
+        {"name": "Office", "temperature_entity": "sensor.office_temperature"},
     )
     assert result["type"] == FlowResultType.MENU
     assert entry.options == {}  # No partial writes.
-    result = await edit(
-        hass, result, "group", "__new__", {"id": "outdoor_1", "name": "Outdoor 1"}
+    result = await edit(hass, result, "group", "__new__", {"name": "Outdoor 1"})
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "equipment"}
     )
-    result = await edit(
-        hass,
-        result,
-        "equipment",
-        "__new__",
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"record": "__new__"}
+    )
+    assert "id" not in result["data_schema"].schema
+    # Read the IDs from UI choices, just as the frontend submits them.
+    zone_id = result["data_schema"].schema["zone_id"].config["options"][0]["value"]
+    group_id = result["data_schema"].schema["group_id"].config["options"][1]["value"]
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
         {
-            "id": "indoor_1",
             "name": "Indoor 1",
             "kind": "hvac",
             "entity_id": "climate.indoor_1",
-            "zone_id": "office",
-            "group_id": "outdoor_1",
+            "zone_id": zone_id,
+            "group_id": group_id,
         },
     )
     assert result["type"] == FlowResultType.MENU
@@ -95,25 +96,47 @@ async def test_create_topology_and_save(hass):
         )
         await hass.async_block_till_done()
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert len(entry.options["equipment"]) == 1
-    assert entry.options["equipment"][0]["group_id"] == "outdoor_1"
+    assert (
+        entry.options["equipment"][0]["zone_id"]
+        == entry.options["zones"][0]["id"]
+        == zone_id
+    )
+    assert (
+        entry.options["equipment"][0]["group_id"]
+        == entry.options["groups"][0]["id"]
+        == group_id
+    )
+    ids = [entry.options[key][0]["id"] for key in ("zones", "groups", "equipment")]
+    assert len(set(ids)) == 3
+    assert all(UUID(value).version == 4 for value in ids)
 
 
-async def test_missing_entity_and_duplicate_id(hass, topology):
+async def test_missing_entity_retry_keeps_generated_id(hass, topology):
     entry, result = await start_options(hass, topology)
-    result = await edit(
-        hass,
-        result,
-        "zone",
-        "__new__",
-        {"id": "new", "name": "New", "temperature_entity": "sensor.does_not_exist"},
-    )
-    assert result["errors"] == {"base": "entity_not_found"}
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"id": "office", "name": "Duplicate"}
-    )
-    assert result["errors"] == {"base": "duplicate_id"}
-    assert len(entry.options["zones"]) == 1
+    with patch(
+        "custom_components.zonentra.config_flow.uuid4", return_value=UUID("f" * 32)
+    ) as generate_id:
+        result = await edit(
+            hass,
+            result,
+            "zone",
+            "__new__",
+            {"name": "New", "temperature_entity": "sensor.does_not_exist"},
+        )
+        assert result["errors"] == {"base": "entity_not_found"}
+        assert "id" not in result["data_schema"].schema
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"name": "Office"}
+        )
+        assert result["type"] == FlowResultType.MENU
+        generate_id.assert_called_once()
+    with patch.object(hass.config_entries, "async_reload", return_value=True):
+        await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "finish"}
+        )
+        await hass.async_block_till_done()
+    assert [zone["id"] for zone in entry.options["zones"]] == ["office", "f" * 32]
+    assert [zone["name"] for zone in entry.options["zones"]] == ["Office", "Office"]
 
 
 async def test_referenced_delete_blocked_and_optional_link_removed(hass, topology):
@@ -123,11 +146,11 @@ async def test_referenced_delete_blocked_and_optional_link_removed(hass, topolog
         result,
         "zone",
         "office",
-        {"id": "office", "name": "Office", "delete": True},
+        {"name": "Office", "delete": True},
     )
     assert result["errors"] == {"base": "invalid_reference"}
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"id": "office", "name": "Renamed"}
+        result["flow_id"], {"name": "Renamed"}
     )
     assert result["type"] == FlowResultType.MENU
     with patch.object(hass.config_entries, "async_reload", return_value=True):
@@ -146,11 +169,11 @@ async def test_group_edit_delete_and_cancel(hass, topology):
         result,
         "group",
         "outdoor_1",
-        {"id": "outdoor_1", "name": "Outdoor 1", "delete": True},
+        {"name": "Outdoor 1", "delete": True},
     )
     assert result["errors"] == {"base": "invalid_reference"}
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"id": "outdoor_1", "name": "Renamed"}
+        result["flow_id"], {"name": "Renamed"}
     )
     assert result["type"] == FlowResultType.MENU
     hass.config_entries.options.async_abort(result["flow_id"])
@@ -164,7 +187,14 @@ async def test_equipment_delete_then_group_delete(hass, topology):
         result,
         "equipment",
         "indoor_1",
-        {**topology["equipment"][0], "delete": True},
+        {
+            **{
+                key: value
+                for key, value in topology["equipment"][0].items()
+                if key != "id"
+            },
+            "delete": True,
+        },
     )
     assert result["type"] == FlowResultType.MENU
     result = await edit(
@@ -172,7 +202,7 @@ async def test_equipment_delete_then_group_delete(hass, topology):
         result,
         "group",
         "outdoor_1",
-        {"id": "outdoor_1", "name": "Outdoor 1", "delete": True},
+        {"name": "Outdoor 1", "delete": True},
     )
     assert result["type"] == FlowResultType.MENU
     with patch.object(hass.config_entries, "async_reload", return_value=True):
@@ -182,3 +212,42 @@ async def test_equipment_delete_then_group_delete(hass, topology):
         await hass.async_block_till_done()
     assert entry.options["equipment"] == []
     assert entry.options["groups"] == []
+
+
+async def test_rename_preserves_existing_ids_and_links(hass, topology):
+    """Rename every record through the UI without rewriting legacy references."""
+    entry, result = await start_options(hass, topology)
+    for category, record_id in (
+        ("zone", "office"),
+        ("group", "outdoor_1"),
+        ("equipment", "indoor_1"),
+    ):
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": category}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"record": record_id}
+        )
+        assert "id" not in result["data_schema"].schema
+        data = {"name": f"Renamed {category}"}
+        if category == "equipment":
+            data.update(
+                kind="hvac",
+                entity_id="climate.indoor_1",
+                zone_id="office",
+                group_id="outdoor_1",
+            )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], data
+        )
+        assert result["type"] == FlowResultType.MENU
+    with patch.object(hass.config_entries, "async_reload", return_value=True):
+        await hass.config_entries.options.async_configure(
+            result["flow_id"], {"next_step_id": "finish"}
+        )
+        await hass.async_block_till_done()
+    assert entry.options["zones"][0]["id"] == "office"
+    assert entry.options["groups"][0]["id"] == "outdoor_1"
+    assert entry.options["equipment"][0] == dict(
+        topology["equipment"][0], name="Renamed equipment"
+    )

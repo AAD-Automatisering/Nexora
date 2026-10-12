@@ -1,6 +1,6 @@
-# Nexora — roadmap
+# Zonentra — roadmap
 
-Scope: één Home Assistant-installatie, één Nexora, één gebouw. Alle fases moeten
+Scope: één Home Assistant-installatie, één Zonentra, één gebouw. Alle fases moeten
 kleine, onafhankelijk toetsbare stappen blijven. Deze basis doet geen automatische
 hardware-aansturing.
 
@@ -16,7 +16,7 @@ hardware-aansturing.
 - [ ] Installatie-/UI-smoketest op de werkelijke Home Assistant-installatie.
 
 Exit: alle tests slagen; gebouw is via UI configureerbaar; geen servicecall vanuit
-Nexora; herladen ruimt listeners op. De praktijktest blijft een aparte installatie-
+Zonentra; herladen ruimt listeners op. De praktijktest blijft een aparte installatie-
 verificatie: unit/integratietests vervangen geen echte KNX/Mitsubishi-omgeving.
 
 ## Fase 2 — klimaatcoördinatie

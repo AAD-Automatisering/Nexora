@@ -5,8 +5,8 @@ from unittest.mock import patch
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.nexora.const import DOMAIN
-from custom_components.nexora.diagnostics import async_get_config_entry_diagnostics
+from custom_components.zonentra.const import DOMAIN
+from custom_components.zonentra.diagnostics import async_get_config_entry_diagnostics
 
 
 async def test_lifecycle_read_only(hass, topology):
@@ -95,7 +95,7 @@ async def test_options_reload_and_floor_protection(hass, topology):
             result["flow_id"], {"record": "office"}
         )
         result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"id": "office", "name": "Office"}
+            result["flow_id"], {"name": "Office"}
         )
         await hass.config_entries.options.async_configure(
             result["flow_id"], {"next_step_id": "finish"}

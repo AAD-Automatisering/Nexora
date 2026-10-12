@@ -1,10 +1,10 @@
-# Nexora — Intelligent Building Management
+# Zonentra — Intelligent Building Management
 
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
-**Eén Home Assistant = één Nexora = één gebouw**, met meerdere ruimtes en installaties.
+**Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie 0.1.0 implementeert uitsluitend fase 1: indeling, observatie en diagnostische
-simulatie. Nexora roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
+Versie 0.1.2 implementeert uitsluitend fase 1: indeling, observatie en diagnostische
+simulatie. Zonentra roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
 zonwerings- of ventilatie-instellingen. De 16 °C-vloerverwarmingsgrens blijft intact.
 Bestaande VTherm-regeling en automations blijven zelfstandig werken.
 
@@ -13,39 +13,43 @@ Bestaande VTherm-regeling en automations blijven zelfstandig werken.
 Getest met Home Assistant **2026.10.1**; oudere versies zijn niet ondersteund of getest.
 De runtime heeft geen aanvullende Python-requirements en vereist geen VTherm.
 
-1. Kopieer `custom_components/nexora` uit dit project naar
-   `<Home Assistant config>/custom_components/nexora`.
+1. Kopieer `custom_components/zonentra` uit dit project naar
+   `<Home Assistant config>/custom_components/zonentra`.
 2. Herstart Home Assistant.
-3. Ga naar **Instellingen → Apparaten & diensten → Integratie toevoegen → Nexora**.
-4. Geef het gebouw een naam. Een tweede Nexora-entry wordt geweigerd.
+3. Ga naar **Instellingen → Apparaten & diensten → Integratie toevoegen → Zonentra**.
+4. Geef het gebouw een naam. Een tweede Zonentra-entry wordt geweigerd.
 5. Open de integratieopties (het tandwiel) om de gebouwindeling te configureren.
 
-Er is geen YAML nodig. De lokale HACS-configuratie is voorbereid; deze versie is
-nog niet als publieke repository/release gepubliceerd. De repository-URL in het
-manifest is een placeholder en moet vóór publicatie worden vervangen door het
-werkelijke projectadres.
+Er is geen YAML nodig.
 
 ### Installeren via HACS (custom repository)
 
-Zodra Nexora in een eigen publieke GitHub-repository staat:
-
 1. Open **HACS → ⋮ → Custom repositories / Aangepaste repositories**.
-2. Vul de URL van de Nexora-repository in en kies type **Integration**.
-3. Voeg de repository toe, zoek **Nexora** en download de integratie.
+2. Voeg `https://github.com/AAD-Automatisering/Zonentra` toe met type **Integration**.
+3. Zoek **Zonentra** en download de integratie zodra deze versie is gepubliceerd.
 4. Herstart Home Assistant.
-5. Voeg **Nexora** toe via **Instellingen → Apparaten & diensten**.
+5. Voeg **Zonentra** toe via **Instellingen → Apparaten & diensten**.
 
 HACS installeert en beheert de bestanden; de gebouwconfiguratie gebeurt vervolgens
 via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hiervoor
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
+De repository-URL hierboven is het nieuwe projectadres; gebruik deze nadat de
+GitHub-repository is hernoemd en versie 0.1.2 is gepubliceerd.
 
-Voor publicatie moet de inhoud van **deze Nexora-map** aan de root van een aparte
-publieke repository staan, met `hacs.json`, `README.md` en
-`custom_components/nexora/`. De bovenliggende verzamelrepository heeft niet die
-structuur en is dus geen geschikte HACS-URL. Vul in het integratiemanifest ook de
-werkelijke `documentation`, `issue_tracker` en GitHub-`codeowners` in. Voeg een
-repositorybeschrijving toe en schakel Issues in. Een GitHub-release wordt aangeraden;
-zonder release kan HACS de default branch downloaden.
+### Oude testinstallatie vervangen
+
+Deze testversie heeft een nieuwe Home Assistant-domain en integratiemap: `zonentra`.
+Er is geen automatische migratie van de vorige testintegratie.
+
+1. Noteer eventueel de huidige ruimte- en apparatuurkoppelingen.
+2. Verwijder de oude Nexora-configuratie via **Instellingen → Apparaten & diensten**.
+3. Verwijder de oude integratie via HACS (of de map `custom_components/nexora` bij
+   handmatige installatie). Verwijder daarbij alleen de oude integratiebestanden.
+4. Installeer Zonentra via de nieuwe repository zodra deze versie gepubliceerd is.
+5. Herstart Home Assistant en voeg **Zonentra** toe. Configureer de gebouwindeling opnieuw.
+
+De bestaande Mitsubishi-, KNX- en VTherm-entiteiten worden niet verwijderd.
+Verwijzingen naar de oude diagnostische statussensor moeten opnieuw worden gekoppeld.
 
 Bronnen: [HACS custom repositories](https://www.hacs.dev/docs/faq/custom_repositories/),
 [repositorystructuur](https://www.hacs.dev/docs/publish/integration/) en
@@ -55,13 +59,14 @@ Bronnen: [HACS custom repositories](https://www.hacs.dev/docs/faq/custom_reposit
 
 Gebruik **Ruimte toevoegen of bewerken**, **Buitenunitgroep toevoegen of bewerken**
 en **Apparatuur toevoegen of bewerken**. Selecteer een bestaand item of `Add new`.
-Geef elk item een vast ID zoals `kantoor_1` en een herkenbare naam. IDs blijven
-vast; namen kunnen worden gewijzigd. Alle wijzigingen worden pas opgeslagen via
+Geef elk item een herkenbare naam. Zonentra maakt automatisch een uniek intern ID
+aan; dit verschijnt niet in de formulieren en blijft behouden als je de naam wijzigt.
+Bestaande, eerder handmatig ingevulde IDs blijven ook behouden. Alle wijzigingen worden pas opgeslagen via
 **Opslaan**. Sluiten verwerpt de transactie.
 
 Maak eerst ruimtes aan, daarna buitenunitgroepen, daarna apparatuur. Voor het
-kantoor kunnen twee groepen `buitenunit_1` en `buitenunit_2` worden gemaakt. Koppel
-elke binnenunit aan zijn werkelijke ruimte en buitenunit; Nexora raadt die relatie
+kantoor kunnen twee groepen met de namen `Buitenunit 1` en `Buitenunit 2` worden gemaakt. Koppel
+elke binnenunit aan zijn werkelijke ruimte en buitenunit; Zonentra raadt die relatie
 niet. Groepen modelleren maximaal één heat/cool-modus tegelijk.
 
 Een ruimte heeft optioneel een aparte KNX-temperatuursensor, een climate-
@@ -79,7 +84,7 @@ Centrale alarmbezetting, CO₂, P1, PV en weercontext volgen in latere fases.
 
 ## Status en diagnostiek
 
-Het Nexora-gebouw krijgt één diagnostische **Status**-sensor:
+Het Zonentra-gebouw krijgt één diagnostische **Status**-sensor:
 
 | Status | Betekenis |
 | --- | --- |
@@ -95,12 +100,12 @@ Alle beslissingen zijn simulatie. Een conflict wordt gemeld, niet gecorrigeerd.
 Download diagnostiek via het integratiemenu. Namen, IDs en entiteitkoppelingen
 worden geredigeerd; ruwe bronstates worden niet geëxporteerd. Voor debuglogging
 kan de standaard HA-functie **Debuglogging inschakelen** worden gebruikt.
-Ontkoppelen/herladen ruimt eventlisteners op; Nexora pollt niet.
+Ontkoppelen/herladen ruimt eventlisteners op; Zonentra pollt niet.
 
 ## Ontwikkelen en testen
 
 Gebruik Python 3.14.2 of nieuwer. De dependencyversies zijn vastgelegd voor de
-geteste HA-versie; runtime-installatie van Nexora vereist deze testtools niet.
+geteste HA-versie; runtime-installatie van Zonentra vereist deze testtools niet.
 
 ```sh
 python3.14 -m venv .venv
@@ -121,7 +126,7 @@ uit. Een praktische installatie-/UI-smoketest in uw eigen HA blijft nodig.
 ARCHITECTURE.md                 keuzes, datamodellen, interfaces en bronnen
 ROADMAP.md                      fases en exitcriteria
 README.md                       installatie en gebruik
-custom_components/nexora/
+custom_components/zonentra/
   __init__.py                   setup/unload, runtime_data, subscriptions
   manifest.json                 custom integration metadata, singleton
   const.py                      domein en types
@@ -141,5 +146,5 @@ pyproject.toml                  Python-, pytest- en Ruff-configuratie
 ```
 
 Zie [ARCHITECTURE.md](ARCHITECTURE.md) en [ROADMAP.md](ROADMAP.md) voor vervolgwerk.
-Nexora gebruikt MIT als projectlicentie. VTherm is als MIT-gelicentieerde referentie
+Zonentra gebruikt MIT als projectlicentie. VTherm is als MIT-gelicentieerde referentie
 onderzocht; er is geen VTherm-code gekopieerd en er is geen forkafhankelijkheid.

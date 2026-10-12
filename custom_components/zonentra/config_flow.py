@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from typing import Any
+from uuid import uuid4
 
 import probatio as vol
 from homeassistant.config_entries import (
@@ -27,7 +28,7 @@ def choice(options):
     return selector.SelectSelector({"options": options, "mode": "dropdown"})
 
 
-class NexoraConfigFlow(ConfigFlow, domain=DOMAIN):
+class ZonentraConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(self, user_input=None) -> ConfigFlowResult:
@@ -58,15 +59,16 @@ class NexoraConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry):
-        return NexoraOptionsFlow()
+        return ZonentraOptionsFlow()
 
 
-class NexoraOptionsFlow(OptionsFlowWithReload):
+class ZonentraOptionsFlow(OptionsFlowWithReload):
     """Collect edits in a private copy and save only via Finish."""
 
     def __init__(self):
         self.topology: dict[str, Any] | None = None
         self.selected: str | None = None
+        self.new_id: str | None = None
 
     async def async_step_init(self, user_input=None):
         if self.topology is None:
@@ -87,6 +89,7 @@ class NexoraOptionsFlow(OptionsFlowWithReload):
     async def _select(self, category, user_input):
         if user_input is not None:
             self.selected = user_input["record"]
+            self.new_id = uuid4().hex if self.selected == "__new__" else None
             return await getattr(self, f"async_step_{category}_details")()
         records = self.topology[
             {"zone": "zones", "group": "groups", "equipment": "equipment"}[category]
@@ -123,7 +126,6 @@ class NexoraOptionsFlow(OptionsFlowWithReload):
 
     def _schema(self, category):
         fields = {
-            vol.Required("id"): selector.TextSelector(),
             vol.Required("name"): selector.TextSelector(),
         }
         if category == "zone":
@@ -173,9 +175,8 @@ class NexoraOptionsFlow(OptionsFlowWithReload):
                 category
             ]
             record = {k: v for k, v in user_input.items() if k != "delete" and v != ""}
+            record["id"] = self.new_id if self.selected == "__new__" else self.selected
             try:
-                if self.selected != "__new__" and record["id"] != self.selected:
-                    raise ValueError("id_immutable")
                 candidate[key] = [
                     item for item in candidate[key] if item["id"] != self.selected
                 ]

@@ -1,0 +1,14 @@
+{
+  "domain": "zonentra",
+  "name": "Zonentra",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/AAD-Automatisering/Zonentra",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.2",
+  "issue_tracker": "https://github.com/AAD-Automatisering/Zonentra/issues"
+}
