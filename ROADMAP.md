@@ -62,6 +62,16 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] Regressietests voor stabiele, ongeldige, onbeschikbare en herstellende bronnen.
 - [ ] Praktijkcontrole: een stabiele KNX-temperatuur blijft `valid` na 44+ minuten stabiele waarde.
 
+### Versie 0.4.0 — binnenunitobservatie (geïmplementeerd)
+
+- [x] Binnenunits = bestaande HVAC-apparatuur; geen dubbele configuratie.
+- [x] Selected mode, reported action en fysieke modus strikt gescheiden.
+- [x] Pure Mode Detection Engine met consensus, activiteit, afgeleide modus en kwaliteit.
+- [x] Conflictdetectie en vergelijking met de gewenste modus via reason codes.
+- [x] Binnenunit- en afgeleide-groepsmodussensoren, uitgebreide diagnostiek.
+- [x] `current_mode_unknown` blijft zonder betrouwbare fysieke feedback gehandhaafd.
+- [ ] Praktijkcontrole met de airco's van de kantoorinstallatie.
+
 ### Vervolg vóór actieve regeling
 
 Inventariseer de fysieke topologie, betrouwbare gatewayfeedback en huidige

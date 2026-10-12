@@ -1,6 +1,6 @@
 """Zonentra constants."""
 
 DOMAIN = "zonentra"
-VERSION = "0.3.1"
+VERSION = "0.4.0"
 TOPOLOGY_KEYS = ("zones", "groups", "equipment")
 KINDS = ("hvac", "floor_heating", "shading", "ventilation", "other")

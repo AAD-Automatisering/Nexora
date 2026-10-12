@@ -88,12 +88,12 @@
       },
       "equipment_details": {
         "title": "Apparatuur",
-        "description": "Optionele koppelingen kunnen worden gewist. Apparatuur wordt niet aangestuurd.",
+        "description": "Registreer iedere binnenunit (een bestaande climate-entiteit) als HVAC-apparatuur in zijn ruimte; meerdere units per ruimte en per buitenunitgroep zijn mogelijk. Zonentra leest alleen modus, hvac_action, temperaturen en ventilatorstand. Optionele koppelingen kunnen worden gewist. Er wordt niets aangestuurd.",
         "data": {
           "name": "Naam",
           "delete": "Dit item verwijderen",
           "kind": "Apparaattype",
-          "entity_id": "Fysieke entiteit",
+          "entity_id": "Fysieke entiteit (bij HVAC: de climate-entiteit van de binnenunit)",
           "zone_id": "Ruimte",
           "group_id": "Buitenunitgroep (alleen HVAC)"
         }
@@ -122,7 +122,7 @@
       "invalid_kind": "Kies een ondersteund apparaattype.",
       "invalid_reference": "Een ruimte of groep ontbreekt of wordt nog gebruikt. Verwijder eerst de apparatuurkoppelingen.",
       "invalid_group": "Alleen HVAC-apparatuur kan een buitenunitgroep hebben.",
-      "duplicate_equipment_entity": "Deze fysieke entiteit is al als apparatuur geregistreerd.",
+      "duplicate_equipment_entity": "Deze entiteit is al als apparatuur gekoppeld (mogelijk aan een andere ruimte). Een binnenunit hoort bij één ruimte.",
       "entity_not_found": "De nieuwe entiteit moet bestaan in Home Assistant.",
       "add_zone_first": "Voeg eerst een ruimte toe. Sluit dit venster en open Opties opnieuw.",
       "invalid_parameters": "Ongeldige regelparameters: gebruik eindige waarden binnen de aangegeven grenzen. update_based vereist een maximale updateleeftijd groter dan 0.",
@@ -147,6 +147,29 @@
           "heat": "Verwarmen",
           "cool": "Koelen",
           "off": "Geen actieve vraag",
+          "unknown": "Onbekend"
+        }
+      },
+      "indoor_unit": {
+        "name": "{unit} Binnenunit-modus",
+        "state": {
+          "heat": "Verwarmen",
+          "cool": "Koelen",
+          "heat_cool": "Verwarmen/koelen",
+          "auto": "Auto",
+          "dry": "Drogen",
+          "fan_only": "Alleen ventilator",
+          "off": "Uit",
+          "unknown": "Onbekend"
+        }
+      },
+      "derived_group_mode": {
+        "name": "{group} Modus afgeleid van binnenunits",
+        "state": {
+          "heat": "Verwarmen",
+          "cool": "Koelen",
+          "inactive": "Inactief",
+          "mixed": "Gemengd (conflict)",
           "unknown": "Onbekend"
         }
       }

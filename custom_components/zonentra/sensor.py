@@ -1,4 +1,4 @@
-"""Compact read-only diagnostics: one building, one zone and one group sensor."""
+"""Compact read-only diagnostics for the building, zones, indoor units and groups."""
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
 from homeassistant.core import callback
@@ -18,6 +18,14 @@ async def async_setup_entry(
     entities = [ZonentraStatusSensor(entry)]
     entities.extend(ZoneDemandSensor(entry, zone) for zone in runtime.building.zones)
     entities.extend(GroupModeSensor(entry, group) for group in runtime.building.groups)
+    entities.extend(
+        IndoorUnitSensor(entry, item)
+        for item in runtime.building.equipment
+        if item.kind == "hvac"
+    )
+    entities.extend(
+        DerivedGroupModeSensor(entry, group) for group in runtime.building.groups
+    )
     # Options reload removes obsolete diagnostics; renames retain stable IDs.
     expected = {entity.unique_id for entity in entities}
     registry = er.async_get(hass)
@@ -168,4 +176,110 @@ class GroupModeSensor(ZonentraDiagnosticSensor):
             "member_zones": len(decision.member_zone_ids),
             "reliable_zones": decision.reliable_zones,
             "mode_quality": decision.mode_quality,
+            # Physical mode only comes from the configured, trusted feedback.
+            "physical_mode": decision.current_mode,
+            "mode_feedback_quality": decision.mode_quality,
+            "physical_mode_feedback_available": decision.mode_quality == "valid",
+            "derived_group_mode": self.runtime.group_observations[
+                self.group.id
+            ].derived_mode,
+            "observation_reason": self.runtime.mode_comparisons[self.group.id],
+        }
+
+
+class IndoorUnitSensor(ZonentraDiagnosticSensor):
+    """Selected mode of one linked indoor unit, as reported by Home Assistant."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "heat",
+        "cool",
+        "heat_cool",
+        "auto",
+        "dry",
+        "fan_only",
+        "off",
+        "unknown",
+    ]
+    _attr_icon = "mdi:air-conditioner"
+    _attr_translation_key = "indoor_unit"
+
+    def __init__(self, entry, item):
+        super().__init__(entry)
+        self.item = item
+        self._attr_translation_placeholders = {"unit": item.name}
+        self._attr_unique_id = f"{entry.entry_id}_equipment_{item.id}_indoor_unit"
+
+    @property
+    def native_value(self):
+        unit = self.runtime.indoor_units[self.item.id]
+        return (
+            unit.selected_mode
+            if unit.selected_mode in self._attr_options
+            else "unknown"
+        )
+
+    @property
+    def extra_state_attributes(self):
+        unit = self.runtime.indoor_units[self.item.id]
+        return {
+            "read_only": True,
+            "indoor_unit_entity": self.item.entity_id,
+            "selected_mode": unit.selected_mode,
+            "reported_action": unit.reported_action,
+            "current_temperature": unit.current_temperature,
+            "target_temperature": unit.target_temperature,
+            "temperature_unit": unit.temperature_unit,
+            "fan_mode": unit.fan_mode,
+            "availability": unit.availability,
+            "observation_quality": unit.quality,
+            "selected_action_mismatch": unit.mismatch,
+            "observed_at": unit.observed_at,
+        }
+
+
+class DerivedGroupModeSensor(ZonentraDiagnosticSensor):
+    """Group mode interpreted from indoor units — never physical outdoor feedback."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["heat", "cool", "inactive", "mixed", "unknown"]
+    _attr_icon = "mdi:home-search-outline"
+    _attr_translation_key = "derived_group_mode"
+
+    def __init__(self, entry, group):
+        super().__init__(entry)
+        self.group = group
+        self._attr_translation_placeholders = {"group": group.name}
+        self._attr_unique_id = f"{entry.entry_id}_group_{group.id}_derived_mode"
+
+    @property
+    def native_value(self):
+        return self.runtime.group_observations[self.group.id].derived_mode
+
+    @property
+    def extra_state_attributes(self):
+        observation = self.runtime.group_observations[self.group.id]
+        decision = self.runtime.group_decisions[self.group.id]
+        return {
+            "read_only": True,
+            "derived_from": "indoor_units",
+            "member_indoor_units": observation.member_units,
+            "available_indoor_units": observation.available_units,
+            "usable_selected_modes": observation.usable_modes,
+            "usable_hvac_actions": observation.usable_actions,
+            "selected_modes": dict(observation.selected_modes),
+            "selected_mode_consensus": observation.selected_consensus,
+            "selected_modes_agree": observation.modes_agree,
+            "reported_activity": observation.reported_activity,
+            "reported_actions_agree": observation.actions_agree,
+            "conflict_detected": observation.conflict,
+            "conflicts": list(observation.conflicts),
+            "completeness": observation.completeness,
+            "quality": observation.quality,
+            "reason": observation.reason,
+            "notes": list(observation.notes),
+            "desired_mode": decision.desired_mode,
+            "physical_mode": decision.current_mode,
+            "physical_mode_feedback_available": decision.mode_quality == "valid",
+            "observation_reason": self.runtime.mode_comparisons[self.group.id],
         }

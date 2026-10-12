@@ -88,12 +88,12 @@
       },
       "equipment_details": {
         "title": "Equipment",
-        "description": "Optional links can be cleared. No equipment is controlled.",
+        "description": "Register each indoor unit (an existing climate entity) as HVAC equipment in its zone; several units per zone and per outdoor unit group are supported. Zonentra only reads mode, hvac_action, temperatures and fan mode. Optional links can be cleared. No equipment is controlled.",
         "data": {
           "name": "Name",
           "delete": "Delete this record",
           "kind": "Equipment type",
-          "entity_id": "Physical entity",
+          "entity_id": "Physical entity (for HVAC: the indoor unit climate entity)",
           "zone_id": "Zone",
           "group_id": "Outdoor unit group (HVAC only)"
         }
@@ -122,7 +122,7 @@
       "invalid_kind": "Choose a supported equipment type.",
       "invalid_reference": "A zone or group is missing or is still referenced. Remove equipment links first.",
       "invalid_group": "Only HVAC equipment can belong to an outdoor unit group.",
-      "duplicate_equipment_entity": "This physical entity is already registered as equipment.",
+      "duplicate_equipment_entity": "This entity is already linked as equipment (possibly in another zone). An indoor unit can belong to one zone only.",
       "entity_not_found": "The new entity link must exist in Home Assistant.",
       "add_zone_first": "Add a zone before registering equipment. Close this dialog and reopen Options.",
       "invalid_parameters": "Invalid parameters: use finite values within the indicated ranges. update_based requires a maximum update age above 0.",
@@ -147,6 +147,29 @@
           "heat": "Heating",
           "cool": "Cooling",
           "off": "No active demand",
+          "unknown": "Unknown"
+        }
+      },
+      "indoor_unit": {
+        "name": "{unit} Indoor unit mode",
+        "state": {
+          "heat": "Heat",
+          "cool": "Cool",
+          "heat_cool": "Heat/cool",
+          "auto": "Auto",
+          "dry": "Dry",
+          "fan_only": "Fan only",
+          "off": "Off",
+          "unknown": "Unknown"
+        }
+      },
+      "derived_group_mode": {
+        "name": "{group} Mode derived from indoor units",
+        "state": {
+          "heat": "Heat",
+          "cool": "Cool",
+          "inactive": "Inactive",
+          "mixed": "Mixed (conflict)",
           "unknown": "Unknown"
         }
       }

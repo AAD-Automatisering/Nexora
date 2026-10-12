@@ -8,6 +8,15 @@ from . import ZonentraConfigEntry
 from .models import ZONE_ENTITY_FIELDS
 from .observations import describe
 
+# Interpretation only: no temperatures, fan modes or entity IDs leave the instance.
+UNIT_FIELDS = (
+    "equipment_id",
+    "availability",
+    "selected_mode",
+    "reported_action",
+    "quality",
+    "mismatch",
+)
 SOURCE_FIELDS = (
     "temperature",
     "heating_limit",
@@ -39,6 +48,7 @@ def _source_validation(runtime) -> list[dict]:
 
 
 async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -> dict:
+    runtime = entry.runtime_data
     return async_redact_data(
         {
             "configuration": {"data": dict(entry.data), "options": dict(entry.options)},
@@ -52,6 +62,27 @@ async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -
                 asdict(item) for item in entry.runtime_data.zone_demands.values()
             ],
             "source_validation": _source_validation(entry.runtime_data),
+            "group_observations": [
+                {
+                    **asdict(observation),
+                    "desired_mode": runtime.group_decisions[group_id].desired_mode,
+                    "physical_mode": runtime.group_decisions[group_id].current_mode,
+                    "physical_mode_feedback_available": (
+                        runtime.group_decisions[group_id].mode_quality == "valid"
+                    ),
+                    "observation_reason": runtime.mode_comparisons[group_id],
+                    "units": [
+                        {
+                            key: value
+                            for key, value in asdict(unit).items()
+                            if key in UNIT_FIELDS
+                        }
+                        for unit in runtime.indoor_units.values()
+                        if unit.group_id == group_id
+                    ],
+                }
+                for group_id, observation in runtime.group_observations.items()
+            ],
             "group_decisions": [
                 {
                     **asdict(item),

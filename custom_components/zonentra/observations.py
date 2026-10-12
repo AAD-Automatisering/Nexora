@@ -18,12 +18,25 @@ VALIDATION_STRATEGIES = (STATE_BASED, UPDATE_BASED)
 
 
 @dataclass(frozen=True)
+class ClimateAttributes:
+    """Read-only climate attributes copied from HA; none of these are commands."""
+
+    hvac_action: str | None = None
+    current_temperature: float | None = None
+    target_temperature: float | None = None
+    fan_mode: str | None = None
+    temperature_unit: str | None = None
+    observed_at: datetime | None = None  # HA last_updated: state or attribute change
+
+
+@dataclass(frozen=True)
 class SourceState:
     state: str | None
     unit: str | None = None
     reported_at: datetime | None = None  # HA last_reported: last write, even unchanged
     trustworthy: bool = True
     changed_at: datetime | None = None  # HA last_changed: diagnostic only
+    climate: ClimateAttributes | None = None  # Only for climate entities
 
 
 @dataclass(frozen=True)

@@ -1,4 +1,4 @@
-# Zonentra 0.3.1 — uitlegbare klimaatintelligentie
+# Zonentra 0.4.0 — uitlegbare klimaatintelligentie
 
 Alles in dit document betreft **read-only analyse**. Een voorgestelde modus is
 geen commando, en verandert ook niet de intern bijgehouden actuele modus.
@@ -175,12 +175,85 @@ Met weging A=2 wordt Δ=1,2: desired=heat. Of proposed ook heat wordt, hangt af 
 betrouwbare modusfeedback en de omschakelwachttijd. Zonder feedback blijft proposed
 unknown. Dit kiest bewust stabiliteit boven een omschakeling bij een klein verschil.
 
+## Binnenunits en afgeleide groepsmodus (0.4)
+
+Binnenunits zijn de als `hvac`-apparatuur gekoppelde climate-entiteiten. De pure
+module `indoor.py` interpreteert ze; de beslisengine (`engine.py`) is niet
+gewijzigd en gebruikt deze interpretatie niet.
+
+**Per binnenunit** wordt gelezen: beschikbaarheid, selected mode (entity state),
+`hvac_action`, `current_temperature`, `temperature` (setpoint), `fan_mode` en
+`last_updated`. Ontbrekende attributen worden niet geraden.
+
+| Beschikbaarheid | Betekenis |
+|---|---|
+| available | Geldige state van een betrouwbare bron |
+| missing | Entiteit bestaat niet (meer) in HA |
+| unknown / unavailable | HA meldt dit expliciet |
+| untrusted | `restored` of `assumed_state` |
+
+| Selected mode | Classificatie |
+|---|---|
+| heat / cool | Verwarmen / koelen geselecteerd |
+| off | Uit (geen bewijs dat de buitenunit uit is) |
+| fan_only | Geen verwarmen of koelen geselecteerd |
+| auto / heat_cool | Niet te classificeren zonder activiteit (`auto_mode_unclassified`) |
+| dry | Apart; nooit automatisch gelijk aan cool (`dry_mode_selected`) |
+| overig | `unsupported_mode_selected` |
+
+`hvac_action`: heating/preheating/defrosting → heating; cooling → cooling;
+drying → drying; idle/off/fan → inactief; ontbrekend → onbekend
+(`hvac_action_missing`). Een selected mode die de gemelde activiteit niet kan
+veroorzaken is een **mismatch** (bijv. off + heating, heat + cooling, fan_only +
+cooling). heat + idle is normaal: ingesteld op verwarmen, nu niet actief.
+
+**Per groep:**
+
+1. *Selected consensus* (beschikbare units): heat én cool → `mixed`
+   (`selected_heat_and_cool`); anders heat → `heat`, cool → `cool`; alleen
+   off/fan_only → `off`; anders (auto/dry/onbekend) → `unknown`.
+2. *Reported activity*: heating én cooling → `mixed`
+   (`reported_heating_and_cooling`); anders heating, cooling, drying of
+   `inactive`; zonder bruikbare `hvac_action` → `unknown`.
+3. *Derived mode*: elk conflict → `mixed` met het conflict als reden. Anders
+   consensus heat/cool (tenzij de activiteit tegenovergesteld is →
+   `selected_heat_reported_cooling` / `selected_cool_reported_heating`),
+   consensus off → `inactive` (`all_units_off` / `no_heat_or_cool_selected`),
+   bij een ambigue modus alleen heat/cool als de activiteit dat meldt
+   (`ambiguous_mode_heating_reported`), anders `unknown`. Geen units →
+   `no_indoor_units`; geen beschikbare units → `no_available_indoor_units`.
+   Een conflict wordt nooit opgelost door één unit voorrang te geven.
+4. *Kwaliteit*: `completeness` = complete / partial (unit onbeschikbaar of
+   modus onbruikbaar) / none. `quality` = consistent (alles bekend en eens) /
+   selected_only (hvac_action ontbreekt) / partial / conflict / none.
+
+Een off-unit naast een verwarmende unit is normaal en geen conflict.
+
+**Vergelijking met de gewenste modus** (`observation_reason`, alleen diagnose):
+
+| Situatie | Reden |
+|---|---|
+| Afgeleid gelijk aan gewenst (off ↔ inactive telt als gelijk) | observed_matches_desired |
+| Gewenst heat/cool, units inactief | heat_requested_units_inactive / cool_requested_units_inactive |
+| Gewenst heat, afgeleid cool (of omgekeerd) | mode_mismatch_observed |
+| Gewenst off, units verwarmen/koelen | units_active_without_demand |
+| Afgeleid mixed / unknown | indoor_units_conflict / indoor_observation_unknown |
+| Gewenst unknown | desired_mode_unknown |
+| Geen binnenunits | no_indoor_units |
+
+**Veiligheidsregel.** `physical_mode` is uitsluitend de bestaande `current_mode`
+uit de expliciet ingestelde modus-feedback van de groep. De afgeleide modus vult
+die nooit in, verandert `desired_mode`, scores of `proposed_mode` niet, en kan
+`current_mode_unknown` niet opheffen of een omschakeling vrijgeven.
+
 ## Events en herbeoordeling
 
 Bronveranderingen gebruiken `async_track_state_change_event`. Voor rapporten met
 ongewijzigde waarde is er een gefilterde `EVENT_STATE_REPORTED`-listener, zoals de
 actuele HA-API voorschrijft. De runtime plant slechts één timer naar de eerstvolgende
 sensorvervaldatum of geblokkeerde omschakeldeadline. Er is geen periodieke polling.
+Binnenunits zijn al gevolgde apparatuurentiteiten: een `hvac_action`-wijziging
+is een attribuutwijziging en komt via hetzelfde state_changed-event binnen.
 Bij unload worden zowel bronlisteners als de timer verwijderd.
 
 De beslisengine importeert geen Home Assistant en heeft geen uitvoerinterface.

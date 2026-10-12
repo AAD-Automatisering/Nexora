@@ -1,6 +1,6 @@
 # Zonentra — architectuur
 
-Status: versie 0.3.1, sensorvalidatiefix, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
+Status: versie 0.4.0, binnenunitobservatie, sensorvalidatie, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
 
 ## Projectnaam en integratie-identiteit
 
@@ -116,6 +116,9 @@ Status-sensor met fysieke hold-beslissingen. De nieuwe, pure analysemodellen zij
 | ZoneDemand | Hysteretische vraag, twee gewogen scores, kwaliteit en reden |
 | GroupMemory | Alleen laatst geobserveerde betrouwbare modus en waarnemingstijd |
 | GroupDecision | current/desired/proposed, geaggregeerde scores, redenen en deadline |
+| ClimateAttributes | Gekopieerde hvac_action, temperaturen, fan_mode en last_updated van een climate-entiteit |
+| IndoorUnitObservation | Beschikbaarheid, selected mode, reported action, kwaliteit en mismatch per binnenunit |
+| GroupModeObservation | Consensus, activiteit, afgeleide modus, conflicten, volledigheid, kwaliteit en reden per groep |
 
 De runtime verzamelt één snapshot op één UTC-tijdstip. `collect_zone` bouwt pure
 snapshots, `calculate_demand` berekent behoeften, `evaluate`/`decide_group`

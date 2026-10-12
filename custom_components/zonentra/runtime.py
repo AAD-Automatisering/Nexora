@@ -12,8 +12,15 @@ from homeassistant.util import dt as dt_util
 from .decision import Observation, simulate
 from .demand import calculate_demand, collect_zone
 from .engine import GroupMemory, evaluate, observe_mode
+from .indoor import compare_modes, observe_group
 from .models import Building
-from .observations import Reading, SourceState, max_age_for, read
+from .observations import (
+    ClimateAttributes,
+    Reading,
+    SourceState,
+    max_age_for,
+    read,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +38,10 @@ class BuildingRuntime:
         self.zone_snapshots = {}
         self.zone_demands = {}
         self.group_decisions = {}
+        # Indoor unit interpretation; diagnostic only, never physical feedback.
+        self.indoor_units = {}
+        self.group_observations = {}
+        self.mode_comparisons = {}
         self.evaluated_at = dt_util.utcnow()
         self.memories = {
             group.id: GroupMemory("unknown", dt_util.utcnow())
@@ -65,6 +76,7 @@ class BuildingRuntime:
                         or state.attributes.get("assumed_state")
                     ),
                     state.last_changed,
+                    self._climate(state) if entity_id.startswith("climate.") else None,
                 )
         decisions = simulate(self.building, observations)
         if decisions != self.decisions:
@@ -107,6 +119,20 @@ class BuildingRuntime:
             for decision in evaluate(
                 self.building, self.zone_demands, sources, self.memories, now
             )
+        }
+        indoor_units = {}
+        group_observations = {}
+        for group in self.building.groups:
+            units, observation = observe_group(self.building, group, sources)
+            indoor_units.update({unit.equipment_id: unit for unit in units})
+            group_observations[group.id] = observation
+        self.indoor_units = indoor_units
+        self.group_observations = group_observations
+        self.mode_comparisons = {
+            group_id: compare_modes(
+                self.group_decisions[group_id].desired_mode, observation
+            )
+            for group_id, observation in group_observations.items()
         }
         if self.group_decisions != previous_group_decisions:
             _LOGGER.debug(
@@ -159,6 +185,19 @@ class BuildingRuntime:
                 self.hass, self.refresh, min(future)
             )
         async_dispatcher_send(self.hass, self.signal)
+
+    def _climate(self, state) -> ClimateAttributes:
+        """Copy only the read-only climate attributes Zonentra explains."""
+        attributes = state.attributes
+        fan_mode = attributes.get("fan_mode")
+        return ClimateAttributes(
+            attributes.get("hvac_action"),
+            attributes.get("current_temperature"),
+            attributes.get("temperature"),
+            str(fan_mode) if fan_mode is not None else None,
+            self.hass.config.units.temperature_unit,
+            state.last_updated,
+        )
 
     @callback
     def close(self):

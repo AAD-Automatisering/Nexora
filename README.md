@@ -3,8 +3,12 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.3.1** herstelt de sensorvalidatie: een geldige temperatuur die lang
-niet verandert (zoals bij KNX) wordt niet langer onterecht `stale`. Versie 0.3.0
+Versie **0.4.0** observeert de bestaande binnenunits (climate-entiteiten): per
+binnenunit de ingestelde modus en `hvac_action`, en per buitenunitgroep een
+**afgeleide** groepsmodus met conflictdetectie, naast de gewenste modus uit de
+klimaatvraag. Een afgeleide modus is nooit fysieke buitenunitfeedback. Versie
+0.3.1 herstelde de sensorvalidatie: een geldige temperatuur die lang niet
+verandert (zoals bij KNX) wordt niet langer onterecht `stale`. Versie 0.3.0
 voegde centrale gebouwinstellingen met optionele ruimteafwijkingen toe aan de
 uitlegbare klimaatvraag en gewogen buitenunitvoorstellen. Alles blijft
 read-only simulatie. Zonentra roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
@@ -38,6 +42,13 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.4.0
+
+Werk bij via HACS en herstart Home Assistant; herconfiguratie is niet nodig.
+Binnenunits zijn de climate-entiteiten die al als **HVAC-apparatuur** aan een
+ruimte zijn gekoppeld. Voor elke binnenunit en elke buitenunitgroep verschijnen
+automatisch nieuwe diagnostische sensoren.
 
 ### Bijwerken naar 0.3.1
 
@@ -163,15 +174,40 @@ Optionele context beïnvloedt de klimaatscores in 0.3 nog niet.
 
 ## Status en diagnostiek
 
-Er zijn **één gebouwsensor, één klimaatsensor per ruimte en één modusvoorstelsensor
-per buitenunitgroep**. Scores en verklaringen staan in compacte attributen, zodat
+Er zijn **één gebouwsensor, één klimaatsensor per ruimte, één modussensor per
+binnenunit en per buitenunitgroep een modusvoorstel- en een afgeleide-modussensor**. Scores en verklaringen staan in compacte attributen, zodat
 niet voor elke score een aparte entiteit nodig is.
 
 | Sensor | State | Belangrijkste attributen |
 |---|---|---|
 | Status | read_only / degraded / conflict | zones, groups, equipment, unavailable_inputs, unknown_zone_demands, outdoor_temperature_c, outdoor_temperature_quality, outdoor_temperature_validation, outdoor_temperature_freshness_verified, outdoor_temperature_selection_required; maximaal 20 fysieke hold-beslissingen |
 | Ruimte Klimaatvraag | heating_demand / cooling_demand / neutral / unknown | temperature_c, heating_limit_c, cooling_limit_c, heating_score, cooling_score, reason, sensor_health, source_health, sensor_validation, temperature_validation, occupancy, limits_source, parameters_source |
-| Buitenunit Voorgestelde HVAC-modus | heat / cool / off / unknown | current_mode, desired_mode, heating_score, cooling_score, reason, blocked_reason, blocked_until, mode_change_proposed, mode_quality, reliable_zones |
+| Buitenunit Voorgestelde HVAC-modus | heat / cool / off / unknown | current_mode, desired_mode, heating_score, cooling_score, reason, blocked_reason, blocked_until, mode_change_proposed, mode_quality, reliable_zones, physical_mode, mode_feedback_quality, physical_mode_feedback_available, derived_group_mode, observation_reason |
+| Binnenunit-modus | heat / cool / heat_cool / auto / dry / fan_only / off / unknown | indoor_unit_entity, selected_mode, reported_action, current_temperature, target_temperature, temperature_unit, fan_mode, availability, observation_quality, selected_action_mismatch, observed_at |
+| Buitenunit Modus afgeleid van binnenunits | heat / cool / inactive / mixed / unknown | member_indoor_units, available_indoor_units, usable_selected_modes, usable_hvac_actions, selected_modes, selected_mode_consensus, reported_activity, conflict_detected, conflicts, completeness, quality, reason, notes, desired_mode, physical_mode, physical_mode_feedback_available, observation_reason |
+
+### Binnenunits en afgeleide groepsmodus (0.4)
+
+Koppel iedere bestaande airco-climate-entiteit via **Opties → Apparatuur** als
+type `hvac` aan zijn ruimte; de buitenunitgroep volgt uit de ruimte. Meerdere
+binnenunits per ruimte en per groep zijn mogelijk. Dezelfde entiteit kan maar
+één keer gekoppeld worden; een tweede koppeling geeft een duidelijke foutmelding.
+Wijzigen of ontkoppelen kan in hetzelfde formulier; overbodige sensoren worden
+bij opslaan verwijderd.
+
+Zonentra houdt drie dingen gescheiden:
+
+- **Selected mode** – de ingestelde modus (de entity state, bijv. `heat`).
+- **Reported action** – `hvac_action` zoals HA hem meldt (bijv. `idle`). Dat is
+  alleen zo betrouwbaar als de onderliggende integratie; Zonentra neemt niet aan
+  dat dit fysieke terugmelding is.
+- **Physical mode** – alleen de expliciet ingestelde, betrouwbare modus-feedback
+  van de groep. Zonder die bron blijft `physical_mode` `unknown` en blijft
+  `current_mode_unknown` een moduswissel blokkeren, wat de binnenunits ook melden.
+
+Voorbeeld: ruimte met warmtevraag, airco uit → desired `heat`, afgeleid
+`inactive`, physical `unknown`, `observation_reason: heat_requested_units_inactive`.
+De afleidingsregels en alle reason codes staan in [ALGORITHM.md](ALGORITHM.md#binnenunits-en-afgeleide-groepsmodus-04).
 
 `read_only` bevestigt observatie/simulatie, ook bij een leeg gebouw. `degraded`
 betekent een ontbrekende/unknown/unavailable gekoppelde bron of een ongeldige
@@ -257,7 +293,8 @@ custom_components/zonentra/
   engine.py                     gewogen groepsarbitrage en verklaringen
   decision.py                   pure read-only simulator
   runtime.py                    HA-observatie en update-dispatch
-  sensor.py                     diagnostische statussensor
+  indoor.py                     binnenunitobservatie en afgeleide groepsmodus
+  sensor.py                     diagnostische sensoren
   diagnostics.py                geredigeerde diagnostiekdownload
   strings.json                  UI-teksten
   translations/{en,nl}.json     lokale UI-vertalingen
