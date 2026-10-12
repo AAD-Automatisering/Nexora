@@ -16,12 +16,19 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
 from .const import DOMAIN, KINDS, TOPOLOGY_KEYS
-from .models import build_model
+from .models import EquipmentGroup, Zone, build_model
 
 
 def entity_selector(domain=None):
     config = {"filter": {"domain": domain}} if domain else {}
     return selector.EntitySelector(config)
+
+
+def numeric(low, high, step=0.1, unit=None):
+    config = {"min": low, "max": high, "step": step, "mode": "box"}
+    if unit:
+        config["unit_of_measurement"] = unit
+    return selector.NumberSelector(config)
 
 
 def choice(options):
@@ -134,6 +141,38 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                     vol.Optional("temperature_entity"): entity_selector("sensor"),
                     vol.Optional("controller_entity"): entity_selector("climate"),
                     vol.Optional("occupancy_entity"): entity_selector("binary_sensor"),
+                    vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
+                    vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
+                    vol.Optional("heating_limit_entity"): entity_selector(
+                        ["sensor", "number", "input_number"]
+                    ),
+                    vol.Optional("cooling_limit_entity"): entity_selector(
+                        ["sensor", "number", "input_number"]
+                    ),
+                    vol.Optional("humidity_entity"): entity_selector("sensor"),
+                    vol.Optional("co2_entity"): entity_selector("sensor"),
+                    vol.Optional("outdoor_temperature_entity"): entity_selector(
+                        "sensor"
+                    ),
+                    vol.Optional("contact_entities"): selector.EntitySelector(
+                        {"filter": {"domain": "binary_sensor"}, "multiple": True}
+                    ),
+                    vol.Optional("weight"): numeric(0.1, 10),
+                    vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
+                    vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
+                    vol.Optional("group_id"): self._group_selector(),
+                }
+            )
+        elif category == "group":
+            fields.update(
+                {
+                    vol.Optional("mode_entity"): entity_selector(
+                        ["sensor", "select", "climate"]
+                    ),
+                    vol.Optional("min_switch_seconds"): numeric(0, 86400, 1, "s"),
+                    vol.Optional("min_demand_score"): numeric(0.1, 100),
+                    vol.Optional("score_deadband"): numeric(0.1, 100),
+                    vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
                 }
             )
         elif category == "equipment":
@@ -147,15 +186,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                             for item in self.topology["zones"]
                         ]
                     ),
-                    vol.Optional("group_id"): choice(
-                        [
-                            {"value": "", "label": "No group"},
-                            *[
-                                {"value": item["id"], "label": item["name"]}
-                                for item in self.topology["groups"]
-                            ],
-                        ]
-                    ),
+                    vol.Optional("group_id"): self._group_selector(),
                 }
             )
         if self.selected != "__new__":
@@ -165,7 +196,39 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
         current = next(
             (item for item in self.topology[key] if item["id"] == self.selected), {}
         )
-        return self.add_suggested_values_to_schema(schema, current)
+        defaults = {}
+        if category == "zone":
+            zone = Zone(id="suggestion", name="suggestion")
+            defaults = {
+                "heating_limit": 21.0,
+                "cooling_limit": 24.0,
+                "weight": zone.weight,
+                "hysteresis": zone.hysteresis,
+                "max_age_seconds": zone.max_age_seconds,
+            }
+        elif category == "group":
+            group = EquipmentGroup(id="suggestion", name="suggestion")
+            defaults = {
+                key: getattr(group, key)
+                for key in (
+                    "min_switch_seconds",
+                    "min_demand_score",
+                    "score_deadband",
+                    "max_age_seconds",
+                )
+            }
+        return self.add_suggested_values_to_schema(schema, {**defaults, **current})
+
+    def _group_selector(self):
+        return choice(
+            [
+                {"value": "", "label": "No group"},
+                *[
+                    {"value": item["id"], "label": item["name"]}
+                    for item in self.topology["groups"]
+                ],
+            ]
+        )
 
     async def _edit(self, category, user_input):
         errors = {}
@@ -176,6 +239,17 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
             ]
             record = {k: v for k, v in user_input.items() if k != "delete" and v != ""}
             record["id"] = self.new_id if self.selected == "__new__" else self.selected
+            if category == "group":
+                previous_record = next(
+                    (
+                        item
+                        for item in self.topology[key]
+                        if item["id"] == self.selected
+                    ),
+                    {},
+                )
+                if "single_hvac_mode" in previous_record:
+                    record["single_hvac_mode"] = previous_record["single_hvac_mode"]
             try:
                 candidate[key] = [
                     item for item in candidate[key] if item["id"] != self.selected

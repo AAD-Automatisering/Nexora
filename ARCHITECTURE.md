@@ -1,6 +1,6 @@
 # Zonentra — architectuur
 
-Status: fase 1, read-only fundament, 12 oktober 2026.
+Status: versie 0.2.0, Building Intelligence in read-only simulatie, 12 oktober 2026.
 
 ## Projectnaam en integratie-identiteit
 
@@ -20,15 +20,16 @@ Er is geen multi-building beheerlaag. Het entry-ID vormt alleen een stabiele
 namespace voor runtime en diagnostische entiteiten.
 
 Zonentra coördineert uiteindelijk comfort, energie en installatiebeperkingen, maar
-fase 1 observeert uitsluitend bestaande Home Assistant-entiteiten. De enige
-gepubliceerde entiteit is een diagnostische sensor. Er zijn geen actuatorservices,
+versie 0.2 observeert bestaande Home Assistant-entiteiten en berekent vraag en
+groepsvoorstellen. De gepubliceerde entiteiten zijn uitsluitend diagnostische sensoren. Er zijn geen actuatorservices,
 climate-platform, serviceregistraties of serviceaanroepen. De vloerverwarmingsgrens
 van 16 °C wordt nergens als verstelbaar setpoint opgeslagen of geschreven.
 Lokale KNX-veiligheid en bestaande VTherm/KNX/Shelly-automations blijven functioneren.
 
 ### Besluit A — pure kern en dunne HA-adapter
 
-`models.py` en `decision.py` hebben geen Home Assistant-afhankelijkheid. `runtime.py`
+`models.py`, `observations.py`, `demand.py`, `engine.py` en de bestaande hold-
+simulator `decision.py` importeren geen Home Assistant. `runtime.py`
 leest state en publiceert updates, `config_flow.py` beheert de UI, `sensor.py` toont
 status. Runtime staat in de getypeerde `ConfigEntry.runtime_data`.
 
@@ -41,7 +42,7 @@ als ze eigen gedrag nodig hebben. Geen lege implementaties voor toekomstige modu
 
 Een toekomstige module mag alleen een voorstel indienen. Eén Decision Engine
 beoordeelt alle voorstellen uit dezelfde snapshot en maakt één plan. Eén toekomstige
-uitvoerlaag bezit de bevoegdheid om HA-services aan te roepen. Fase 1 bevat die laag
+uitvoerlaag bezit de bevoegdheid om HA-services aan te roepen. Ook versie 0.2 bevat die laag
 niet. Meerdere apparaten met hetzelfde fysieke entity-ID worden afgewezen.
 Een ruimtecontroller en de fysieke binnenunit zijn aparte rollen: bij VTherm wordt
 VTherm gekoppeld als `controller_entity` en de Mitsubishi-climate als apparatuur.
@@ -80,16 +81,18 @@ heeft `should_poll=False`. `async_on_unload` en entity remove-callbacks ruimen
 subscriptions op. Geen netwerkclient of cloud nodig.
 
 Alternatief: periodieke DataUpdateCoordinator. Er is geen extern endpoint om te
-pollen, dus dit voegt geen waarde toe. Tijdsafhankelijke beslissingen krijgen later
-expliciete timers bij een deadline, niet een onnodige algemene polling-loop.
+pollen, dus dit voegt geen waarde toe. Tijdsafhankelijke beslissingen gebruiken één expliciete timer naar de eerstvolgende
+meetvervaldatum of omschakeldeadline. Een gefilterde state_reported-listener neemt
+ook nieuwe rapporten met dezelfde waarde mee; last_changed wordt niet als freshness
+gebruikt. Alle subscriptions en timers worden opgeruimd bij unload.
 
 ## Datamodellen (geïmplementeerd)
 
 | Model | Belangrijkste velden | Invariant |
 | --- | --- | --- |
 | Building | id, name, zones, groups, equipment | Eén gebouw per installatie |
-| Zone | id, name, temperature_entity, controller_entity, occupancy_entity | Koppelingen optioneel; temperatuur apart van climate-interne meting |
-| EquipmentGroup | id, name, single_hvac_mode=True | Een buitenunitgroep representeert gedeeld heat/cool-bedrijf |
+| Zone | id, name, bronkoppelingen, analysegrenzen, weight, hysteresis, max_age_seconds, group_id | Geen implicit setpoint; optionele context blokkeert niet |
+| EquipmentGroup | id, name, mode_entity, single_hvac_mode, min_switch_seconds, scoreparameters | Eén gewogen voorstel; actuele modus niet raden |
 | Equipment | id, name, kind, entity_id, zone_id, group_id | Eén zone per apparaat; groep alleen bij HVAC; fysieke entiteit uniek |
 | Observation | state, quality | missing, unknown, unavailable of observed |
 | Decision | equipment_id, action, reason | Fase 1: action uitsluitend hold |
@@ -101,16 +104,47 @@ per buitenunit mogelijk zijn. Niet-HVAC-apparatuur kan zonder groep geregistreer
 worden als floor_heating, shading, ventilation of other. Equipment is een logisch
 model voor een bestaande HA-entiteit, geen nieuw fysiek apparaat in de HA-registry.
 
-De huidige observation is een eenvoudige statusobservatie, **geen verklaring dat
-sensorwaarden betrouwbaar, recent of correct gekalibreerd zijn**. Fase 1 rekent geen
-warmtevraag uit. Alleen expliciete states heat/cool tellen voor een waargenomen
-buitenunitconflict; auto/heat_cool/hvac_action geven geen betrouwbaar bewijs van de
-werkelijke buitenunitmodus. Zonentra corrigeert zo'n conflict niet.
+De bestaande `Observation`/`Decision` blijven beschikbaar voor de 0.1-compatible
+Status-sensor met fysieke hold-beslissingen. De nieuwe, pure analysemodellen zijn:
 
-Voor fase 2 wordt Observation uitgebreid met tijdstip, genormaliseerde eenheid,
-bronkwaliteit en geldigheidsduur. Temperatuur krijgt checks op numerieke/finitie
-waarden, plausibiliteit en bron-specifieke freshness. Een onveranderde goede KNX-
-temperatuur mag niet zomaar als defect worden beschouwd omdat `last_changed` oud is.
+| Model | Rol |
+|---|---|
+| SourceState | Gekopieerde HA-state, eenheid, last_reported, trustworthy-vlag |
+| Reading | Gevalideerde waarde met valid/missing/unknown/unavailable/stale/unreliable |
+| ZoneSnapshot | Temperatuur, analysegrenzen, context en gekoppelde equipment-IDs |
+| ZoneDemand | Hysteretische vraag, twee gewogen scores, kwaliteit en reden |
+| GroupMemory | Alleen laatst geobserveerde betrouwbare modus en waarnemingstijd |
+| GroupDecision | current/desired/proposed, geaggregeerde scores, redenen en deadline |
+
+De runtime verzamelt één snapshot op één UTC-tijdstip. `collect_zone` bouwt pure
+snapshots, `calculate_demand` berekent behoeften, `evaluate`/`decide_group`
+arbitreren per installatiegroep. Reden-codes zitten direct in de resultaten;
+sensor.py vertaalt presentatie, diagnostics.py maakt een geredigeerde export.
+Er is geen uitvoeradapter. Extra context is al configureerbaar en gekoppelde
+vloerverwarming/zonwering zit in de snapshot, maar krijgt geen regelgedrag.
+
+Zie [ALGORITHM.md](ALGORITHM.md) voor het volledige geïmplementeerde algoritme.
+Harde randvoorwaarden gaan vóór scoreafwegingen: alle kritieke groepsdata moeten
+betrouwbaar zijn, actuele modus mag niet geraden worden en omschakelwachttijden
+worden nooit door een voorstel zelf gereset. Optionele context blokkeert niet.
+Herstart/reload begint met een conservatieve wachttijd; er wordt geen uitvoerplan
+of hypothetische modus opgeslagen/hersteld.
+
+### Compatibiliteit met Zonentra 0.1
+
+Config Flow VERSION blijft 1. De bestaande data/options-structuur en de status-
+unique ID blijven behouden. Nieuwe dataclassvelden zijn additief; opgeslagen 0.1-
+records laden zonder wijziging. Ongeconfigureerde analysegrenzen blijven None,
+zodat geen gewenste temperatuur wordt verzonnen. Bij bewerken biedt de UI begin-
+waarden, die pas bij expliciet Opslaan persistente configuratie worden.
+
+Geen opslagmigratie nodig omdat geen bestaand veld wordt vervangen of anders
+geïnterpreteerd. Dit is getest met oude topologieën en echte Options Flow/reload.
+Nieuw toegevoegde zones en groepen krijgen automatisch diagnostische entiteiten.
+Verwijderde zones/groepen verliezen uitsluitend hun eigen diagnostische registry-
+records; fysieke bronentiteiten blijven bestaan. Een naamwijziging houdt hetzelfde
+ID en dezelfde sensor. Bronnen die tot Zonentra zelf behoren zijn afgewezen bij
+configuratie én setup om terugkoppeling te voorkomen.
 
 ## Modulegrenzen (ontwerp voor volgende fases)
 
@@ -137,7 +171,7 @@ resource, intent, prioriteit, reden, geldig-tot); geen `hass` of uitvoeradapter.
 RoomController-adapter observeert VTherm of een toekomstige eigen controller via
 hetzelfde contract. Dependencies blijven één richting op: HA-adapter → kern.
 
-## Prioriteiten en conflictpreventie (fase 2-ontwerp)
+## Prioriteiten en conflictpreventie voor toekomstige actieve regeling
 
 1. Harde veiligheids- en installatiebeperkingen worden altijd toegepast. Lokale
    KNX-windveiligheid blijft leidend; Zonentra mag die niet uitschakelen. De 16 °C-
@@ -167,7 +201,7 @@ gebruikt. Er worden geen oude plannen blind opnieuw uitgevoerd.
 VTherm en bestaande automations mogen in fase 2 niet tegelijkertijd met Zonentra de
 bedrijfsmodus van dezelfde fysieke unit schrijven. Eigenaarsoverdracht is een
 expliciete installatiekeuze; op basis van HA-context alleen kan Zonentra niet alle
-handmatige bediening betrouwbaar herkennen. Fase 1 claimt geen eigenaarschap.
+handmatige bediening betrouwbaar herkennen. Zonentra 0.2 claimt geen eigenaarschap van apparaatbesturing.
 
 ## VTherm-analyse en hergebruik
 
@@ -201,17 +235,20 @@ dezelfde adaptergrens invullen zonder een VTherm-fork.
 
 ## Diagnostiek en grenzen
 
-Sensorstatus: `read_only` bij observeerbare inputs (ook een leeg gebouw), `degraded`
-bij missing/unknown/unavailable, `conflict` bij waargenomen tegenstrijdige groepsmodi.
-Attributen tonen aantallen en hold-redenen. Dit is geen thermostaatadvies.
-De diagnostiekdownload redigeert namen, IDs en entiteitkoppelingen, en bevat geen
-ruwe bronstates, alarmwaarden of HA-attributen. Lokale sensorattributen bevatten
-wel apparatuur-IDs zodat de gebruiker redenen kan herkennen.
+De bestaande gebouwstatus blijft een overzicht van connectiviteit en fysieke
+hold-simulatie. Per ruimte en per groep is er één extra diagnostische enum-sensor;
+scores, temperaturen en verklaringen staan in begrensde attributen. De gebouwsensor
+bevat maximaal 20 equipment-beslissingen en een totaalcount. Sensorleeftijd,
+bronkwaliteit en de actuele/gewilde/toegestane modus zijn afzonderlijk zichtbaar.
+De export redigeert alle entityvelden, contactlijsten, namen, IDs en member_zone_ids;
+er worden geen ruwe SourceStates geëxporteerd. Lokale sensoren bevatten wel de
+relevante waarden en apparatuur-IDs voor uitleg.
 
 Geen afzonderlijke buitenunitmeters: later zijn energie-inschattingen altijd als
-estimated gemarkeerd, zonder HA measurement-statistieken te claimen. Fase 1 bevat
-overhaupt geen energiegetallen. Alarm → gebouwbezetting, mmWave-debounce, CO₂,
-weerstation, planning en stale-sensorbeleid worden pas in latere fases gebouwd.
+estimated gemarkeerd, zonder HA measurement-statistieken te claimen. Zonentra 0.2 bevat
+geen energiegetallen; gewogen klimaatscores zijn geen energiemetingen. Alarm → gebouwbezetting, mmWave-debounce, CO₂-regeling,
+weerstation en planning worden pas in latere fases gebouwd. Meetvalidatie en
+stale-detectie zijn nu wel geïmplementeerd; optionele context heeft nog geen beleidswerking.
 
 ## Nog te bepalen vóór actieve regeling
 
@@ -224,7 +261,7 @@ weerstation, planning en stale-sensorbeleid worden pas in latere fases gebouwd.
 - Welke gevels, dakramen en KNX-windbeveiligingen zijn werkelijk aanwezig?
 - Welke meters zijn echte metingen, wat zijn hun eenheden en actualisatiepatronen?
 
-Deze vragen blokkeren fase 1 niet. Er worden geen fysieke aannames automatisch als
+Deze vragen blokkeren read-only analyse niet, maar moeten vóór actieve regeling worden beantwoord. Er worden geen fysieke aannames automatisch als
 configuratie ingevuld.
 
 ## Geverifieerde Home Assistant-bronnen

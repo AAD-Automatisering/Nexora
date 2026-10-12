@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Zonentra-gebouw",
-        "description": "Eén Home Assistant, één Zonentra, één gebouw. Fase 1 leest en simuleert alleen; bestaande regelingen blijven zelfstandig werken.",
+        "description": "Eén Home Assistant, één Zonentra, één gebouw. Klimaatvraag en buitenunitvoorstellen zijn uitsluitend simulatie; bestaande regelingen blijven zelfstandig werken.",
         "data": {
           "name": "Gebouwnaam"
         }
@@ -38,13 +38,25 @@
       },
       "zone_details": {
         "title": "Ruimte",
-        "description": "Optionele koppelingen kunnen worden gewist. Apparatuur wordt niet aangestuurd.",
+        "description": "Dit zijn analysegrenzen, geen apparaat-setpoints. Grensentiteiten gaan vóór vaste waarden en moeten °C of °F rapporteren. Optionele sensoren verzamelen alleen context. Zonentra stuurt niets aan.",
         "data": {
           "name": "Naam",
           "delete": "Dit item verwijderen",
           "temperature_entity": "Ruimtetemperatuursensor",
           "controller_entity": "Ruimteregelaar / VTherm (optioneel)",
-          "occupancy_entity": "Aanwezigheidssensor (optioneel)"
+          "occupancy_entity": "Aanwezigheidssensor (optioneel)",
+          "heating_limit": "Verwarmingsgrens (°C)",
+          "cooling_limit": "Koelgrens (°C)",
+          "heating_limit_entity": "Entiteit voor verwarmingsgrens (optioneel)",
+          "cooling_limit_entity": "Entiteit voor koelgrens (optioneel)",
+          "humidity_entity": "Luchtvochtigheid (optioneel)",
+          "co2_entity": "CO₂-sensor (optioneel)",
+          "outdoor_temperature_entity": "Buitentemperatuur (optioneel)",
+          "contact_entities": "Raam- en deurcontacten (optioneel)",
+          "weight": "Ruimteweging",
+          "hysteresis": "Temperatuurhysterese (°C)",
+          "max_age_seconds": "Maximale meetleeftijd (seconden; 0 = uit)",
+          "group_id": "Buitenunitgroep (optioneel)"
         }
       },
       "group": {
@@ -55,10 +67,15 @@
       },
       "group_details": {
         "title": "Buitenunitgroep",
-        "description": "Optionele koppelingen kunnen worden gewist. Apparatuur wordt niet aangestuurd.",
+        "description": "De feedbackbron moet heat, cool of off melden. Gebruik alleen betrouwbare terugmelding, geen gewenste modus van VTherm. Zonder feedback blijft de actuele modus unknown. Alle voorstellen zijn read-only.",
         "data": {
           "name": "Naam",
-          "delete": "Dit item verwijderen"
+          "delete": "Dit item verwijderen",
+          "mode_entity": "Betrouwbare actuele modus-feedback (optioneel)",
+          "min_switch_seconds": "Minimale tijd tussen moduswisselingen (seconden)",
+          "min_demand_score": "Minimale vraagscore",
+          "score_deadband": "Minimaal verschil tussen warmte- en koelvraag",
+          "max_age_seconds": "Maximale feedbackleeftijd (seconden; 0 = uit)"
         }
       },
       "equipment": {
@@ -90,7 +107,32 @@
       "invalid_group": "Alleen HVAC-apparatuur kan een buitenunitgroep hebben.",
       "duplicate_equipment_entity": "Deze fysieke entiteit is al als apparatuur geregistreerd.",
       "entity_not_found": "De nieuwe entiteit moet bestaan in Home Assistant.",
-      "add_zone_first": "Voeg eerst een ruimte toe. Sluit dit venster en open Opties opnieuw."
+      "add_zone_first": "Voeg eerst een ruimte toe. Sluit dit venster en open Opties opnieuw.",
+      "invalid_parameters": "Ongeldige regelparameters: gebruik eindige waarden binnen de aangegeven grenzen.",
+      "invalid_limits": "Configureer beide grenzen. Verwarmingsgrens + tweemaal hysterese moet lager zijn dan de koelgrens.",
+      "conflicting_group": "De buitenunitgroep van het apparaat verschilt van die van de ruimte."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "zone_demand": {
+        "name": "{zone} Klimaatvraag",
+        "state": {
+          "heating_demand": "Verwarmingsvraag",
+          "cooling_demand": "Koelvraag",
+          "neutral": "Neutraal",
+          "unknown": "Onbekend"
+        }
+      },
+      "group_mode": {
+        "name": "{group} Voorgestelde HVAC-modus",
+        "state": {
+          "heat": "Verwarmen",
+          "cool": "Koelen",
+          "off": "Geen actieve vraag",
+          "unknown": "Onbekend"
+        }
+      }
     }
   }
 }

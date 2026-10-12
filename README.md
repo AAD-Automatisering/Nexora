@@ -3,8 +3,8 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie 0.1.2 implementeert uitsluitend fase 1: indeling, observatie en diagnostische
-simulatie. Zonentra roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
+Versie **0.2.0** voegt uitlegbare klimaatvraag per ruimte en gewogen
+buitenunitvoorstellen toe, volledig in read-only simulatie. Zonentra roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
 zonwerings- of ventilatie-instellingen. De 16 °C-vloerverwarmingsgrens blijft intact.
 Bestaande VTherm-regeling en automations blijven zelfstandig werken.
 
@@ -33,23 +33,22 @@ Er is geen YAML nodig.
 HACS installeert en beheert de bestanden; de gebouwconfiguratie gebeurt vervolgens
 via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hiervoor
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
-De repository-URL hierboven is het nieuwe projectadres; gebruik deze nadat de
-GitHub-repository is hernoemd en versie 0.1.2 is gepubliceerd.
+Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
+De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
 
-### Oude testinstallatie vervangen
+### Bijwerken vanaf Zonentra 0.1
 
-Deze testversie heeft een nieuwe Home Assistant-domain en integratiemap: `zonentra`.
-Er is geen automatische migratie van de vorige testintegratie.
+Werk de bestaande integratie bij via HACS en herstart Home Assistant. **Verwijder
+je bestaande Zonentra-configuratie niet.** Het domain, de opgeslagen structuur,
+IDs, apparaatkoppelingen en de Status-sensor blijven behouden. De nieuwe velden
+zijn additief en hebben achterwaarts compatibele modeldefaults: er is geen
+config-entry-versiemigratie nodig (Config Flow VERSION blijft 1).
 
-1. Noteer eventueel de huidige ruimte- en apparatuurkoppelingen.
-2. Verwijder de oude Nexora-configuratie via **Instellingen → Apparaten & diensten**.
-3. Verwijder de oude integratie via HACS (of de map `custom_components/nexora` bij
-   handmatige installatie). Verwijder daarbij alleen de oude integratiebestanden.
-4. Installeer Zonentra via de nieuwe repository zodra deze versie gepubliceerd is.
-5. Herstart Home Assistant en voeg **Zonentra** toe. Configureer de gebouwindeling opnieuw.
-
-De bestaande Mitsubishi-, KNX- en VTherm-entiteiten worden niet verwijderd.
-Verwijzingen naar de oude diagnostische statussensor moeten opnieuw worden gekoppeld.
+Open daarna Opties, bewerk iedere ruimte en configureer de twee klimaatgrenzen.
+Een oude ruimte zonder klimaatgrenzen blijft laden maar heeft demand=unknown.
+Er wordt geen VTherm-setpoint automatisch als verwarmings- én koelgrens gebruikt.
+De veel eerdere testintegratie onder domain `nexora` is een andere integratie;
+zoals afgesproken bij de naamswijziging is daarvoor geen migratie toegevoegd.
 
 Bronnen: [HACS custom repositories](https://www.hacs.dev/docs/faq/custom_repositories/),
 [repositorystructuur](https://www.hacs.dev/docs/publish/integration/) en
@@ -80,27 +79,95 @@ Verwijder apparatuur eerst voordat een gebruikte groep of ruimte wordt verwijder
 Bij bewerken kunnen optionele koppelingen worden gewist. Nieuwe koppelingen moeten
 in HA bestaan; bestaande offline bronnen hoeven niet te worden verwijderd. De
 gebouwnaam wordt bij setup vastgelegd; deze eerste Options Flow bewerkt de indeling.
-Centrale alarmbezetting, CO₂, P1, PV en weercontext volgen in latere fases.
+Centrale alarmmapping, ventilatie-/CO₂-regeling, P1/PV en weeroptimalisatie volgen
+in latere fases. Optionele CO₂ en buitentemperatuur kunnen nu al als context worden gekoppeld.
+
+## Klimaatintelligentie configureren
+
+Bewerk een ruimte via **Opties → Ruimte toevoegen of bewerken**:
+
+| Veld | Gebruik / voorgestelde beginwaarde |
+|---|---|
+| Ruimtetemperatuursensor | De externe KNX-temperatuursensor, met °C of °F |
+| Verwarmingsgrens / koelgrens | Bijvoorbeeld 21 / 24 °C; analysegrenzen, geen apparaat-setpoints |
+| Grensentiteiten | Optionele sensor/number/input_number met °C/°F; gaan vóór vaste grenzen |
+| Ruimteweging | 1; grotere of belangrijkere ruimtes kunnen zwaarder meewegen |
+| Temperatuurhysterese | 0,3 °C; ruimte tussen grenzen moet groter zijn dan tweemaal hysterese |
+| Maximale meetleeftijd | 1800 s; afstemmen op de werkelijke sensorrapportage, 0 schakelt de check uit |
+| Buitenunitgroep | Optioneel als standaard voor HVAC-apparatuur in deze ruimte |
+| Optionele context | Vochtigheid, CO₂, aanwezigheid, raam-/deurcontacten, buitentemperatuur |
+
+De VTherm-climate blijft de ruimteregelaar; registreer de fysieke Mitsubishi-climate
+als HVAC-apparatuur. Een expliciete groep bij een apparaat mag niet afwijken van
+de groep van de ruimte. Meerdere binnenunits in dezelfde ruimte tellen in de
+vraagscore van hun groep maar één keer mee.
+
+Bewerk vervolgens een **Buitenunitgroep**:
+
+- **Actuele modus-feedback:** alleen een betrouwbare entiteit die de actuele modus
+  van de gedeelde installatie meldt als `heat`, `cool` of `off`. Selecteer hier
+  niet zonder verificatie de gewenste VTherm-modus. Heb je geen betrouwbare
+  terugmelding, laat de bron leeg: desired kan berekend worden, proposed blijft
+  unknown en `current_mode_unknown` verklaart de blokkering.
+- **Minimuminterval:** 900 s tussen waargenomen modusveranderingen. Herstart en
+  options-reload beginnen conservatief met een nieuwe wachttijd.
+- **Minimale vraagscore:** 0,5. **Minimaal scoreverschil:** 0,5 om heen-en-weer
+  wisselen bij kleine verschillen tussen warmte- en koelvraag te beperken.
+- **Feedbackleeftijd:** 1800 s, afstemmen op de bron. Ook actuele modusfeedback
+  kan verouderen.
+
+Klik tenslotte **Opslaan**. De ingestelde analysegrenzen wijzigen geen airco- of
+vloerverwarmingssetpoints. Optionele aanwezigheid ontbreekt → unknown, nooit away.
+Optionele context beïnvloedt de klimaatscores in 0.2 nog niet.
 
 ## Status en diagnostiek
 
-Het Zonentra-gebouw krijgt één diagnostische **Status**-sensor:
+Er zijn **één gebouwsensor, één klimaatsensor per ruimte en één modusvoorstelsensor
+per buitenunitgroep**. Scores en verklaringen staan in compacte attributen, zodat
+niet voor elke score een aparte entiteit nodig is.
 
-| Status | Betekenis |
-| --- | --- |
-| read_only | Gekoppelde inputs zijn observeerbaar; ook geldig bij een leeg gebouw |
-| degraded | Minstens één input ontbreekt, is unknown of unavailable |
-| conflict | Apparaten in dezelfde buitenunitgroep melden zowel heat als cool |
+| Sensor | State | Belangrijkste attributen |
+|---|---|---|
+| Status | read_only / degraded / conflict | zones, groups, equipment, unavailable_inputs, unknown_zone_demands; maximaal 20 fysieke hold-beslissingen |
+| Ruimte Klimaatvraag | heating_demand / cooling_demand / neutral / unknown | temperature_c, heating_limit_c, cooling_limit_c, heating_score, cooling_score, reason, sensor_health, source_health, occupancy |
+| Buitenunit Voorgestelde HVAC-modus | heat / cool / off / unknown | current_mode, desired_mode, heating_score, cooling_score, reason, blocked_reason, blocked_until, mode_change_proposed, mode_quality, reliable_zones |
 
-Attributen tonen aantallen en `hold`-beslissingen met reason codes:
-`foundation_read_only`, `source_unavailable`, `observed_group_conflict`.
-Alle beslissingen zijn simulatie. Een conflict wordt gemeld, niet gecorrigeerd.
-`read_only` is geen bewijs van temperatuurkwaliteit of optimaal gebouwgedrag.
+`read_only` bevestigt observatie/simulatie, ook bij een leeg gebouw. `degraded`
+betekent een ontbrekende/unknown/unavailable gekoppelde bron of een ongeldige
+klimaatvraag voor een ruimte met ingestelde grenzen. Optionele bronproblemen zijn
+zichtbaar, maar blokkeren de vraagberekening niet. `conflict` meldt tegengestelde
+heat/cool-states van binnenunits binnen dezelfde beperkte groep.
 
-Download diagnostiek via het integratiemenu. Namen, IDs en entiteitkoppelingen
-worden geredigeerd; ruwe bronstates worden niet geëxporteerd. Voor debuglogging
-kan de standaard HA-functie **Debuglogging inschakelen** worden gebruikt.
-Ontkoppelen/herladen ruimt eventlisteners op; Zonentra pollt niet.
+`proposed_mode` is wat na alle controles voorgesteld mag worden: bij een bekende
+actuele modus en een nog lopende wachttijd blijft hij op current_mode. De gewenste
+richting blijft afzonderlijk zichtbaar in desired_mode. `unknown` betekent geen
+bruikbaar voorstel; kijk dan naar blocked_reason. `off` is een simulatie van geen
+actieve vraag, nooit een uitschakelcommando. De fysieke hold-beslissingen op de
+Status-sensor blijven voor alle apparatuur gelden.
+
+Sensor health: valid, missing, unknown, unavailable, stale of unreliable. Scores
+zijn gewogen graden afwijking, geen energie- of vermogensmetingen. Afwezige
+klimaatdata geven null-scores, geen verzonnen nulvraag. Zie
+[ALGORITHM.md](ALGORITHM.md) voor alle formules, drempels en reden-codes.
+
+Download diagnostiek via het integratiemenu. Namen, IDs en bronkoppelingen worden
+geredigeerd. De export bevat scores en verklaringen, geen ruwe sensorstates.
+Debuglogging kan via de standaard HA-functie worden ingeschakeld. Bronlisteners
+volgen wijzigingen én rapporten met dezelfde waarde; één deadline-timer houdt
+sensorleeftijd en wachttijden bij. Er is geen periodieke polling.
+
+## Veilig testen naast VTherm
+
+Laat de bestaande regeling en automations gewoon draaien. Vergelijk per ruimte
+de KNX-temperatuur, ingestelde analysegrenzen en weergegeven klimaatscores.
+Controleer per buitenunit current/desired/proposed en de blokkeerreden. Test een
+onbeschikbare bron en het herstel daarvan; Zonentra moet unknown melden in plaats
+van een nieuwe modus bedenken. **Koppel de voorgestelde modi niet aan eigen
+actuator-automations** als je deze versie read-only wilt testen.
+
+Aanwezigheid, ramen, vloerverwarming, zonwering en ventilatie worden niet bediend.
+De gasvloergrens van 16 °C blijft intact. Een HA-herstart moet bij een bekend
+modusverschil weer een omschakelwachttijd laten zien.
 
 ## Ontwikkelen en testen
 
@@ -115,7 +182,8 @@ python3.14 -m venv .venv
 .venv/bin/pytest -q
 ```
 
-Tests gebruiken de echte Home Assistant flow manager, state machine, sensorplatform
+De suite omvat 79 tests. Pure kernfuncties worden zonder HomeAssistant-instance
+getest. Integratietests gebruiken de echte Home Assistant flow manager, state machine, sensorplatform
 en lifecycle-fixtures. Ze controleren ook dat geen servicecalls plaatsvinden bij
 setup, bronwijzigingen, unload en opnieuw laden. CI voert dezelfde checks op Linux
 uit. Een praktische installatie-/UI-smoketest in uw eigen HA blijft nodig.
@@ -126,12 +194,16 @@ uit. Een praktische installatie-/UI-smoketest in uw eigen HA blijft nodig.
 ARCHITECTURE.md                 keuzes, datamodellen, interfaces en bronnen
 ROADMAP.md                      fases en exitcriteria
 README.md                       installatie en gebruik
+ALGORITHM.md                    formules, bronkwaliteit en omschakelbeveiliging
 custom_components/zonentra/
   __init__.py                   setup/unload, runtime_data, subscriptions
   manifest.json                 custom integration metadata, singleton
   const.py                      domein en types
   config_flow.py                gebouwsetup en topologie-editor
   models.py                     pure, immutable topologie en validatie
+  observations.py               bronkwaliteit, leeftijd en eenheden
+  demand.py                     ruimtesnapshots en klimaatvraag
+  engine.py                     gewogen groepsarbitrage en verklaringen
   decision.py                   pure read-only simulator
   runtime.py                    HA-observatie en update-dispatch
   sensor.py                     diagnostische statussensor

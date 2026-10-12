@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Zonentra building",
-        "description": "One Home Assistant, one Zonentra, one building. Phase 1 only observes and simulates; existing equipment control continues independently.",
+        "description": "One Home Assistant, one Zonentra, one building. Demand and outdoor unit proposals are simulations only; existing controllers remain independent.",
         "data": {
           "name": "Building name"
         }
@@ -38,13 +38,25 @@
       },
       "zone_details": {
         "title": "Zone",
-        "description": "Optional links can be cleared. No equipment is controlled.",
+        "description": "These are analysis limits, not device setpoints. Limit entities override static values and must report °C or °F. Optional sensors collect context only. Zonentra does not control equipment.",
         "data": {
           "name": "Name",
           "delete": "Delete this record",
           "temperature_entity": "Room temperature sensor",
           "controller_entity": "Room controller / VTherm (optional)",
-          "occupancy_entity": "Room occupancy sensor (optional)"
+          "occupancy_entity": "Room occupancy sensor (optional)",
+          "heating_limit": "Heating limit (°C)",
+          "cooling_limit": "Cooling limit (°C)",
+          "heating_limit_entity": "Heating limit entity (optional)",
+          "cooling_limit_entity": "Cooling limit entity (optional)",
+          "humidity_entity": "Humidity (optional)",
+          "co2_entity": "CO₂ sensor (optional)",
+          "outdoor_temperature_entity": "Outdoor temperature (optional)",
+          "contact_entities": "Window and door contacts (optional)",
+          "weight": "Zone weight",
+          "hysteresis": "Temperature hysteresis (°C)",
+          "max_age_seconds": "Maximum measurement age (seconds; 0 = disabled)",
+          "group_id": "Outdoor unit group (optional)"
         }
       },
       "group": {
@@ -55,10 +67,15 @@
       },
       "group_details": {
         "title": "Outdoor unit group",
-        "description": "Optional links can be cleared. No equipment is controlled.",
+        "description": "The feedback source must report heat, cool or off. Use reliable feedback, not a VTherm desired mode. Without feedback the actual mode stays unknown. Every proposal is read-only.",
         "data": {
           "name": "Name",
-          "delete": "Delete this record"
+          "delete": "Delete this record",
+          "mode_entity": "Reliable actual mode feedback (optional)",
+          "min_switch_seconds": "Minimum time between mode changes (seconds)",
+          "min_demand_score": "Minimum demand score",
+          "score_deadband": "Minimum heat/cool score difference",
+          "max_age_seconds": "Maximum feedback age (seconds; 0 = disabled)"
         }
       },
       "equipment": {
@@ -90,7 +107,32 @@
       "invalid_group": "Only HVAC equipment can belong to an outdoor unit group.",
       "duplicate_equipment_entity": "This physical entity is already registered as equipment.",
       "entity_not_found": "The new entity link must exist in Home Assistant.",
-      "add_zone_first": "Add a zone before registering equipment. Close this dialog and reopen Options."
+      "add_zone_first": "Add a zone before registering equipment. Close this dialog and reopen Options.",
+      "invalid_parameters": "Invalid parameters: use finite values within the indicated ranges.",
+      "invalid_limits": "Configure both limits. Heating limit plus twice the hysteresis must be lower than the cooling limit.",
+      "conflicting_group": "The equipment group differs from its zone group."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "zone_demand": {
+        "name": "{zone} Demand",
+        "state": {
+          "heating_demand": "Heating demand",
+          "cooling_demand": "Cooling demand",
+          "neutral": "Neutral",
+          "unknown": "Unknown"
+        }
+      },
+      "group_mode": {
+        "name": "{group} Proposed HVAC mode",
+        "state": {
+          "heat": "Heating",
+          "cool": "Cooling",
+          "off": "No active demand",
+          "unknown": "Unknown"
+        }
+      }
     }
   }
 }
