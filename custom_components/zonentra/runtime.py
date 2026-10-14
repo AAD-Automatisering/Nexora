@@ -25,6 +25,7 @@ from .observations import (
     read,
 )
 from .override import CommandTracker, classify_transition, update_override
+from .presence import MotionMemory, Occupancy, motion_state, occupancy, read_presence
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -71,6 +72,11 @@ class BuildingRuntime:
         self.group_observations = {}
         self.mode_comparisons = {}
         self.evaluated_at = dt_util.utcnow()
+        # 0.8 presence (building) and motion (zone) select comfort/eco/away.
+        self.presence = "not_configured"
+        self.motion_memories: dict[str, MotionMemory] = {}
+        self.zone_occupancy: dict[str, Occupancy] = {}
+        self._motion_checks: list = []
         # 0.5 simulated control. In memory only: nothing survives a restart.
         self.overrides = {}
         self.last_transitions = {}
@@ -129,9 +135,15 @@ class BuildingRuntime:
             now,
             self.building.settings.outdoor_max_age_seconds,
         )
+        self._occupancy(sources, now)
         self.zone_snapshots = {
             zone.id: collect_zone(
-                self.building, zone, sources, now, self.outdoor_temperature
+                self.building,
+                zone,
+                sources,
+                now,
+                self.outdoor_temperature,
+                self.zone_occupancy[zone.id].mode,
             )
             for zone in self.building.zones
         }
@@ -235,6 +247,7 @@ class BuildingRuntime:
             if item.waiting_until
         )
         deadlines.extend(due for due, _, _ in self.pending_offs)
+        deadlines.extend(self._motion_checks)
         for group_id, control in self.mode_controls.items():
             if control.blocked_until:
                 deadlines.append(control.blocked_until)
@@ -253,6 +266,30 @@ class BuildingRuntime:
                 self.hass, self.refresh, min(future)
             )
         async_dispatcher_send(self.hass, self.signal)
+
+    def _occupancy(self, sources, now) -> None:
+        """Building presence and zone motion decide each zone's band."""
+        settings = self.building.settings
+        self.presence = read_presence(
+            settings.presence_entity, sources.get(settings.presence_entity)
+        )
+        checks, result = [], {}
+        for zone in self.building.zones:
+            entity = zone.occupancy_entity
+            motion, memory, check = motion_state(
+                entity,
+                sources.get(entity) if entity else None,
+                self.motion_memories.get(zone.id, MotionMemory()),
+                settings.motion_delay_seconds,
+                settings.motion_off_delay_minutes,
+                now,
+            )
+            self.motion_memories[zone.id] = memory
+            if check:
+                checks.append(check)
+            result[zone.id] = occupancy(self.presence, motion)
+        self.zone_occupancy = result
+        self._motion_checks = checks
 
     # --- Active outdoor-stand control (0.7) -----------------------------------
 
@@ -516,6 +553,7 @@ class BuildingRuntime:
             "read_only": True,
             "outdoor_temperature_c": self.outdoor_temperature.value,
             "outdoor_temperature_quality": self.outdoor_temperature.quality,
+            "building_presence": self.presence,
             "outdoor_temperature_validation": self.outdoor_temperature.strategy,
             "outdoor_temperature_freshness_verified": (
                 self.outdoor_temperature.freshness_verified

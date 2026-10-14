@@ -1,4 +1,4 @@
-# Zonentra 0.7.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.8.0 — uitlegbare klimaatintelligentie
 
 Alles in dit document betreft **read-only analyse**. Een voorgestelde modus is
 geen commando, en verandert ook niet de intern bijgehouden actuele modus.
@@ -96,6 +96,28 @@ klimaatvraag nog niet: dit is verzamelde context voor volgende modules.
 Een gekoppelde grensentiteit gaat vóór de vaste UI-grens. Als die entiteit faalt,
 volgt **geen stilzwijgende fallback** naar de vaste grens. Een eventueel nog
 ontbrekende optionele sensor blokkeert temperatuurvraag niet.
+
+## Aanwezigheid en beweging (0.8)
+
+Vóór de klimaatvraag kiest `presence.py` per ruimte een band, naar het model van
+Versatile Thermostat:
+
+1. Aanwezigheid gebouw = `absent` → **afwezig**-band (`away_heating_limit` /
+   `away_cooling_limit`, standaard 16 / 30 °C).
+2. Anders: ruimte heeft een bewegingssensor en de beweging is `inactive` →
+   **eco**-band (standaard 19 / 26 °C).
+3. Anders → **comfort**: de normale grenzen (centraal of van de ruimte, inclusief
+   grensentiteiten).
+
+Beweging is `active` zodra de sensor minstens `motion_delay_seconds` (30 s) aan
+staat, en blijft dat `motion_off_delay_minutes` (30 min) nadat hij uitging, mits
+de beweging eerder bevestigd was. Korte passages tellen niet. Een onbekende of
+onbeschikbare aanwezigheid of bewegingssensor geeft comfort; een sensorfout maakt
+het dus nooit kouder of warmer dan normaal. De eco- en afwezig-band moeten net als
+de comfortband ruimer zijn dan tweemaal de hysterese. De runtime plant een
+herbeoordeling op het moment dat de detectie- of nalooptijd verstrijkt. De
+bewegingsgeschiedenis staat alleen in het geheugen; na een herstart begint een
+ruimte zonder recente beweging op eco.
 
 ## Temperatuurvraag per ruimte
 

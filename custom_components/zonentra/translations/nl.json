@@ -28,7 +28,14 @@
           "manual_override_duration_minutes": "Duur handmatige bediening (minuten, 5–120)",
           "min_on_seconds": "Minimale inschakeltijd binnenunit vóór uitschakelen (seconden; comfort)",
           "min_off_seconds": "Minimale uitschakeltijd binnenunit vóór inschakelen (seconden; veiligheid, controleer fabrikant)",
-          "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)"
+          "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)",
+          "presence_entity": "Aanwezigheid gebouw (binary_sensor, input_boolean, alarmpaneel, persoon, groep of zone)",
+          "eco_heating_limit": "Eco-verwarmingsgrens (°C; geen beweging in de ruimte)",
+          "eco_cooling_limit": "Eco-koelgrens (°C; geen beweging in de ruimte)",
+          "away_heating_limit": "Afwezig-verwarmingsgrens (°C; gebouw afwezig)",
+          "away_cooling_limit": "Afwezig-koelgrens (°C; gebouw afwezig)",
+          "motion_delay_seconds": "Bewegingsdetectie-vertraging (seconden)",
+          "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)"
         }
       },
       "zone": {
@@ -42,7 +49,7 @@
           "weight": "Ruimteweging",
           "use_building_limits": "Centrale klimaatgrenzen gebruiken",
           "use_building_parameters": "Centrale regelparameters gebruiken",
-          "occupancy_entity": "Aanwezigheidssensor (optioneel)",
+          "occupancy_entity": "Bewegingssensor (optioneel; zonder beweging geldt de eco-band)",
           "humidity_entity": "Luchtvochtigheid (optioneel)",
           "co2_entity": "CO₂-sensor (optioneel)",
           "contact_entities": "Raam- en deurcontacten (optioneel)",
@@ -113,7 +120,7 @@
           "name": "Naam",
           "delete": "Dit item verwijderen",
           "temperature_entity": "Ruimtetemperatuursensor",
-          "occupancy_entity": "Aanwezigheidssensor (optioneel)",
+          "occupancy_entity": "Bewegingssensor (optioneel; zonder beweging geldt de eco-band)",
           "heating_limit": "Verwarmingsgrens (°C)",
           "cooling_limit": "Koelgrens (°C)",
           "heating_limit_entity": "Entiteit voor verwarmingsgrens (optioneel)",
@@ -184,7 +191,14 @@
           "manual_override_duration_minutes": "Duur handmatige bediening (minuten, 5–120)",
           "min_on_seconds": "Minimale inschakeltijd binnenunit vóór uitschakelen (seconden; comfort)",
           "min_off_seconds": "Minimale uitschakeltijd binnenunit vóór inschakelen (seconden; veiligheid, controleer fabrikant)",
-          "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)"
+          "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)",
+          "presence_entity": "Aanwezigheid gebouw (binary_sensor, input_boolean, alarmpaneel, persoon, groep of zone)",
+          "eco_heating_limit": "Eco-verwarmingsgrens (°C; geen beweging in de ruimte)",
+          "eco_cooling_limit": "Eco-koelgrens (°C; geen beweging in de ruimte)",
+          "away_heating_limit": "Afwezig-verwarmingsgrens (°C; gebouw afwezig)",
+          "away_cooling_limit": "Afwezig-koelgrens (°C; gebouw afwezig)",
+          "motion_delay_seconds": "Bewegingsdetectie-vertraging (seconden)",
+          "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)"
         }
       },
       "zone_settings": {
@@ -198,7 +212,7 @@
           "weight": "Ruimteweging",
           "use_building_limits": "Centrale klimaatgrenzen gebruiken",
           "use_building_parameters": "Centrale regelparameters gebruiken",
-          "occupancy_entity": "Aanwezigheidssensor (optioneel)",
+          "occupancy_entity": "Bewegingssensor (optioneel; zonder beweging geldt de eco-band)",
           "humidity_entity": "Luchtvochtigheid (optioneel)",
           "co2_entity": "CO₂-sensor (optioneel)",
           "contact_entities": "Raam- en deurcontacten (optioneel)",

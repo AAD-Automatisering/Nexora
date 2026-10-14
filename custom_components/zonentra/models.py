@@ -9,6 +9,7 @@ from typing import Any
 from .const import KINDS
 from .migration import LIMIT_FIELDS, PARAMETER_FIELDS, migrate_options
 from .observations import STATE_BASED, UPDATE_BASED, VALIDATION_STRATEGIES
+from .presence import PRESENCE_DOMAINS
 
 ZONE_ENTITY_FIELDS = (
     "temperature_entity",
@@ -84,6 +85,14 @@ class BuildingSettings:
     min_on_seconds: float = 600.0  # comfort: avoid short runs
     min_off_seconds: float = 180.0  # safety: restart protection (verify per make)
     changeover_wait_seconds: float = 300.0  # safety: stop -> other mode delay
+    # 0.8 presence and motion (like Versatile Thermostat).
+    presence_entity: str | None = None
+    eco_heating_limit: float = 19.0
+    eco_cooling_limit: float = 26.0
+    away_heating_limit: float = 16.0
+    away_cooling_limit: float = 30.0
+    motion_delay_seconds: float = 30.0
+    motion_off_delay_minutes: float = 30.0
 
 
 def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
@@ -123,6 +132,7 @@ class Building:
                     "outdoor_temperature_entity",
                     "heating_limit_entity",
                     "cooling_limit_entity",
+                    "presence_entity",
                 )
                 if (entity := getattr(self.settings, key))
             ]
@@ -186,6 +196,16 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _range(settings.manual_override_duration_minutes, 5, 120)
     for key in ("min_on_seconds", "min_off_seconds", "changeover_wait_seconds"):
         _range(getattr(settings, key), 0, 3600)
+    _entity(settings.presence_entity, PRESENCE_DOMAINS)
+    for band in ("eco", "away"):
+        heat = getattr(settings, f"{band}_heating_limit")
+        cool = getattr(settings, f"{band}_cooling_limit")
+        _range(heat, 5, 35)
+        _range(cool, 5, 35)
+        if heat + 2 * settings.hysteresis >= cool:
+            raise ValueError("invalid_limits")
+    _range(settings.motion_delay_seconds, 0, 600)
+    _range(settings.motion_off_delay_minutes, 1, 240)
     _validate_sensor_validation(settings)
     _validate_limits(settings)
     zones, groups, equipment = (

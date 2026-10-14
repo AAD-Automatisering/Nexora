@@ -102,6 +102,13 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [ ] Afgeleide buitenunitmodus ("eerste aan bepaalt") als extra diagnose.
 - [ ] Praktijkperiode: commandolog en gedrag beoordelen vóór verdere aansturing.
 
+### Versie 0.8.0 — aanwezigheid en beweging (geïmplementeerd)
+
+- [x] Aanwezigheid gebouw in de centrale configuratie (meerdere brontypen).
+- [x] Bewegingssensor per ruimte met detectie- en nalooptijd, zoals Versatile Thermostat.
+- [x] Comfort-, eco- en afwezig-band; aanwezigheid gaat voor beweging.
+- [ ] 0.9.0: Zonentra-thermostaat per ruimte (actieve ruimteregeling, zelfregulerend setpoint).
+
 ### Vervolg vóór actieve regeling
 
 Inventariseer de fysieke topologie, betrouwbare gatewayfeedback en huidige

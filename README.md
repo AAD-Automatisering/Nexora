@@ -3,7 +3,10 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.7.0** is de eerste versie die iets **echt aanstuurt**: Zonentra zet per
+Versie **0.8.0** voegt **aanwezigheid en beweging** toe zoals Versatile Thermostat:
+een aanwezigheidssensor voor het hele gebouw en optioneel een bewegingssensor per
+ruimte kiezen tussen een comfort-, eco- en afwezig-band. Versie 0.7.0 is de eerste
+versie die iets **echt aanstuurt**: Zonentra zet per
 buitenunitgroep de **stand** (verwarmen/koelen) van alle binnenunits, op basis van
 de gewogen klimaatvraag. Al het andere (aan/uit per ruimte, setpoints, vloerverwarming,
 ventilatie, zonwering) blijft simulatie. Per groep is er een noodstop-schakelaar.
@@ -56,6 +59,15 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.8.0 — aanwezigheid en beweging
+
+Werk bij via HACS, herstart Home Assistant en herlaad de browser volledig. Stel
+daarna in **Centrale configuratie** de aanwezigheidssensor van het gebouw en de
+eco- en afwezig-band in. Het bestaande veld "aanwezigheidssensor" van een ruimte
+is nu de **bewegingssensor** van die ruimte. Let op: een ruimte met een
+bewegingssensor zonder recente beweging gaat naar de eco-band, en dat werkt via
+de klimaatvraag ook door in de actieve standregeling.
 
 ### Bijwerken naar 0.7.0 — actieve standregeling
 
@@ -185,6 +197,10 @@ Begin via **Opties → Centrale configuratie**:
 | Minimale inschakeltijd | 600 s (comfort) |
 | Minimale uitschakeltijd | 180 s (veiligheid; controleer fabrikant) |
 | Wachttijd groepsomschakeling | 300 s (veiligheid; tussen stoppen en tegengestelde modus) |
+| Aanwezigheid gebouw | Optioneel; binary_sensor, input_boolean, alarmpaneel, persoon, groep of zone |
+| Eco-band | 19 / 26 °C; geldt bij geen beweging in een ruimte met bewegingssensor |
+| Afwezig-band | 16 / 30 °C; geldt als het gebouw afwezig is |
+| Bewegingsdetectie / nalooptijd | 30 s / 30 min |
 
 Bewerk daarna een ruimte via **Opties → Ruimte toevoegen of bewerken**:
 
@@ -248,6 +264,25 @@ niet voor elke score een aparte entiteit nodig is.
 
 | Binnenunit Gesimuleerde actie | turn_on_heat / turn_on_cool / turn_off / correct_mode / hold / blocked | simulation, zone, observed_mode, desired_mode, zone_demand, intended_action, steps, reason, blocked_reason, blocked_until, manual_override_active, override_remaining_seconds, override_expires_at, seconds_since_transition, group_coordination_phase, availability, evaluated_at |
 | Buitenunit Gesimuleerde coördinatie | idle / preparing / stopping / waiting / applying / verifying / completed / blocked / failed | simulation, desired_mode, group_mode, group_mode_reason, coordinated_mode, derived_mode, member_indoor_units, available_indoor_units, conflicts, switch_needed, switch_from, switch_to, switch_allowed_in_simulation, active_switch_permitted (altijd false), phase_reason, waiting_until, blockers, planned_actions |
+
+### Aanwezigheid en beweging (0.8)
+
+Zoals bij Versatile Thermostat bepalen aanwezigheid (gebouw) en beweging (ruimte)
+welke band voor de klimaatvraag geldt. Aanwezigheid gaat altijd voor.
+
+| Situatie | Band | Standaard (verwarmen tot / koelen vanaf) |
+|---|---|---|
+| Aanwezig en beweging, of geen bewegingssensor | Comfort | de grenzen van de ruimte of het gebouw |
+| Aanwezig, geen beweging | Eco | 19 / 26 °C |
+| Gebouw afwezig | Afwezig | 16 / 30 °C |
+| Aanwezigheid of bewegingssensor onbekend/onbeschikbaar | Comfort | niemand zit in de kou door een sensorfout |
+
+Aanwezigheidsbronnen: binary_sensor of input_boolean (aan = aanwezig), alarmpaneel
+(uitgeschakeld = aanwezig, ingeschakeld = afwezig), persoon (`home`), groep
+(`on`/`home`) en zone (aantal personen > 0). Beweging telt pas na 30 s aanhoudende
+detectie en blijft 30 min na de laatste beweging gelden (centraal instelbaar). De
+klimaatvraagsensor toont `occupancy_mode`, `occupancy_reason`, `building_presence`
+en `motion`; de status toont `building_presence`.
 
 ### Actieve standregeling (0.7)
 
@@ -419,6 +454,7 @@ custom_components/zonentra/
   control.py                    groepscoördinatie en gesimuleerde acties per unit
   topology.py                   centrale configuratie + ruimte-items → één gebouwmodel
   executor.py                   actieve standregeling: welke modus-commando's nodig zijn
+  presence.py                   aanwezigheid (gebouw) en beweging (ruimte) → comfort/eco/afwezig
   switch.py                     noodstop per buitenunitgroep (Actieve standregeling)
   sensor.py                     diagnostische sensoren
   diagnostics.py                geredigeerde diagnostiekdownload

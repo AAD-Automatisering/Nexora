@@ -28,7 +28,14 @@
           "manual_override_duration_minutes": "Manual override duration (minutes, 5–120)",
           "min_on_seconds": "Minimum indoor unit on-time before switching off (seconds; comfort)",
           "min_off_seconds": "Minimum indoor unit off-time before switching on (seconds; safety, check manufacturer)",
-          "changeover_wait_seconds": "Wait between stopping and the opposite mode on a group switch (seconds; safety)"
+          "changeover_wait_seconds": "Wait between stopping and the opposite mode on a group switch (seconds; safety)",
+          "presence_entity": "Building presence (binary_sensor, input_boolean, alarm panel, person, group or zone)",
+          "eco_heating_limit": "Eco heating limit (°C; no motion in the zone)",
+          "eco_cooling_limit": "Eco cooling limit (°C; no motion in the zone)",
+          "away_heating_limit": "Away heating limit (°C; building absent)",
+          "away_cooling_limit": "Away cooling limit (°C; building absent)",
+          "motion_delay_seconds": "Motion detection delay (seconds)",
+          "motion_off_delay_minutes": "Time occupied after last motion (minutes)"
         }
       },
       "zone": {
@@ -42,7 +49,7 @@
           "weight": "Zone weight",
           "use_building_limits": "Use central climate limits",
           "use_building_parameters": "Use central regulation parameters",
-          "occupancy_entity": "Room occupancy sensor (optional)",
+          "occupancy_entity": "Motion sensor (optional; without motion the zone uses the eco band)",
           "humidity_entity": "Humidity (optional)",
           "co2_entity": "CO₂ sensor (optional)",
           "contact_entities": "Window and door contacts (optional)",
@@ -113,7 +120,7 @@
           "name": "Name",
           "delete": "Delete this record",
           "temperature_entity": "Room temperature sensor",
-          "occupancy_entity": "Room occupancy sensor (optional)",
+          "occupancy_entity": "Motion sensor (optional; without motion the zone uses the eco band)",
           "heating_limit": "Heating limit (°C)",
           "cooling_limit": "Cooling limit (°C)",
           "heating_limit_entity": "Heating limit entity (optional)",
@@ -184,7 +191,14 @@
           "manual_override_duration_minutes": "Manual override duration (minutes, 5–120)",
           "min_on_seconds": "Minimum indoor unit on-time before switching off (seconds; comfort)",
           "min_off_seconds": "Minimum indoor unit off-time before switching on (seconds; safety, check manufacturer)",
-          "changeover_wait_seconds": "Wait between stopping and the opposite mode on a group switch (seconds; safety)"
+          "changeover_wait_seconds": "Wait between stopping and the opposite mode on a group switch (seconds; safety)",
+          "presence_entity": "Building presence (binary_sensor, input_boolean, alarm panel, person, group or zone)",
+          "eco_heating_limit": "Eco heating limit (°C; no motion in the zone)",
+          "eco_cooling_limit": "Eco cooling limit (°C; no motion in the zone)",
+          "away_heating_limit": "Away heating limit (°C; building absent)",
+          "away_cooling_limit": "Away cooling limit (°C; building absent)",
+          "motion_delay_seconds": "Motion detection delay (seconds)",
+          "motion_off_delay_minutes": "Time occupied after last motion (minutes)"
         }
       },
       "zone_settings": {
@@ -198,7 +212,7 @@
           "weight": "Zone weight",
           "use_building_limits": "Use central climate limits",
           "use_building_parameters": "Use central regulation parameters",
-          "occupancy_entity": "Room occupancy sensor (optional)",
+          "occupancy_entity": "Motion sensor (optional; without motion the zone uses the eco band)",
           "humidity_entity": "Humidity (optional)",
           "co2_entity": "CO₂ sensor (optional)",
           "contact_entities": "Window and door contacts (optional)",

@@ -187,6 +187,17 @@ class ZoneDemandSensor(ZonentraDiagnosticSensor):
     def _present(self, runtime) -> bool:
         return self._zone.id in runtime.zone_demands
 
+    def _occupancy(self) -> dict:
+        item = self.runtime.zone_occupancy.get(self._zone.id)
+        if item is None:
+            return {}
+        return {
+            "occupancy_mode": item.mode,
+            "occupancy_reason": item.reason,
+            "building_presence": item.presence,
+            "motion": item.motion,
+        }
+
     @property
     def native_value(self):
         return self.runtime.zone_demands[self.zone.id].demand
@@ -229,6 +240,8 @@ class ZoneDemandSensor(ZonentraDiagnosticSensor):
                 snapshot.temperature, self.runtime.evaluated_at
             ),
             "occupancy": snapshot.occupancy.value or "unknown",
+            # 0.8: which band applies and why (presence wins over motion).
+            **self._occupancy(),
             "open_contacts": sum(
                 contact.value == "open" for contact in snapshot.contacts
             ),

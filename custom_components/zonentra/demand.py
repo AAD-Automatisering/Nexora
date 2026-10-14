@@ -46,7 +46,9 @@ def collect_zone(
     sources: Mapping[str, SourceState],
     now: datetime,
     outdoor_temperature: Reading | None = None,
+    band: str = "comfort",
 ) -> ZoneSnapshot:
+    """Snapshot of one zone; ``band`` eco/away replaces the comfort limits."""
     # Measurements follow the zone strategy; state_based applies no age limit.
     max_age = max_age_for(zone.sensor_validation, zone.max_age_seconds)
 
@@ -72,11 +74,18 @@ def collect_zone(
             if item.zone_id == zone.id and item.kind == kind
         )
 
+    if band in ("eco", "away"):  # Central eco/away bands (presence, motion).
+        settings = building.settings
+        heating = configured_limit(getattr(settings, f"{band}_heating_limit"))
+        cooling = configured_limit(getattr(settings, f"{band}_cooling_limit"))
+    else:
+        heating = limits(zone.heating_limit_entity, zone.heating_limit)
+        cooling = limits(zone.cooling_limit_entity, zone.cooling_limit)
     return ZoneSnapshot(
         zone.id,
         numeric("temperature_entity", "temperature"),
-        limits(zone.heating_limit_entity, zone.heating_limit),
-        limits(zone.cooling_limit_entity, zone.cooling_limit),
+        heating,
+        cooling,
         numeric("humidity_entity", "humidity"),
         numeric("co2_entity", "co2"),
         outdoor_temperature

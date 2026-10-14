@@ -33,6 +33,7 @@ from .models import (
     build_model,
 )
 from .observations import VALIDATION_STRATEGIES
+from .presence import PRESENCE_DOMAINS
 from .topology import (
     CENTRAL,
     CENTRAL_UNIQUE_ID,
@@ -81,6 +82,14 @@ def building_fields() -> dict:
         vol.Optional("min_on_seconds"): numeric(0, 3600, 1, "s"),
         vol.Optional("min_off_seconds"): numeric(0, 3600, 1, "s"),
         vol.Optional("changeover_wait_seconds"): numeric(0, 3600, 1, "s"),
+        # Presence and motion (0.8), like Versatile Thermostat.
+        vol.Optional("presence_entity"): entity_selector(list(PRESENCE_DOMAINS)),
+        vol.Optional("eco_heating_limit"): numeric(5, 35, unit="°C"),
+        vol.Optional("eco_cooling_limit"): numeric(5, 35, unit="°C"),
+        vol.Optional("away_heating_limit"): numeric(5, 35, unit="°C"),
+        vol.Optional("away_cooling_limit"): numeric(5, 35, unit="°C"),
+        vol.Optional("motion_delay_seconds"): numeric(0, 600, 1, "s"),
+        vol.Optional("motion_off_delay_minutes"): numeric(1, 240, 1, "min"),
     }
 
 
@@ -97,6 +106,12 @@ def building_defaults() -> dict:
                 "min_on_seconds",
                 "min_off_seconds",
                 "changeover_wait_seconds",
+                "eco_heating_limit",
+                "eco_cooling_limit",
+                "away_heating_limit",
+                "away_cooling_limit",
+                "motion_delay_seconds",
+                "motion_off_delay_minutes",
             )
         },
     }
