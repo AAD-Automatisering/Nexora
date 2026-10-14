@@ -321,9 +321,11 @@ Met **Ruimteregeling** aan:
   koelgrens − hysterese); daar komt de afwijking van de ruimte bij (verwarmen:
   setpoint = basis + (basis − ruimte)), begrensd tot 2 °C en hooguit eens per 5
   minuten (beide centraal instelbaar), afgerond op de stap van de unit.
-- Mensen gaan voor: zet iemand de unit aan, uit of op een ander setpoint via de
-  roomcontroller, dan respecteert Zonentra dat voor de Manual Override-duur (standaard
-  30 minuten). Commando's die Zonentra zelf geeft, tellen niet als bediening.
+- Mensen gaan voor: zet iemand de unit aan of uit via de roomcontroller, of wijzigt
+  iemand in Home Assistant het setpoint van de unit zelf, dan respecteert Zonentra dat
+  voor de Manual Override-duur (standaard 30 minuten). Commando's die Zonentra zelf
+  geeft, tellen niet als bediening. Een setpoint dat de unit of gateway zelf wijzigt
+  (de roomcontroller kan alleen aan/uit), stuurt Zonentra na de wachttijd terug.
 - Een klaarzet-puls van de standregeling zet een unit niet uit als de geregelde
   ruimte hem in die stand nodig heeft.
 - In `dry` of `fan_only` zet Zonentra de units eenmaal in die stand (na de minimale

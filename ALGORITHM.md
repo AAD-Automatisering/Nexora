@@ -487,9 +487,11 @@ verschuift alleen zijn doel zodat de ruimtesensor in plaats van de unitsensor te
 **Mensen gaan voor.** In een geregelde ruimte start naast `manual_on` ook
 `manual_off` (unit blijft uit, `manual_override_off`) en `manual_setpoint` een
 Manual Override. Een setpointwijziging is `zonentra_setpoint` als ze het verwachte
-eigen setpoint bevestigt, `automation_setpoint` met een `parent_id`-context, en
-`setpoint_after_command` binnen 60 s na een eigen commando (een integratie kan bij
-inschakelen zijn eigen setpoint terugzetten). Alleen de rest is `manual_setpoint`.
+eigen setpoint bevestigt, `automation_setpoint` met een `parent_id`-context en
+`device_setpoint` met een kale context: de roomcontrollers van deze installatie
+kunnen alleen aan- en uitschakelen, dus zo'n wijziging komt van de unit of gateway
+zelf en wordt na de wachttijd teruggestuurd. Alleen een wijziging door een
+HA-gebruiker (`user_id`) is `manual_setpoint`.
 
 ## Events en herbeoordeling
 

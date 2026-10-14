@@ -47,9 +47,6 @@ from .thermostat import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-# A setpoint change right after a Zonentra command is the unit settling (an
-# integration may restore its own setpoint on switch-on), not a person.
-SETPOINT_SETTLE_SECONDS = 60
 
 
 def _setpoint(value) -> str | None:
@@ -116,7 +113,6 @@ class BuildingRuntime:
         self.setpoint_plans: dict[str, SetpointPlan] = {}
         self.setpoint_sent: dict = {}
         self.setpoint_tracker = CommandTracker()
-        self.last_command_at: dict = {}
         self._setpoint_checks: list = []
         self.mode_applied: dict[str, str] = {}  # dry / fan_only set per unit
         self.fan_applied: dict[str, str] = {}  # fan speed sent per unit
@@ -700,7 +696,6 @@ class BuildingRuntime:
                 command.hvac_mode if command.service == "set_hvac_mode" else "off"
             )
             self.command_tracker.register(command.entity_id, expected, now)
-        self.last_command_at[command.entity_id] = now
         if command.hvac_mode:
             data["hvac_mode"] = command.hvac_mode
         entry = self._log(command, now, "sending")
@@ -792,18 +787,24 @@ class BuildingRuntime:
         return transitions
 
     def _setpoint_transition(self, entity_id, old, new, event, now) -> str:
-        """0.9: who changed a running unit's setpoint (attribute only)."""
+        """0.9: who changed a running unit's setpoint (attribute only).
+
+        The room controllers of this installation only switch units on and
+        off. A setpoint change with a bare context therefore comes from the
+        unit or gateway itself (for example its own setpoint after switching
+        on), not from a person: only a Home Assistant user counts as manual.
+        """
         before = _setpoint(old.attributes.get("temperature"))
         after = _setpoint(new.attributes.get("temperature"))
         if before == after or after is None:
             return "attribute_update"
         if self.setpoint_tracker.confirm(entity_id, after, now):
             return "zonentra_setpoint"
-        if _origin(event) == "automation":
+        origin = _origin(event)
+        if origin == "automation":
             return "automation_setpoint"
-        last = self.last_command_at.get(entity_id)
-        if last and (now - last).total_seconds() < SETPOINT_SETTLE_SECONDS:
-            return "setpoint_after_command"
+        if origin == "device":
+            return "device_setpoint"
         return "manual_setpoint"
 
     def _plan(self, transitions, sources, now) -> None:

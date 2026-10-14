@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 import pytest
+from homeassistant.core import Context
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
@@ -203,9 +204,21 @@ async def test_room_regulation_switches_steers_and_respects_people(hass, freezer
     assert control.attributes["room_regulation_status"] == "hold"
     assert control.attributes["setpoint_status"] == "in_sync"
 
-    # A person changes the setpoint at the room controller: respected.
+    # The unit or gateway changes its own setpoint (room controllers only
+    # switch on and off): no override, Zonentra steers it back.
     await later(hass, freezer, minutes=2)
-    await unit(hass, "heat", temperature=25)
+    await unit(hass, "heat", temperature=26)
+    assert runtime.last_transitions[EQUIPMENT][0] == "device_setpoint"
+    assert EQUIPMENT not in runtime.overrides
+    await later(hass, freezer, minutes=4)
+    assert calls(mocks) == [("set_temperature", 23.5)]
+    clear(mocks)
+
+    # A person changes the setpoint in Home Assistant: respected.
+    hass.states.async_set(
+        UNIT, "heat", {**ATTRIBUTES, "temperature": 25}, context=Context(user_id="u")
+    )
+    await hass.async_block_till_done()
     assert runtime.last_transitions[EQUIPMENT][0] == "manual_setpoint"
     assert runtime.setpoint_plans[EQUIPMENT].status == "manual_override"
 
