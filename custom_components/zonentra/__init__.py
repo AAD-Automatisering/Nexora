@@ -47,6 +47,20 @@ def central_entry(hass: HomeAssistant) -> ConfigEntry | None:
     )
 
 
+def central_device_entry(hass: HomeAssistant, central: ConfigEntry):
+    """The central device, looked up within its own config entry."""
+    return next(
+        (
+            device
+            for device in dr.async_entries_for_config_entry(
+                dr.async_get(hass), central.entry_id
+            )
+            if (DOMAIN, central.entry_id) in device.identifiers
+        ),
+        None,
+    )
+
+
 def zone_entries(hass: HomeAssistant) -> list[ConfigEntry]:
     return [
         entry
@@ -133,7 +147,7 @@ async def _async_setup_zone(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.config_entries.async_schedule_reload(central.entry_id)
     # The zone device hangs below the central device (via_device_id).
     devices = dr.async_get(hass)
-    central_device = devices.async_get_device(identifiers={(DOMAIN, central.entry_id)})
+    central_device = central_device_entry(hass, central)
     devices.async_get_or_create(
         config_entry_id=entry.entry_id,
         identifiers={(DOMAIN, entry.entry_id)},

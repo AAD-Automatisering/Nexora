@@ -9,6 +9,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.zonentra import central_device_entry
 from custom_components.zonentra.const import DOMAIN
 from custom_components.zonentra.diagnostics import async_get_config_entry_diagnostics
 
@@ -93,9 +94,7 @@ async def test_zones_join_the_central_building_without_commands(hass):
         zone_device = devices.async_get(
             er.async_get(hass).async_get(demand_id).device_id
         )
-        central_device = devices.async_get_device(
-            identifiers={(DOMAIN, central.entry_id)}
-        )
+        central_device = central_device_entry(hass, central)
         assert zone_device.name == "West"
         assert zone_device.via_device_id == central_device.id
         control = hass.states.get(entity(hass, f"{west.entry_id}_hvac_west_ac_control"))
