@@ -174,7 +174,7 @@ async def test_config_flow_creates_central_then_zone(hass):
     await hass.async_block_till_done()
     zone = central.runtime_data.building.zones[0]
     assert (zone.name, zone.heating_limit_entity) == ("Lab", "input_number.lab_heat")
-    snapshot = central.runtime_data.zone_snapshots["lab"]
+    snapshot = central.runtime_data.zone_snapshots[zone.id]  # Generated ID.
     assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (19, 26)
 
 
