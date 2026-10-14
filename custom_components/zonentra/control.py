@@ -319,6 +319,9 @@ def unit_intent(
         return result(
             "unknown", "blocked", "indoor_unit_unavailable", unit.availability
         )
+    if active_override and active_override.mode_at_start == "off" and mode == "off":
+        # 0.9 room regulation: a person switched the unit off; respect it.
+        return result("off", "hold", "manual_override_off")
     if coordination.group_mode == "unknown":
         return result(
             "unchanged", "blocked", "group_mode_unknown", coordination.phase_reason
@@ -462,7 +465,9 @@ def plan(
         for item in hvac
     }
     active_overrides = frozenset(
-        key for key, override in overrides.items() if override.active(now)
+        key
+        for key, override in overrides.items()
+        if override.active(now) and override.mode_at_start != "off"
     )
     coordinations, intents, new_memories = {}, {}, {}
     for group in building.groups:

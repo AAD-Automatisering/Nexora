@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Add Zonentra",
-        "description": "Like Versatile Thermostat: first create the central configuration (building, outdoor unit groups and shared settings) once, then add every zone separately. Zonentra only reads and simulates; nothing is controlled.",
+        "description": "Like Versatile Thermostat: first create the central configuration (building, outdoor unit groups and shared settings) once, then add every zone separately. Zonentra sets the outdoor unit stand per group; a room is only regulated once its Room regulation switch is on.",
         "menu_options": {
           "central": "Central configuration",
           "zone": "Zone"
@@ -12,7 +12,7 @@
       },
       "central": {
         "title": "Central configuration",
-        "description": "Building-wide settings used by every zone that takes the central values. Add outdoor unit groups afterwards via Configure. No equipment is controlled.",
+        "description": "Building-wide settings used by every zone that takes the central values. Add outdoor unit groups afterwards via Configure. The room regulation settings only apply to rooms whose Room regulation switch is on.",
         "data": {
           "name": "Building name",
           "outdoor_temperature_entity": "Outdoor temperature sensor (whole building)",
@@ -35,12 +35,14 @@
           "away_heating_limit": "Away heating limit (°C; building absent)",
           "away_cooling_limit": "Away cooling limit (°C; building absent)",
           "motion_delay_seconds": "Motion detection delay (seconds)",
-          "motion_off_delay_minutes": "Time occupied after last motion (minutes)"
+          "motion_off_delay_minutes": "Time occupied after last motion (minutes)",
+          "setpoint_max_offset": "Room regulation: maximum setpoint correction of an indoor unit (°C)",
+          "setpoint_interval_seconds": "Room regulation: minimum time between setpoint changes (seconds)"
         }
       },
       "zone": {
         "title": "Zone",
-        "description": "One room with its temperature sensor, indoor units (existing climate entities) and outdoor unit group. Disable a central choice to enter local values in the next step. No equipment is controlled.",
+        "description": "One room with its temperature sensor, indoor units (existing climate entities) and outdoor unit group. Disable a central choice to enter local values in the next step. The room gets its own Zonentra thermostat; its indoor units are only switched once its Room regulation switch is on.",
         "data": {
           "name": "Name",
           "temperature_entity": "Room temperature sensor",
@@ -198,12 +200,14 @@
           "away_heating_limit": "Away heating limit (°C; building absent)",
           "away_cooling_limit": "Away cooling limit (°C; building absent)",
           "motion_delay_seconds": "Motion detection delay (seconds)",
-          "motion_off_delay_minutes": "Time occupied after last motion (minutes)"
+          "motion_off_delay_minutes": "Time occupied after last motion (minutes)",
+          "setpoint_max_offset": "Room regulation: maximum setpoint correction of an indoor unit (°C)",
+          "setpoint_interval_seconds": "Room regulation: minimum time between setpoint changes (seconds)"
         }
       },
       "zone_settings": {
         "title": "Zone",
-        "description": "One room with its temperature sensor, indoor units (existing climate entities) and outdoor unit group. Disable a central choice to enter local values in the next step. No equipment is controlled.",
+        "description": "One room with its temperature sensor, indoor units (existing climate entities) and outdoor unit group. Disable a central choice to enter local values in the next step. The room gets its own Zonentra thermostat; its indoor units are only switched once its Room regulation switch is on.",
         "data": {
           "name": "Name",
           "temperature_entity": "Room temperature sensor",
@@ -296,7 +300,7 @@
         }
       },
       "unit_control": {
-        "name": "{unit} Simulated action",
+        "name": "{unit} Control action",
         "state": {
           "turn_on_heat": "Turn on heating",
           "turn_on_cool": "Turn on cooling",
@@ -328,11 +332,44 @@
           "neutral": "Neutral",
           "unknown": "Unknown"
         }
+      },
+      "active_band": {
+        "name": "Active band",
+        "state": {
+          "comfort": "Comfort",
+          "eco": "Eco",
+          "away": "Away"
+        }
       }
     },
     "switch": {
       "active_mode_control": {
         "name": "{group} Active stand control"
+      },
+      "room_regulation": {
+        "name": "Room regulation"
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "activity": "Activity (presence and motion)",
+              "comfort": "Comfort",
+              "eco": "Eco",
+              "away": "Away"
+            }
+          }
+        }
+      }
+    },
+    "number": {
+      "comfort_heating_limit": {
+        "name": "Comfort heating limit"
+      },
+      "comfort_cooling_limit": {
+        "name": "Comfort cooling limit"
       }
     }
   },
@@ -340,6 +377,23 @@
     "legacy_configuration": {
       "title": "Recreate Zonentra as central configuration and zones",
       "description": "The Zonentra entry \"{name}\" uses the pre-0.6 single-entry layout. It keeps working for now, but is deprecated. Remove it and add Zonentra again: first the central configuration, then each zone. Entity IDs will change."
+    }
+  },
+  "exceptions": {
+    "invalid_limits": {
+      "message": "Invalid comfort band: the heating limit must be at least twice the hysteresis below the cooling limit, both between 5 and 35 °C."
+    },
+    "invalid_hvac_mode": {
+      "message": "This mode is not available for this Zonentra thermostat."
+    },
+    "invalid_preset": {
+      "message": "Unknown preset."
+    },
+    "invalid_parameters": {
+      "message": "Invalid value."
+    },
+    "zone_not_loaded": {
+      "message": "The Zonentra central configuration is not loaded, or this zone is not part of it yet."
     }
   }
 }

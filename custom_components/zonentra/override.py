@@ -67,6 +67,11 @@ class CommandTracker:
             now + timedelta(seconds=self.confirmation_seconds),
         )
 
+    def is_pending(self, entity_id: str, now: datetime) -> bool:
+        """A command for this entity still awaits its expected state."""
+        self.expire(now)
+        return entity_id in self._pending
+
     def expire(self, now: datetime) -> None:
         self._pending = {
             key: item for key, item in self._pending.items() if now <= item.deadline
@@ -123,11 +128,27 @@ def update_override(
     *,
     enabled: bool,
     duration_minutes: float,
+    regulated: bool = False,
 ) -> tuple[ManualOverride | None, str | None]:
-    """Apply expiry and one transition; returns (override, event code)."""
+    """Apply expiry and one transition; returns (override, event code).
+
+    ``regulated`` (0.9 room regulation active for the unit's room): a person
+    switching the unit off, or changing its setpoint, is respected for the
+    override duration too, instead of being undone by Zonentra.
+    """
     event = None
     if current and not current.active(now):
         current, event = None, "override_expired"
+    if regulated and transition in ("manual_off", "manual_setpoint"):
+        if not enabled:
+            return None, "override_disabled"
+        mode = "off" if transition == "manual_off" else new_state or "unknown"
+        return (
+            ManualOverride(
+                equipment_id, now, now + timedelta(minutes=duration_minutes), mode
+            ),
+            "override_started",
+        )
     if transition == "manual_on":
         if not enabled:
             return None, "override_disabled"

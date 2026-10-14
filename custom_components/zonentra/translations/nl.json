@@ -4,7 +4,7 @@
     "step": {
       "user": {
         "title": "Zonentra toevoegen",
-        "description": "Zoals bij Versatile Thermostat: maak eerst eenmalig de centrale configuratie (gebouw, buitenunitgroepen en gedeelde instellingen) en voeg daarna iedere ruimte apart toe. Zonentra leest en simuleert alleen; er wordt niets aangestuurd.",
+        "description": "Zoals bij Versatile Thermostat: maak eerst eenmalig de centrale configuratie (gebouw, buitenunitgroepen en gedeelde instellingen) en voeg daarna iedere ruimte apart toe. Zonentra zet per groep de stand van de buitenunit; een ruimte wordt pas geregeld als de schakelaar Ruimteregeling aan staat.",
         "menu_options": {
           "central": "Centrale configuratie",
           "zone": "Ruimte"
@@ -12,7 +12,7 @@
       },
       "central": {
         "title": "Centrale configuratie",
-        "description": "Gebouwbrede instellingen voor iedere ruimte die de centrale waarden gebruikt. Voeg daarna buitenunitgroepen toe via Configureren. Er wordt niets aangestuurd.",
+        "description": "Gebouwbrede instellingen voor iedere ruimte die de centrale waarden gebruikt. Voeg daarna buitenunitgroepen toe via Configureren. De instellingen voor ruimteregeling gelden alleen voor ruimtes waarvan de schakelaar Ruimteregeling aan staat.",
         "data": {
           "name": "Gebouwnaam",
           "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
@@ -35,12 +35,14 @@
           "away_heating_limit": "Afwezig-verwarmingsgrens (°C; gebouw afwezig)",
           "away_cooling_limit": "Afwezig-koelgrens (°C; gebouw afwezig)",
           "motion_delay_seconds": "Bewegingsdetectie-vertraging (seconden)",
-          "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)"
+          "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)",
+          "setpoint_max_offset": "Ruimteregeling: maximale setpointcorrectie van een binnenunit (°C)",
+          "setpoint_interval_seconds": "Ruimteregeling: minimale tijd tussen setpointwijzigingen (seconden)"
         }
       },
       "zone": {
         "title": "Ruimte",
-        "description": "Eén ruimte met temperatuursensor, binnenunits (bestaande climate-entiteiten) en buitenunitgroep. Zet een centrale keuze uit om in de volgende stap eigen waarden in te vullen. Er wordt niets aangestuurd.",
+        "description": "Eén ruimte met temperatuursensor, binnenunits (bestaande climate-entiteiten) en buitenunitgroep. Zet een centrale keuze uit om in de volgende stap eigen waarden in te vullen. De ruimte krijgt een eigen Zonentra-thermostaat; de binnenunits worden pas geschakeld als de schakelaar Ruimteregeling aan staat.",
         "data": {
           "name": "Naam",
           "temperature_entity": "Ruimtetemperatuursensor",
@@ -198,12 +200,14 @@
           "away_heating_limit": "Afwezig-verwarmingsgrens (°C; gebouw afwezig)",
           "away_cooling_limit": "Afwezig-koelgrens (°C; gebouw afwezig)",
           "motion_delay_seconds": "Bewegingsdetectie-vertraging (seconden)",
-          "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)"
+          "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)",
+          "setpoint_max_offset": "Ruimteregeling: maximale setpointcorrectie van een binnenunit (°C)",
+          "setpoint_interval_seconds": "Ruimteregeling: minimale tijd tussen setpointwijzigingen (seconden)"
         }
       },
       "zone_settings": {
         "title": "Ruimte",
-        "description": "Eén ruimte met temperatuursensor, binnenunits (bestaande climate-entiteiten) en buitenunitgroep. Zet een centrale keuze uit om in de volgende stap eigen waarden in te vullen. Er wordt niets aangestuurd.",
+        "description": "Eén ruimte met temperatuursensor, binnenunits (bestaande climate-entiteiten) en buitenunitgroep. Zet een centrale keuze uit om in de volgende stap eigen waarden in te vullen. De ruimte krijgt een eigen Zonentra-thermostaat; de binnenunits worden pas geschakeld als de schakelaar Ruimteregeling aan staat.",
         "data": {
           "name": "Naam",
           "temperature_entity": "Ruimtetemperatuursensor",
@@ -296,7 +300,7 @@
         }
       },
       "unit_control": {
-        "name": "{unit} Gesimuleerde actie",
+        "name": "{unit} Regelactie",
         "state": {
           "turn_on_heat": "Verwarmen inschakelen",
           "turn_on_cool": "Koelen inschakelen",
@@ -328,11 +332,44 @@
           "neutral": "Neutraal",
           "unknown": "Onbekend"
         }
+      },
+      "active_band": {
+        "name": "Actieve band",
+        "state": {
+          "comfort": "Comfort",
+          "eco": "Eco",
+          "away": "Afwezig"
+        }
       }
     },
     "switch": {
       "active_mode_control": {
         "name": "{group} Actieve standregeling"
+      },
+      "room_regulation": {
+        "name": "Ruimteregeling"
+      }
+    },
+    "climate": {
+      "thermostat": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "activity": "Activiteit (aanwezigheid en beweging)",
+              "comfort": "Comfort",
+              "eco": "Eco",
+              "away": "Afwezig"
+            }
+          }
+        }
+      }
+    },
+    "number": {
+      "comfort_heating_limit": {
+        "name": "Comfort verwarmen tot"
+      },
+      "comfort_cooling_limit": {
+        "name": "Comfort koelen vanaf"
       }
     }
   },
@@ -340,6 +377,23 @@
     "legacy_configuration": {
       "title": "Zonentra opnieuw aanmaken als centrale configuratie en ruimtes",
       "description": "Het Zonentra-item \"{name}\" gebruikt de indeling van vóór 0.6 met één item. Het blijft voorlopig werken, maar is verouderd. Verwijder het en voeg Zonentra opnieuw toe: eerst de centrale configuratie, daarna iedere ruimte. Entity-ID's veranderen."
+    }
+  },
+  "exceptions": {
+    "invalid_limits": {
+      "message": "Ongeldige comfortband: de verwarmingsgrens moet minstens twee keer de hysterese onder de koelgrens liggen, beide tussen 5 en 35 °C."
+    },
+    "invalid_hvac_mode": {
+      "message": "Deze modus is niet beschikbaar voor deze Zonentra-thermostaat."
+    },
+    "invalid_preset": {
+      "message": "Onbekende preset."
+    },
+    "invalid_parameters": {
+      "message": "Ongeldige waarde."
+    },
+    "zone_not_loaded": {
+      "message": "De centrale configuratie van Zonentra is niet geladen, of deze ruimte hoort er nog niet bij."
     }
   }
 }

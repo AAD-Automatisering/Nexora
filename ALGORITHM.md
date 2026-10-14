@@ -1,7 +1,8 @@
-# Zonentra 0.8.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.9.0 — uitlegbare klimaatintelligentie
 
-Alles in dit document betreft **read-only analyse**. Een voorgestelde modus is
-geen commando, en verandert ook niet de intern bijgehouden actuele modus.
+Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
+commando en verandert ook niet de intern bijgehouden actuele modus. De actieve
+functies staan apart beschreven: de standregeling (0.7) en de ruimteregeling (0.9).
 
 Sinds 0.6 worden de centrale configuratie en de losse ruimte-items vóór elke
 berekening samengevoegd tot één gebouwmodel (`topology.assemble`). De algoritmes
@@ -395,7 +396,7 @@ een override. Een unit die na een herstart aan staat zonder vraag krijgt de norm
 
 ## Actieve standregeling (0.7)
 
-Dit is de enige actieve functie. `executor.plan_mode_commands()` is puur; de runtime
+Dit was de eerste actieve functie. `executor.plan_mode_commands()` is puur; de runtime
 voert de commando's uit via `climate.set_hvac_mode` en `climate.turn_off`.
 
 **Doelmodus** = de leidende groepsmodus uit de coördinator (heat/cool). Bij neutral of
@@ -425,6 +426,70 @@ gezette stand staat in HA-opslag en overleeft herstarts.
 `state_changed`-event. Een gebruiker (`user_id`) of een kale context (KNX-roomcontroller)
 → `manual_on`; een context met `parent_id` (automation/script) → `automation_on`,
 geen override. Dit is een sterke aanwijzing, geen bewijs.
+
+## Ruimtethermostaat en ruimteregeling (0.9)
+
+`thermostat.py` is puur; de runtime bewaart de thermostaat per ruimte in HA-opslag
+(`zonentra.<centrale>.thermostats`) en houdt een kopie in `hass.data`, zodat een
+herlaad van de centrale configuratie een net gemaakte wijziging niet verliest.
+
+**Band.** `active_band(preset, bezetting)`: bij een afwezig gebouw altijd `away`;
+preset `activity` volgt de bezetting uit 0.8; anders de vaste preset. De
+comfortband is de eigen band van de thermostaat als die is ingesteld, anders de
+geconfigureerde grenzen (`demand.comfort_limits`). Eco en afwezig blijven centraal.
+Een eigen band moet voldoen aan `verwarmen + 2·hysterese < koelen`, beide 5–35 °C.
+
+**Thermostaatmodus** (standaard HA-modi, `room_demand`): `heat_cool` laat de vraag
+ongemoeid; `heat` maakt koelvraag `neutral` (`thermostat_heat_only`), `cool` maakt
+verwarmingsvraag `neutral` (`thermostat_cool_only`), `off`, `dry` en `fan_only` maken
+alle vraag `neutral` (`thermostat_off`, `thermostat_dry`, `thermostat_fan_only`).
+De thermostaat biedt `dry`, `fan_only` en ventilatorstanden alleen aan als alle
+binnenunits van de ruimte ze kennen, en noemt `heat_cool` `auto` als de units dat
+doen (opgeslagen blijft `heat_cool`). Met ruimteregeling zet `plan_room_mode` de
+units eenmaal per thermostaatwijziging in `dry`/`fan_only` (na `min_off_seconds`,
+niet tijdens een Manual Override; `dry` alleen als de groep mag koelen, anders gaat
+een door Zonentra drogende unit uit), en `plan_fan` geeft de ventilatorstand
+eenmaal per wijziging door aan draaiende units. De groep weegt daarna zoals altijd; een modus dwingt nooit de
+buitenunit. Eén doeltemperatuur (`heat`/`cool`) zet de verwarmings- of koelgrens;
+de andere grens blijft staan, of schuift mee als de band anders ongeldig wordt
+(`single_target`).
+
+**Aan/uit (alleen met Ruimteregeling aan).** De runtime voert de bestaande actie per
+binnenunit uit (0.5): `turn_on_heat`/`turn_on_cool` → `set_hvac_mode`,
+`turn_off` → `climate.turn_off`. `correct_mode` blijft aan de standregeling,
+`hold`/`blocked` sturen niets. Inschakelen gebeurt alleen in een *veilige* modus:
+met actieve standregeling de klaargezette stand van de groep; zonder standregeling
+de stand van de units die al draaien (heat, of cool/dry), allebei = conflict = niets,
+geen enkele = vrij. Zolang een eigen commando nog niet is bevestigd
+(CommandTracker), of de standregeling in dezelfde ronde of met een openstaande
+uit-puls met de unit bezig is, wacht de ruimteregeling.
+
+Een openstaande uit-puls van de standregeling wordt overgeslagen
+(`skipped_room_demand`) als de ruimte geregeld wordt en de unit in die stand nodig
+heeft (`desired_mode` van de actie = doelstand).
+
+**Zelfregulerend setpoint** (`plan_setpoint`) voor een draaiende unit zonder actieve
+override, met geldige ruimtetemperatuur en een `temperature`-attribuut:
+
+- verwarmen: basis = verwarmingsgrens + hysterese,
+  setpoint = basis + clamp(basis − T_ruimte, −max, +max);
+- koelen: basis = koelgrens − hysterese,
+  setpoint = basis − clamp(T_ruimte − basis, −max, +max);
+- grenzen van de actieve band; afgerond op `target_temp_step` (standaard 0,5) en
+  begrensd op `min_temp`/`max_temp` van de unit (standaard 16–30 °C);
+- `max` = `setpoint_max_offset` (standaard 2 °C); versturen alleen bij een verschil
+  van minstens een halve stap en hooguit eens per `setpoint_interval_seconds`
+  (standaard 300 s); de runtime plant een herbeoordeling na de wachttijd.
+
+De versterking is bewust 1 en zonder integratie: de unit regelt zelf, Zonentra
+verschuift alleen zijn doel zodat de ruimtesensor in plaats van de unitsensor telt.
+
+**Mensen gaan voor.** In een geregelde ruimte start naast `manual_on` ook
+`manual_off` (unit blijft uit, `manual_override_off`) en `manual_setpoint` een
+Manual Override. Een setpointwijziging is `zonentra_setpoint` als ze het verwachte
+eigen setpoint bevestigt, `automation_setpoint` met een `parent_id`-context, en
+`setpoint_after_command` binnen 60 s na een eigen commando (een integratie kan bij
+inschakelen zijn eigen setpoint terugzetten). Alleen de rest is `manual_setpoint`.
 
 ## Events en herbeoordeling
 

@@ -107,7 +107,18 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] Aanwezigheid gebouw in de centrale configuratie (meerdere brontypen).
 - [x] Bewegingssensor per ruimte met detectie- en nalooptijd, zoals Versatile Thermostat.
 - [x] Comfort-, eco- en afwezig-band; aanwezigheid gaat voor beweging.
-- [ ] 0.9.0: Zonentra-thermostaat per ruimte (actieve ruimteregeling, zelfregulerend setpoint).
+- [x] 0.9.0: Zonentra-thermostaat per ruimte (zie hieronder).
+
+### Versie 0.9.0 — Zonentra-thermostaat per ruimte (geïmplementeerd)
+
+- [x] Climate-entiteit per ruimte met comfortband, standaardmodi heat/cool/heat_cool/off en presets (activiteit, comfort, eco, afwezig).
+- [x] Comfortband als instellingen op het ruimteapparaat en een sensor Actieve band.
+- [x] Schakelaar Ruimteregeling per ruimte, standaard uit; thermostaat bewaard in HA-opslag.
+- [x] Ruimteregeling: binnenunits aan/uit op de klimaatvraag, alleen in de stand van de buitenunit.
+- [x] Zelfregulerend setpoint op de ruimtesensor, begrensd en met minimale wachttijd.
+- [x] Handmatig uit en handmatig setpoint in een geregelde ruimte starten een Manual Override.
+- [ ] Praktijkperiode met één ruimte: commandolog, setpointgedrag en comfort beoordelen.
+- [ ] Ventilatorstand en raamcontacten (raam open → unit uit) in de ruimteregeling.
 
 ### Vervolg vóór actieve regeling
 

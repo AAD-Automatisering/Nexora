@@ -26,10 +26,33 @@ from .topology import CENTRAL, ENTRY_TYPE, ZONE, assemble
 ZonentraConfigEntry = ConfigEntry[BuildingRuntime]
 PLATFORMS = [Platform.SENSOR]
 CENTRAL_PLATFORMS = [Platform.SENSOR, Platform.SWITCH]
+# 0.9: every zone gets a Zonentra thermostat, like Versatile Thermostat.
+ZONE_PLATFORMS = [Platform.CLIMATE, Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
 
 
 def platforms(entry: ConfigEntry) -> list[Platform]:
-    return CENTRAL_PLATFORMS if entry_type(entry) == CENTRAL else PLATFORMS
+    return {CENTRAL: CENTRAL_PLATFORMS, ZONE: ZONE_PLATFORMS}.get(
+        entry_type(entry), PLATFORMS
+    )
+
+
+async def _thermostat_state(hass: HomeAssistant, entry: ConfigEntry):
+    """Store and in-memory copy of the room thermostats of one central entry.
+
+    The copy lives in hass.data so a central reload (for example after a zone
+    change) never loses a just-made change that is still being written.
+    """
+    data = hass.data.setdefault(DOMAIN, {})
+    stores = data.setdefault("thermostat_stores", {})
+    caches = data.setdefault("thermostats", {})
+    if entry.entry_id not in stores:
+        stores[entry.entry_id] = Store(
+            hass, 1, f"{DOMAIN}.{entry.entry_id}.thermostats"
+        )
+    if entry.entry_id not in caches:
+        stored = await stores[entry.entry_id].async_load()
+        caches[entry.entry_id] = dict((stored or {}).get("zones") or {})
+    return stores[entry.entry_id], caches[entry.entry_id]
 
 
 def entry_type(entry: ConfigEntry) -> str:
@@ -111,6 +134,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
         # The last applied outdoor-stand per group survives restarts.
         runtime.mode_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.mode_control")
         runtime.load_presets(await runtime.mode_store.async_load())
+        store, cache = await _thermostat_state(hass, entry)
+        runtime.thermostat_store, runtime.thermostat_cache = store, cache
+        runtime.load_thermostats({"zones": cache})
     tracked_entity_ids = building.entity_ids
     if tracked_entity_ids:
         entry.async_on_unload(
@@ -157,7 +183,7 @@ async def _async_setup_zone(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         via_device_id=central_device.id if central_device else None,
     )
     entry.async_on_unload(entry.add_update_listener(_async_zone_updated))
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, ZONE_PLATFORMS)
     return True
 
 
@@ -180,6 +206,11 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         central = central_entry(hass)
         if central and central.state is ConfigEntryState.LOADED:
             hass.config_entries.async_schedule_reload(central.entry_id)
+    elif kind == CENTRAL:
+        data = hass.data.get(DOMAIN, {})
+        data.get("thermostats", {}).pop(entry.entry_id, None)
+        if store := data.get("thermostat_stores", {}).pop(entry.entry_id, None):
+            await store.async_remove()
     elif kind == "legacy":
         ir.async_delete_issue(hass, DOMAIN, f"legacy_configuration_{entry.entry_id}")
 

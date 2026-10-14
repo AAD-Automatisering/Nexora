@@ -3,13 +3,19 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.8.0** voegt **aanwezigheid en beweging** toe zoals Versatile Thermostat:
+Versie **0.9.0** geeft iedere ruimte een eigen **Zonentra-thermostaat** zoals
+Versatile Thermostat: een climate-entiteit met de comfortband van de ruimte,
+presets (activiteit, comfort, eco, afwezig) en instellingen op het apparaat. Met de
+schakelaar **Ruimteregeling** (standaard uit) regelt Zonentra de ruimte echt: de
+binnenunits aan en uit op de klimaatvraag, en een zelfregulerend setpoint op basis
+van de ruimtesensor. Versie 0.8.0 voegde **aanwezigheid en beweging** toe:
 een aanwezigheidssensor voor het hele gebouw en optioneel een bewegingssensor per
 ruimte kiezen tussen een comfort-, eco- en afwezig-band. Versie 0.7.0 is de eerste
 versie die iets **echt aanstuurt**: Zonentra zet per
 buitenunitgroep de **stand** (verwarmen/koelen) van alle binnenunits, op basis van
-de gewogen klimaatvraag. Al het andere (aan/uit per ruimte, setpoints, vloerverwarming,
-ventilatie, zonwering) blijft simulatie. Per groep is er een noodstop-schakelaar.
+de gewogen klimaatvraag. Vloerverwarming, ventilatie en zonwering blijven
+simulatie, net als ruimtes waarvan de ruimteregeling uit staat. Per groep is er een
+noodstop-schakelaar.
 Versie 0.6.0 maakt Zonentra aan zoals Versatile Thermostat: eenmalig een
 **centrale configuratie** (gebouw, buitenunitgroepen, gedeelde instellingen) en
 daarna **per ruimte een eigen item** met een eigen apparaat in Home Assistant.
@@ -26,8 +32,9 @@ klimaatvraag. Een afgeleide modus is nooit fysieke buitenunitfeedback. Versie
 verandert (zoals bij KNX) wordt niet langer onterecht `stale`. Versie 0.3.0
 voegde centrale gebouwinstellingen met optionele ruimteafwijkingen toe aan de
 uitlegbare klimaatvraag en gewogen buitenunitvoorstellen. Behalve de
-actieve standregeling (0.7) blijft alles simulatie: Zonentra wijzigt geen setpoints en
-bedient geen vloerverwarming, zonwering of ventilatie. De 16 °C-vloerverwarmingsgrens blijft intact.
+actieve standregeling (0.7) en de ruimteregeling (0.9, per ruimte aan te zetten)
+blijft alles simulatie: Zonentra bedient geen vloerverwarming, zonwering of
+ventilatie. De 16 °C-vloerverwarmingsgrens blijft intact.
 Bestaande regelingen en automations blijven zelfstandig werken.
 
 ## Installatie
@@ -59,6 +66,17 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.9.0 — Zonentra-thermostaat per ruimte
+
+Werk bij via HACS, herstart Home Assistant en herlaad de browser volledig. Iedere
+ruimte krijgt op haar apparaat een thermostaat (met de naam van de ruimte), twee
+instellingen voor de comfortband, een sensor **Actieve band** en de schakelaar
+**Ruimteregeling**. Die schakelaar staat standaard **uit**: tot je hem aanzet,
+verandert er niets aan wat Zonentra aanstuurt. Begin met één ruimte en controleer
+eerst de sensor **Regelactie** van de binnenunit. Zet voor een geregelde ruimte
+andere regelingen uit die dezelfde airco's aan/uit zetten of hun setpoint wijzigen
+(zoals Versatile Thermostat of eigen automations).
 
 ### Bijwerken naar 0.8.0 — aanwezigheid en beweging
 
@@ -262,8 +280,61 @@ niet voor elke score een aparte entiteit nodig is.
 | Binnenunit-modus | heat / cool / heat_cool / auto / dry / fan_only / off / unknown | indoor_unit_entity, selected_mode, reported_action, current_temperature, target_temperature, temperature_unit, fan_mode, availability, observation_quality, selected_action_mismatch, observed_at |
 | Buitenunit Modus afgeleid van binnenunits | heat / cool / inactive / mixed / unknown | member_indoor_units, available_indoor_units, usable_selected_modes, usable_hvac_actions, selected_modes, selected_mode_consensus, reported_activity, conflict_detected, conflicts, completeness, quality, reason, notes, desired_mode, physical_mode, physical_mode_feedback_available, observation_reason |
 
-| Binnenunit Gesimuleerde actie | turn_on_heat / turn_on_cool / turn_off / correct_mode / hold / blocked | simulation, zone, observed_mode, desired_mode, zone_demand, intended_action, steps, reason, blocked_reason, blocked_until, manual_override_active, override_remaining_seconds, override_expires_at, seconds_since_transition, group_coordination_phase, availability, evaluated_at |
+| Binnenunit Regelactie | turn_on_heat / turn_on_cool / turn_off / correct_mode / hold / blocked | simulation (false bij ruimteregeling), room_regulation, room_regulation_status, setpoint_status, setpoint_target, setpoint_base, setpoint_offset, last_commands, zone, observed_mode, desired_mode, zone_demand, intended_action, steps, reason, blocked_reason, blocked_until, manual_override_active, override_remaining_seconds, override_expires_at, seconds_since_transition, group_coordination_phase, availability, evaluated_at |
 | Buitenunit Gesimuleerde coördinatie | idle / preparing / stopping / waiting / applying / verifying / completed / blocked / failed | simulation, desired_mode, group_mode, group_mode_reason, coordinated_mode, derived_mode, member_indoor_units, available_indoor_units, conflicts, switch_needed, switch_from, switch_to, switch_allowed_in_simulation, active_switch_permitted (altijd false), phase_reason, waiting_until, blockers, planned_actions |
+
+### Zonentra-thermostaat en ruimteregeling (0.9)
+
+Iedere ruimte heeft een eigen thermostaat (climate-entiteit) op haar apparaat:
+
+| Onderdeel | Betekenis |
+|---|---|
+| Modus `heat` | Alleen verwarmen; het doel is de verwarmingsgrens. Een te warme ruimte vraagt niets |
+| Modus `cool` | Alleen koelen; het doel is de koelgrens. Een te koude ruimte vraagt niets |
+| Modus `heat_cool` (of `auto`) | Beide: binnen de comfortband houden (onder- en bovengrens). Heten de binnenunits deze stand `auto`, dan heet hij op de thermostaat ook zo |
+| Modus `dry` / `fan_only` | Alleen als alle binnenunits van de ruimte het kennen. De ruimte vraagt geen verwarming of koeling; met ruimteregeling draaien de units in die stand (`dry` alleen als de groep koelt) |
+| Modus `off` | De ruimte vraagt niets |
+| Ventilatorstand | De standen die alle binnenunits kennen; met ruimteregeling krijgt een draaiende unit de gekozen stand (eenmaal per wijziging) |
+| Doel / onder- en bovengrens | De comfortband: verwarmen tot / koelen vanaf. Zolang je niets instelt, gelden de grenzen van de ruimte of het gebouw |
+| Preset `activity` | Aanwezigheid en beweging kiezen comfort, eco of afwezig (0.8) |
+| Preset `comfort` / `eco` / `away` | Vaste band; een afwezig gebouw gaat altijd voor |
+| Comfort verwarmen tot / koelen vanaf | Dezelfde comfortband als instellingen op het apparaat |
+| Sensor **Actieve band** | Welke band nu geldt, met reden en grenzen |
+| Schakelaar **Ruimteregeling** | Standaard uit (simulatie). Aan: Zonentra regelt de binnenunits van deze ruimte echt |
+
+De thermostaat neemt zo de opties van de binnenunits over, zodat hij ze in HomeKit en
+dashboards kan vervangen. Het zijn de standaardmodi van Home Assistant, maar een modus bepaalt nooit de stand
+van de buitenunit: de groep weegt de vraag van alle ruimtes. Een ruimte op `heat`
+telt alleen mee als ze warmte vraagt; draait de groep op koelen, dan wacht ze tot de
+groep weer verwarmt. Een ruimte op `off` telt niet mee.
+
+Met **Ruimteregeling** aan:
+
+- Een binnenunit gaat **aan** bij klimaatvraag, maar alleen in de stand waarin de
+  buitenunit al staat (de klaargezette stand van de standregeling, of zonder
+  standregeling de stand van de units die al draaien). Zonentra kiest hiermee
+  nooit zelf een tegengestelde stand.
+- Een binnenunit gaat **uit** als de ruimte niets meer vraagt, of als de thermostaat
+  uit staat. De minimale aan- en uittijden blijven gelden.
+- Het **setpoint** van een draaiende unit wordt bijgestuurd op de ruimtesensor.
+  Basis is de rand van de band (verwarmen: verwarmingsgrens + hysterese; koelen:
+  koelgrens − hysterese); daar komt de afwijking van de ruimte bij (verwarmen:
+  setpoint = basis + (basis − ruimte)), begrensd tot 2 °C en hooguit eens per 5
+  minuten (beide centraal instelbaar), afgerond op de stap van de unit.
+- Mensen gaan voor: zet iemand de unit aan, uit of op een ander setpoint via de
+  roomcontroller, dan respecteert Zonentra dat voor de Manual Override-duur (standaard
+  30 minuten). Commando's die Zonentra zelf geeft, tellen niet als bediening.
+- Een klaarzet-puls van de standregeling zet een unit niet uit als de geregelde
+  ruimte hem in die stand nodig heeft.
+- In `dry` of `fan_only` zet Zonentra de units eenmaal in die stand (na de minimale
+  uittijd); verandert iemand daarna de unit, dan blijft dat zo tot de thermostaat
+  weer wijzigt. Gaat de groep naar verwarmen, dan gaat een drogende unit uit.
+- De ventilatorstand van de thermostaat gaat eenmaal per wijziging naar draaiende
+  units; een andere stand op de roomcontroller wordt niet teruggezet.
+
+De thermostaat wordt bewaard en overleeft herstarts. De sensor **Regelactie** van de
+binnenunit toont `room_regulation`, `room_regulation_status`, `setpoint_status`,
+`setpoint_target`, `setpoint_base`, `setpoint_offset` en de laatste commando's.
 
 ### Aanwezigheid en beweging (0.8)
 
@@ -424,10 +495,11 @@ python3.14 -m venv .venv
 .venv/bin/pytest -q
 ```
 
-De suite omvat 92 tests. Pure kernfuncties worden zonder HomeAssistant-instance
-getest. Integratietests gebruiken de echte Home Assistant flow manager, state machine, sensorplatform
-en lifecycle-fixtures. Ze controleren ook dat geen servicecalls plaatsvinden bij
-setup, bronwijzigingen, unload en opnieuw laden. CI voert dezelfde checks op Linux
+Pure kernfuncties worden zonder HomeAssistant-instance getest. Integratietests
+gebruiken de echte Home Assistant flow manager, state machine, platforms en
+lifecycle-fixtures, met gemockte climate-services voor de actieve functies. Ze
+controleren welke commando's worden gestuurd, en dat een ruimte zonder
+ruimteregeling geen ruimtecommando's krijgt. CI voert dezelfde checks op Linux
 uit. Een praktische installatie-/UI-smoketest in uw eigen HA blijft nodig.
 
 ## Projectstructuur
@@ -455,7 +527,11 @@ custom_components/zonentra/
   topology.py                   centrale configuratie + ruimte-items → één gebouwmodel
   executor.py                   actieve standregeling: welke modus-commando's nodig zijn
   presence.py                   aanwezigheid (gebouw) en beweging (ruimte) → comfort/eco/afwezig
-  switch.py                     noodstop per buitenunitgroep (Actieve standregeling)
+  thermostat.py                 ruimtethermostaat, band, ruimteregeling en zelfregulerend setpoint
+  entity.py                     gedeelde basis voor bedieningsentiteiten op het ruimteapparaat
+  climate.py                    Zonentra-thermostaat per ruimte
+  number.py                     comfortband als instellingen op het ruimteapparaat
+  switch.py                     noodstop per buitenunitgroep en Ruimteregeling per ruimte
   sensor.py                     diagnostische sensoren
   diagnostics.py                geredigeerde diagnostiekdownload
   strings.json                  UI-teksten

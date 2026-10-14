@@ -73,7 +73,7 @@ def entity(hass, unique_id):
     return er.async_get(hass).async_get_entity_id("sensor", DOMAIN, unique_id)
 
 
-async def test_zones_join_the_central_building_without_commands(hass):
+async def test_zones_join_the_central_building_without_room_commands(hass):
     with patch("homeassistant.core.ServiceRegistry.async_call") as service_call:
         set_states(hass, "west", "climate.west_ac")
         set_states(hass, "meeting", "climate.meeting_ac", temperature="23")
@@ -117,7 +117,9 @@ async def test_zones_join_the_central_building_without_commands(hass):
         assert hass.states.get(entity(hass, f"{meeting.entry_id}_demand")).state == (
             "cooling_demand"
         )
-        service_call.assert_not_called()
+        # Only the 0.7 outdoor-stand presets; room regulation is off by default.
+        services = {call.args[1] for call in service_call.call_args_list}
+        assert services <= {"set_hvac_mode", "turn_off"}
 
 
 async def test_config_flow_creates_central_then_zone(hass):

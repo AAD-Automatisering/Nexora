@@ -12,9 +12,14 @@ from homeassistant.util import dt as dt_util
 
 from .control import plan
 from .decision import Observation, simulate
-from .demand import calculate_demand, collect_zone
+from .demand import calculate_demand, collect_zone, comfort_limits
 from .engine import GroupMemory, evaluate, observe_mode
-from .executor import PresetMemory, next_correction_check, plan_mode_commands
+from .executor import (
+    ModeCommand,
+    PresetMemory,
+    next_correction_check,
+    plan_mode_commands,
+)
 from .indoor import compare_modes, observe_group, observe_unit
 from .models import Building
 from .observations import (
@@ -26,8 +31,32 @@ from .observations import (
 )
 from .override import CommandTracker, classify_transition, update_override
 from .presence import MotionMemory, Occupancy, motion_state, occupancy, read_presence
+from .thermostat import (
+    UNIT_MODES,
+    RoomUnitControl,
+    SetpointPlan,
+    Thermostat,
+    active_band,
+    plan_fan,
+    plan_room_mode,
+    plan_room_unit,
+    plan_setpoint,
+    room_demand,
+    safe_modes,
+    update_thermostat,
+)
 
 _LOGGER = logging.getLogger(__name__)
+# A setpoint change right after a Zonentra command is the unit settling (an
+# integration may restore its own setpoint on switch-on), not a person.
+SETPOINT_SETTLE_SECONDS = 60
+
+
+def _setpoint(value) -> str | None:
+    try:
+        return f"{float(value):.1f}"
+    except TypeError, ValueError:
+        return None
 
 
 def _origin(event) -> str:
@@ -77,6 +106,20 @@ class BuildingRuntime:
         self.motion_memories: dict[str, MotionMemory] = {}
         self.zone_occupancy: dict[str, Occupancy] = {}
         self._motion_checks: list = []
+        # 0.9 room thermostats (central layout). Persisted by the entry setup.
+        self.thermostats: dict[str, Thermostat] = {}
+        self.thermostat_store = None
+        self.thermostat_cache: dict | None = None  # survives central reloads
+        self.zone_bands: dict[str, tuple[str, str]] = {}
+        self.comfort: dict[str, tuple[Reading, Reading]] = {}
+        self.room_controls: dict[str, RoomUnitControl] = {}
+        self.setpoint_plans: dict[str, SetpointPlan] = {}
+        self.setpoint_sent: dict = {}
+        self.setpoint_tracker = CommandTracker()
+        self.last_command_at: dict = {}
+        self._setpoint_checks: list = []
+        self.mode_applied: dict[str, str] = {}  # dry / fan_only set per unit
+        self.fan_applied: dict[str, str] = {}  # fan speed sent per unit
         # 0.5 simulated control. In memory only: nothing survives a restart.
         self.overrides = {}
         self.last_transitions = {}
@@ -136,6 +179,19 @@ class BuildingRuntime:
             self.building.settings.outdoor_max_age_seconds,
         )
         self._occupancy(sources, now)
+        bands, comfort = {}, {}
+        for zone in self.building.zones:
+            thermostat = self.thermostat(zone.id)
+            bands[zone.id] = active_band(
+                thermostat.preset, self.zone_occupancy[zone.id]
+            )
+            band = (thermostat.heating_limit, thermostat.cooling_limit)
+            comfort[zone.id] = band if thermostat.has_band else None
+        self.zone_bands = bands
+        self.comfort = {
+            zone.id: comfort_limits(zone, sources, now, comfort[zone.id])
+            for zone in self.building.zones
+        }
         self.zone_snapshots = {
             zone.id: collect_zone(
                 self.building,
@@ -143,20 +199,23 @@ class BuildingRuntime:
                 sources,
                 now,
                 self.outdoor_temperature,
-                self.zone_occupancy[zone.id].mode,
+                bands[zone.id][0],
+                comfort[zone.id],
             )
             for zone in self.building.zones
         }
-        self.zone_demands = {
-            zone.id: calculate_demand(
+        demands = {}
+        for zone in self.building.zones:
+            demand = calculate_demand(
                 zone,
                 self.zone_snapshots[zone.id],
                 self.zone_demands[zone.id].demand
                 if zone.id in self.zone_demands
                 else "unknown",
             )
-            for zone in self.building.zones
-        }
+            # Thermostat mode: off asks nothing, heat/cool only one direction.
+            demands[zone.id] = room_demand(self.thermostat(zone.id).hvac_mode, demand)
+        self.zone_demands = demands
         for group in self.building.groups:
             mode = observe_mode(group, sources, now)
             current = mode.value if mode.quality == "valid" else "unknown"
@@ -248,6 +307,7 @@ class BuildingRuntime:
         )
         deadlines.extend(due for due, _, _ in self.pending_offs)
         deadlines.extend(self._motion_checks)
+        deadlines.extend(self._setpoint_checks)
         for group_id, control in self.mode_controls.items():
             if control.blocked_until:
                 deadlines.append(control.blocked_until)
@@ -290,6 +350,238 @@ class BuildingRuntime:
             result[zone.id] = occupancy(self.presence, motion)
         self.zone_occupancy = result
         self._motion_checks = checks
+
+    # --- Room thermostats (0.9) -----------------------------------------------
+
+    def thermostat(self, zone_id: str) -> Thermostat:
+        return self.thermostats.get(zone_id) or Thermostat()
+
+    def load_thermostats(self, data: dict | None) -> None:
+        for zone_id, item in ((data or {}).get("zones") or {}).items():
+            self.thermostats[zone_id] = Thermostat.from_dict(item)
+
+    @callback
+    def set_thermostat(self, zone_id: str, **changes) -> Thermostat:
+        """Validated thermostat change (ValueError with a code), then refresh."""
+        zone = next((z for z in self.building.zones if z.id == zone_id), None)
+        if zone is None or not self.active_capable:
+            raise ValueError("zone_not_loaded")
+        new = update_thermostat(self.thermostat(zone_id), zone.hysteresis, **changes)
+        self.thermostats[zone_id] = new
+        if self.thermostat_cache is not None:
+            self.thermostat_cache[zone_id] = new.as_dict()
+        if self.thermostat_store is not None:
+            self.hass.async_create_task(
+                self.thermostat_store.async_save(
+                    {
+                        "zones": {
+                            key: value.as_dict()
+                            for key, value in self.thermostats.items()
+                        }
+                    }
+                )
+            )
+        self.refresh()
+        return new
+
+    def regulated(self, zone_id: str | None) -> bool:
+        """Room regulation really acts (central layout and switched on)."""
+        return self.active_capable and self.thermostat(zone_id).regulation
+
+    def _safe_modes(self, item) -> frozenset[str]:
+        if item.group_id is None:
+            return frozenset({"heat", "cool"})
+        if self.mode_active.get(item.group_id):
+            memory = self.preset_memories.get(item.group_id, PresetMemory())
+            return safe_modes((), memory.mode)
+        running = tuple(
+            self.indoor_units[other.id].selected_mode
+            for other in self.building.equipment
+            if other.kind == "hvac"
+            and other.id != item.id
+            and other.group_id == item.group_id
+            and other.id in self.indoor_units
+            and self.indoor_units[other.id].available
+        )
+        return safe_modes(running, None)
+
+    def _regulate(self, sources, now, busy: set[str], available: bool) -> None:
+        """Switch regulated rooms' units on/off and steer their setpoints."""
+        settings = self.building.settings
+        zones = {zone.id: zone for zone in self.building.zones}
+        controls, plans, checks = {}, {}, []
+        for item in self.building.equipment:
+            if item.kind != "hvac" or item.id not in self.unit_intents:
+                continue
+            intent = self.unit_intents[item.id]
+            enabled = self.regulated(item.zone_id)
+            thermostat = self.thermostat(item.zone_id)
+            unit = self.indoor_units.get(item.id)
+            unit_busy = item.id in busy or self.command_tracker.is_pending(
+                item.entity_id, now
+            )
+            override = self.overrides.get(item.id)
+            if thermostat.hvac_mode in UNIT_MODES:
+                if enabled and override and override.active(now):
+                    control = RoomUnitControl(item.id, "manual_override")
+                elif unit is None or not unit.available:
+                    control = RoomUnitControl(item.id, "indoor_unit_unavailable")
+                elif enabled and (until := self._restart_blocked(item, unit, now)):
+                    control = RoomUnitControl(item.id, "minimum_off_time")
+                    checks.append(until)
+                else:
+                    control = plan_room_mode(
+                        thermostat.hvac_mode,
+                        unit.selected_mode,
+                        item.id,
+                        item.entity_id,
+                        enabled=enabled,
+                        safe_modes=self._safe_modes(item),
+                        busy=unit_busy,
+                        applied=self.mode_applied.get(item.id),
+                    )
+            else:
+                self.mode_applied.pop(item.id, None)
+                control = plan_room_unit(
+                    intent.action,
+                    intent.reason,
+                    item.id,
+                    item.entity_id,
+                    enabled=enabled,
+                    safe_modes=self._safe_modes(item),
+                    busy=unit_busy,
+                )
+            if control.command and not available:
+                control = RoomUnitControl(item.id, "climate_service_unavailable")
+            controls[item.id] = control
+            if control.command:
+                if thermostat.hvac_mode in UNIT_MODES:
+                    self.mode_applied[item.id] = thermostat.hvac_mode
+                self._execute(control.command, now)
+            elif enabled and unit and unit.available and not unit_busy:
+                self._fan(item, unit, thermostat, now, available)
+            plan = self._setpoint_plan(item, zones[item.zone_id], settings, now)
+            if (
+                plan.send
+                and enabled
+                and available
+                and control.command is None
+                and item.id not in busy
+                and not self.setpoint_tracker.is_pending(item.entity_id, now)
+            ):
+                self.setpoint_sent[item.id] = now
+                self._execute(
+                    ModeCommand(
+                        item.id,
+                        item.entity_id,
+                        "set_temperature",
+                        None,
+                        0,
+                        "self_regulation",
+                        plan.setpoint,
+                    ),
+                    now,
+                )
+            elif plan.send:
+                plan = replace(plan, send=False)
+            if plan.next_check and enabled:
+                checks.append(plan.next_check)
+            plans[item.id] = plan
+        self.room_controls = controls
+        self.setpoint_plans = plans
+        self._setpoint_checks = checks
+
+    def _restart_blocked(self, item, unit, now):
+        """Restart protection for a unit that is off (dry / fan_only rooms)."""
+        if unit.selected_mode != "off":
+            return None
+        state = self.hass.states.get(item.entity_id)
+        if state is None or state.last_changed is None:
+            return None
+        until = state.last_changed + timedelta(
+            seconds=self.building.settings.min_off_seconds
+        )
+        return until if now < until else None
+
+    def _fan(self, item, unit, thermostat, now, available) -> None:
+        """Pass the thermostat's fan speed to a running unit, once per change."""
+        if thermostat.fan_mode is None:
+            self.fan_applied.pop(item.id, None)
+            return
+        state = self.hass.states.get(item.entity_id)
+        supported = tuple((state.attributes.get("fan_modes") or ()) if state else ())
+        fan = plan_fan(
+            thermostat.fan_mode,
+            unit.selected_mode,
+            unit.fan_mode,
+            self.fan_applied.get(item.id),
+            supported,
+        )
+        if unit.fan_mode == thermostat.fan_mode:
+            self.fan_applied[item.id] = thermostat.fan_mode
+        if fan is None or not available:
+            return
+        self.fan_applied[item.id] = fan
+        self._execute(
+            ModeCommand(
+                item.id,
+                item.entity_id,
+                "set_fan_mode",
+                None,
+                0,
+                "thermostat_fan_mode",
+                fan_mode=fan,
+            ),
+            now,
+        )
+
+    def unit_options(self, zone_id: str) -> tuple[frozenset[str], tuple[str, ...]]:
+        """HVAC modes and fan speeds that every indoor unit of a zone supports."""
+        states = [
+            self.hass.states.get(item.entity_id)
+            for item in self.building.equipment
+            if item.kind == "hvac" and item.zone_id == zone_id
+        ]
+        states = [state for state in states if state is not None]
+        if not states:
+            return frozenset(), ()
+        modes = frozenset.intersection(
+            *(frozenset(state.attributes.get("hvac_modes") or ()) for state in states)
+        )
+        fans = tuple(
+            fan
+            for fan in states[0].attributes.get("fan_modes") or ()
+            if all(fan in (state.attributes.get("fan_modes") or ()) for state in states)
+        )
+        return modes, fans
+
+    def _setpoint_plan(self, item, zone, settings, now) -> SetpointPlan:
+        unit = self.indoor_units.get(item.id)
+        override = self.overrides.get(item.id)
+        if unit is None or not unit.available:
+            return SetpointPlan("unit_unavailable")
+        if override and override.active(now):
+            return SetpointPlan("manual_override")
+        snapshot = self.zone_snapshots[item.zone_id]
+        state = self.hass.states.get(item.entity_id)
+        attributes = state.attributes if state else {}
+        return plan_setpoint(
+            unit.selected_mode,
+            snapshot.heating_limit.value,
+            snapshot.cooling_limit.value,
+            zone.hysteresis,
+            snapshot.temperature.value
+            if snapshot.temperature.quality == "valid"
+            else None,
+            unit.target_temperature,
+            self.setpoint_sent.get(item.id),
+            now,
+            max_offset=settings.setpoint_max_offset,
+            interval_seconds=settings.setpoint_interval_seconds,
+            step=attributes.get("target_temp_step"),
+            min_temp=attributes.get("min_temp"),
+            max_temp=attributes.get("max_temp"),
+        )
 
     # --- Active outdoor-stand control (0.7) -----------------------------------
 
@@ -373,18 +665,42 @@ class BuildingRuntime:
         self.mode_controls = controls
         due = [item for item in self.pending_offs if item[0] <= now]
         self.pending_offs = [item for item in self.pending_offs if item[0] > now]
+        busy = {
+            command.equipment_id
+            for control in controls.values()
+            for command in control.commands
+        }
         for _, command, target in due:
             source = sources.get(command.entity_id)
             if source is None or source.state != target:
                 # Someone changed the unit during the pulse: leave it alone.
                 self._log(command, now, "skipped_changed_during_pulse")
                 continue
+            intent = self.unit_intents.get(command.equipment_id)
+            zone_id = intent.zone_id if intent else None
+            if self.regulated(zone_id) and intent.desired_mode == target:
+                # 0.9: the regulated room needs the unit on in this mode.
+                self._log(command, now, "skipped_room_demand")
+                continue
+            busy.add(command.equipment_id)
             self._execute(command, now)
+        busy |= {command.equipment_id for _, command, _ in self.pending_offs}
+        self._regulate(sources, now, busy, available)
 
     def _execute(self, command, now) -> None:
-        expected = command.hvac_mode if command.service == "set_hvac_mode" else "off"
-        self.command_tracker.register(command.entity_id, expected, now)
         data = {"entity_id": command.entity_id}
+        if command.service == "set_fan_mode":
+            data["fan_mode"] = command.fan_mode  # An attribute: nothing to track.
+        elif command.service == "set_temperature":
+            expected = _setpoint(command.temperature)
+            self.setpoint_tracker.register(command.entity_id, expected, now)
+            data["temperature"] = command.temperature
+        else:
+            expected = (
+                command.hvac_mode if command.service == "set_hvac_mode" else "off"
+            )
+            self.command_tracker.register(command.entity_id, expected, now)
+        self.last_command_at[command.entity_id] = now
         if command.hvac_mode:
             data["hvac_mode"] = command.hvac_mode
         entry = self._log(command, now, "sending")
@@ -416,6 +732,8 @@ class BuildingRuntime:
             "entity_id": command.entity_id,
             "service": command.service,
             "hvac_mode": command.hvac_mode,
+            "temperature": command.temperature,
+            "fan_mode": command.fan_mode,
             "reason": command.reason,
             "result": result,
         }
@@ -456,20 +774,37 @@ class BuildingRuntime:
                 and old_value != new_value
                 and self.command_tracker.confirm(entity_id, new_value, now)
             )
-            transitions[item.id] = classify_transition(
+            trusted = new is not None and not (
+                new.attributes.get("restored") or new.attributes.get("assumed_state")
+            )
+            transition = classify_transition(
                 old_value,
                 new_value,
                 old_present=old is not None,
-                trusted=new is not None
-                and not (
-                    new.attributes.get("restored")
-                    or new.attributes.get("assumed_state")
-                ),
+                trusted=trusted,
                 zonentra_initiated=initiated,
                 origin=_origin(event),
             )
+            if transition == "attribute_update" and trusted:
+                transition = self._setpoint_transition(entity_id, old, new, event, now)
+            transitions[item.id] = transition
             self.last_transitions[item.id] = (transitions[item.id], now)
         return transitions
+
+    def _setpoint_transition(self, entity_id, old, new, event, now) -> str:
+        """0.9: who changed a running unit's setpoint (attribute only)."""
+        before = _setpoint(old.attributes.get("temperature"))
+        after = _setpoint(new.attributes.get("temperature"))
+        if before == after or after is None:
+            return "attribute_update"
+        if self.setpoint_tracker.confirm(entity_id, after, now):
+            return "zonentra_setpoint"
+        if _origin(event) == "automation":
+            return "automation_setpoint"
+        last = self.last_command_at.get(entity_id)
+        if last and (now - last).total_seconds() < SETPOINT_SETTLE_SECONDS:
+            return "setpoint_after_command"
+        return "manual_setpoint"
 
     def _plan(self, transitions, sources, now) -> None:
         """Update manual overrides and simulate group coordination and intents."""
@@ -487,6 +822,7 @@ class BuildingRuntime:
                 now,
                 enabled=settings.manual_override_enabled,
                 duration_minutes=settings.manual_override_duration_minutes,
+                regulated=self.regulated(item.zone_id),
             )
             if override:
                 overrides[item.id] = override
@@ -554,6 +890,9 @@ class BuildingRuntime:
             "outdoor_temperature_c": self.outdoor_temperature.value,
             "outdoor_temperature_quality": self.outdoor_temperature.quality,
             "building_presence": self.presence,
+            "regulated_zones": sum(
+                self.regulated(zone.id) for zone in self.building.zones
+            ),
             "outdoor_temperature_validation": self.outdoor_temperature.strategy,
             "outdoor_temperature_freshness_verified": (
                 self.outdoor_temperature.freshness_verified

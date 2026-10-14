@@ -1,8 +1,13 @@
-"""Per outdoor unit group: switch for ACTIVE outdoor-stand (mode) control.
+"""Switches for ACTIVE control.
 
-On by default (as decided for this installation). Turning it off stops every
-command for that group immediately; the plan stays visible as simulation. The
-state is restored after a restart; until then no command is sent.
+* Central device, per outdoor unit group: active outdoor-stand (mode) control
+  (0.7). On by default (as decided for this installation). Turning it off
+  stops every command for that group immediately; the plan stays visible as
+  simulation. The state is restored after a restart; until then no command is
+  sent.
+* Zone device: room regulation (0.9). Off by default: the room is only
+  simulated. On, Zonentra switches the room's indoor units on and off and
+  steers their setpoints. Stored with the room thermostat.
 """
 
 from homeassistant.components.switch import SwitchEntity
@@ -10,9 +15,14 @@ from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DOMAIN
+from .entity import ZoneEntity, zone_context
+from .topology import ENTRY_TYPE, ZONE
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
+    if entry.data.get(ENTRY_TYPE) == ZONE:
+        async_add_entities([RoomRegulationSwitch(entry, **zone_context(hass, entry))])
+        return
     runtime = entry.runtime_data
     async_add_entities(
         ActiveModeControlSwitch(entry, group) for group in runtime.building.groups
@@ -53,3 +63,23 @@ class ActiveModeControlSwitch(SwitchEntity, RestoreEntity):
         self._attr_is_on = value
         self.async_write_ha_state()
         self._entry.runtime_data.set_mode_active(self._group_id, value)
+
+
+class RoomRegulationSwitch(ZoneEntity, SwitchEntity):
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:thermostat-auto"
+    _attr_translation_key = "room_regulation"
+
+    def __init__(self, entry, provider, signal, device) -> None:
+        super().__init__(entry, provider, signal, device)
+        self._attr_unique_id = f"{entry.entry_id}_room_regulation"
+
+    @property
+    def is_on(self) -> bool:
+        return self.thermostat.regulation
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._change(regulation=True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._change(regulation=False)

@@ -90,6 +90,9 @@ def building_fields() -> dict:
         vol.Optional("away_cooling_limit"): numeric(5, 35, unit="°C"),
         vol.Optional("motion_delay_seconds"): numeric(0, 600, 1, "s"),
         vol.Optional("motion_off_delay_minutes"): numeric(1, 240, 1, "min"),
+        # Room regulation (0.9): self-regulating setpoint of running units.
+        vol.Optional("setpoint_max_offset"): numeric(0, 5, unit="°C"),
+        vol.Optional("setpoint_interval_seconds"): numeric(60, 3600, 1, "s"),
     }
 
 
@@ -112,6 +115,8 @@ def building_defaults() -> dict:
                 "away_cooling_limit",
                 "motion_delay_seconds",
                 "motion_off_delay_minutes",
+                "setpoint_max_offset",
+                "setpoint_interval_seconds",
             )
         },
     }

@@ -47,6 +47,8 @@ class ModeCommand:
     hvac_mode: str | None
     delay_seconds: int  # 0 = now; turn_off of a preset pulse is delayed
     reason: str  # preset_pulse / switch_running_unit / correct_running_unit
+    temperature: float | None = None  # set_temperature only (0.9 room regulation)
+    fan_mode: str | None = None  # set_fan_mode only (0.9 room thermostat)
 
 
 @dataclass(frozen=True)

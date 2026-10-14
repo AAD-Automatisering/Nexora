@@ -196,4 +196,21 @@ def _zone_diagnostics(hass, entry) -> dict:
             for intent in runtime.unit_intents.values()
             if intent.zone_id == zone_id
         ]
+        # 0.9 room thermostat and what room regulation does per unit.
+        data["thermostat"] = runtime.thermostat(zone_id).as_dict()
+        data["active_band"] = list(runtime.zone_bands.get(zone_id, ()))
+        data["room_regulation"] = {
+            item.id: {
+                "status": control.status,
+                "setpoint": {
+                    **asdict(plan),
+                    "next_check": _iso(plan.next_check),
+                }
+                if (plan := runtime.setpoint_plans.get(item.id))
+                else None,
+            }
+            for item in runtime.building.equipment
+            if item.zone_id == zone_id
+            and (control := runtime.room_controls.get(item.id))
+        }
     return async_redact_data(data, REDACT)

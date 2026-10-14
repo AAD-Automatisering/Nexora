@@ -20,9 +20,11 @@ Er is geen multi-building beheerlaag. Het entry-ID vormt alleen een stabiele
 namespace voor runtime en diagnostische entiteiten.
 
 Zonentra coördineert uiteindelijk comfort, energie en installatiebeperkingen, maar
-versie 0.3 observeert bestaande Home Assistant-entiteiten en berekent vraag en
-groepsvoorstellen. De gepubliceerde entiteiten zijn uitsluitend diagnostische sensoren. Er zijn geen actuatorservices,
-climate-platform, serviceregistraties of serviceaanroepen. De vloerverwarmingsgrens
+versie 0.3 observeerde alleen bestaande Home Assistant-entiteiten en berekende vraag en
+groepsvoorstellen. Sinds 0.7 zet Zonentra de stand van de binnenunits per groep, en
+sinds 0.9 heeft iedere ruimte een eigen thermostaat (climate-platform) met een
+ruimteregeling die per ruimte aan moet worden gezet. Zonentra registreert geen
+eigen services. De vloerverwarmingsgrens
 van 16 °C wordt nergens als verstelbaar setpoint opgeslagen of geschreven.
 Lokale KNX-veiligheid en bestaande VTherm/KNX/Shelly-automations blijven functioneren.
 
@@ -94,8 +96,36 @@ er is geen fysieke terugmelding. Zonentra vervangt daarom de handmatige
 gewenste groepsmodus. Dit is bewust de kleinste actieve stap: alleen de modus,
 alleen voor de centrale opbouw, met een noodstop-schakelaar per groep, CommandTracker
 voor eigen commando's, een commandolog met resultaat en opslag van de laatst gezette
-stand. Aan/uit per ruimte en setpoints blijven gesimuleerd
-(`active_switch_permitted` blijft false).
+stand. Aan/uit per ruimte en setpoints volgen in 0.9 als ruimteregeling, per
+ruimte aan te zetten (`active_switch_permitted` van de gesimuleerde
+groepsomschakeling blijft false).
+
+## Aanwezigheid en beweging (0.8)
+
+`presence.py` is puur: de aanwezigheid van het gebouw (centrale configuratie) en de
+beweging per ruimte (vroegere bezettingssensor) bepalen per ruimte de band comfort,
+eco of afwezig. De runtime voert de band als extra invoer aan `collect_zone()`; de
+rest van de rekenkern is ongewijzigd. Bewegingsdeadlines lopen mee in de ene timer.
+
+## Ruimtethermostaat en ruimteregeling (0.9)
+
+Zoals bij Versatile Thermostat krijgt iedere ruimte een eigen thermostaat. De
+bedieningsentiteiten (climate, number, switch) staan op het ruimteapparaat, maar
+hun toestand staat in de centrale runtime (`runtime.thermostats`), net als de
+sensoren van de ruimte: een ruimte-item rekent nooit zelf. `thermostat.py` is puur
+(band, aan/uit-besluit, setpoint); `runtime._regulate()` voert uit. Opslag:
+`zonentra.<centrale>.thermostats`, met een kopie in `hass.data` die herladen van de
+centrale configuratie overleeft.
+
+Grenzen van de ruimteregeling:
+- standaard uit per ruimte; alleen de nieuwe opbouw;
+- kiest nooit de buitenunitstand: inschakelen alleen in de klaargezette stand
+  (of zonder standregeling de stand van de units die al draaien);
+- één eigenaar per commando-ronde: units waar de standregeling mee bezig is
+  (commando of openstaande uit-puls) worden overgeslagen;
+- elk commando via de bestaande CommandTracker (modus) of een aparte
+  setpoint-tracker, met commandolog; mensen gaan voor via Manual Override;
+- vloerverwarming, ventilatie en zonwering blijven simulatie.
 
 ## Config entries (0.6)
 

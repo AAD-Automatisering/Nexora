@@ -1,14 +1,14 @@
 """Compact read-only diagnostics for the building, zones, indoor units and groups."""
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
-from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 
-from . import ZonentraConfigEntry, central_entry, entry_type
+from . import ZonentraConfigEntry, entry_type
 from .const import DOMAIN
+from .entity import zone_context
 from .models import Equipment, Zone
 from .observations import describe
 from .topology import ZONE, zone_equipment
@@ -57,36 +57,18 @@ def _building_entities(entry) -> list:
 
 def _zone_entities(hass, entry) -> list:
     """A zone device with its demand and indoor-unit sensors (central runtime)."""
-    central = central_entry(hass)
-
-    def provider():
-        # The central runtime already notifies while its setup is in progress.
-        if central and central.state in (
-            ConfigEntryState.LOADED,
-            ConfigEntryState.SETUP_IN_PROGRESS,
-        ):
-            return getattr(central, "runtime_data", None)
-        return None
-
     options = dict(entry.options)
-    shared = {
-        "provider": provider,
-        "signal": f"{DOMAIN}_{central.entry_id}_updated",
-        "device": DeviceInfo(
-            identifiers={(DOMAIN, entry.entry_id)},
-            name=entry.title,
-            manufacturer="Zonentra",
-            model="Zone",
-        ),
-    }
+    shared = zone_context(hass, entry)
+    zone = Zone(options["id"], options.get("name", entry.title))
     entities = [
         ZoneDemandSensor(
             entry,
-            Zone(options["id"], options.get("name", entry.title)),
+            zone,
             unique_id=f"{entry.entry_id}_demand",
             translation_key="room_demand",
             **shared,
-        )
+        ),
+        ActiveBandSensor(entry, zone, **shared),
     ]
     for record in zone_equipment(options):
         if record["kind"] != "hvac":
@@ -198,6 +180,22 @@ class ZoneDemandSensor(ZonentraDiagnosticSensor):
             "motion": item.motion,
         }
 
+    def _thermostat(self) -> dict:
+        """0.9 room thermostat; the band may differ from motion by preset."""
+        runtime = self.runtime
+        if not runtime.active_capable:
+            return {}
+        thermostat = runtime.thermostat(self._zone.id)
+        band, reason = runtime.zone_bands[self._zone.id]
+        return {
+            "read_only": not runtime.regulated(self._zone.id),
+            "thermostat_mode": thermostat.hvac_mode,
+            "thermostat_preset": thermostat.preset,
+            "active_band": band,
+            "active_band_reason": reason,
+            "room_regulation": runtime.regulated(self._zone.id),
+        }
+
     @property
     def native_value(self):
         return self.runtime.zone_demands[self.zone.id].demand
@@ -242,6 +240,7 @@ class ZoneDemandSensor(ZonentraDiagnosticSensor):
             "occupancy": snapshot.occupancy.value or "unknown",
             # 0.8: which band applies and why (presence wins over motion).
             **self._occupancy(),
+            **self._thermostat(),
             "open_contacts": sum(
                 contact.value == "open" for contact in snapshot.contacts
             ),
@@ -399,6 +398,42 @@ class DerivedGroupModeSensor(ZonentraDiagnosticSensor):
         }
 
 
+class ActiveBandSensor(ZonentraDiagnosticSensor):
+    """The band the zone thermostat applies now: comfort, eco or away."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["comfort", "eco", "away"]
+    _attr_icon = "mdi:account-clock-outline"
+    _attr_translation_key = "active_band"
+    _attr_entity_category = None  # Shown with the controls, like VTherm presets.
+
+    def __init__(self, entry, zone, **shared):
+        super().__init__(entry, **shared)
+        self._zone = zone
+        self._attr_unique_id = f"{entry.entry_id}_active_band"
+
+    def _present(self, runtime) -> bool:
+        return self._zone.id in runtime.zone_bands
+
+    @property
+    def native_value(self):
+        return self.runtime.zone_bands[self._zone.id][0]
+
+    @property
+    def extra_state_attributes(self):
+        runtime = self.runtime
+        snapshot = runtime.zone_snapshots[self._zone.id]
+        occupancy = runtime.zone_occupancy.get(self._zone.id)
+        return {
+            "reason": runtime.zone_bands[self._zone.id][1],
+            "preset": runtime.thermostat(self._zone.id).preset,
+            "heating_limit_c": snapshot.heating_limit.value,
+            "cooling_limit_c": snapshot.cooling_limit.value,
+            "building_presence": occupancy.presence if occupancy else None,
+            "motion": occupancy.motion if occupancy else None,
+        }
+
+
 def _iso(value):
     return value.isoformat() if value else None
 
@@ -457,7 +492,36 @@ class UnitControlSensor(ZonentraDiagnosticSensor):
             "seconds_since_transition": intent.seconds_since_transition,
             "group_coordination_phase": intent.coordination_phase,
             "availability": intent.availability,
+            **self._room_regulation(),
             "evaluated_at": _iso(self.runtime.evaluated_at),
+        }
+
+    def _room_regulation(self) -> dict:
+        """0.9: what room regulation does with this unit (or would do)."""
+        runtime = self.runtime
+        if not runtime.active_capable:
+            return {}
+        active = runtime.regulated(self.item.zone_id)
+        control = runtime.room_controls.get(self.item.id)
+        plan = runtime.setpoint_plans.get(self.item.id)
+        return {
+            "simulation": not active,
+            "read_only": not active,
+            "room_regulation": active,
+            "room_regulation_status": control.status if control else None,
+            "setpoint_status": plan.status if plan else None,
+            "setpoint_target": plan.setpoint if plan else None,
+            "setpoint_base": plan.base if plan else None,
+            "setpoint_offset": plan.offset if plan else None,
+            "last_commands": [
+                {
+                    key: entry[key]
+                    for key in ("at", "service", "hvac_mode", "temperature", "reason")
+                }
+                | {"result": entry["result"]}
+                for entry in runtime.command_log
+                if entry["equipment_id"] == self.item.id
+            ][-5:],
         }
 
 

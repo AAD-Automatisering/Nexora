@@ -47,8 +47,13 @@ def collect_zone(
     now: datetime,
     outdoor_temperature: Reading | None = None,
     band: str = "comfort",
+    comfort: tuple[float, float] | None = None,
 ) -> ZoneSnapshot:
-    """Snapshot of one zone; ``band`` eco/away replaces the comfort limits."""
+    """Snapshot of one zone; ``band`` eco/away replaces the comfort limits.
+
+    ``comfort`` is the room thermostat's own band (0.9); it replaces the
+    configured comfort limits, never the central eco/away bands.
+    """
     # Measurements follow the zone strategy; state_based applies no age limit.
     max_age = max_age_for(zone.sensor_validation, zone.max_age_seconds)
 
@@ -57,15 +62,6 @@ def collect_zone(
         if entity is None:
             return Reading(None, "missing", reason="not_configured")
         return read(sources.get(entity), kind, now, max_age)
-
-    def limits(entity, static):
-        # Limit entities are settings (number/input_number) that only change on
-        # demand; their age is never evidence of a fault.
-        return (
-            read(sources.get(entity), "limit", now)
-            if entity
-            else configured_limit(static)
-        )
 
     def equipment(kind):
         return tuple(
@@ -79,8 +75,7 @@ def collect_zone(
         heating = configured_limit(getattr(settings, f"{band}_heating_limit"))
         cooling = configured_limit(getattr(settings, f"{band}_cooling_limit"))
     else:
-        heating = limits(zone.heating_limit_entity, zone.heating_limit)
-        cooling = limits(zone.cooling_limit_entity, zone.cooling_limit)
+        heating, cooling = comfort_limits(zone, sources, now, comfort)
     return ZoneSnapshot(
         zone.id,
         numeric("temperature_entity", "temperature"),
@@ -104,6 +99,31 @@ def collect_zone(
         equipment("hvac"),
         equipment("floor_heating"),
         equipment("shading"),
+    )
+
+
+def comfort_limits(
+    zone: Zone,
+    sources: Mapping[str, SourceState],
+    now: datetime,
+    comfort: tuple[float, float] | None = None,
+) -> tuple[Reading, Reading]:
+    """The room's comfort band: thermostat band, else the configured limits."""
+    if comfort is not None:
+        return configured_limit(comfort[0]), configured_limit(comfort[1])
+
+    def limits(entity, static):
+        # Limit entities are settings (number/input_number) that only change on
+        # demand; their age is never evidence of a fault.
+        return (
+            read(sources.get(entity), "limit", now)
+            if entity
+            else configured_limit(static)
+        )
+
+    return (
+        limits(zone.heating_limit_entity, zone.heating_limit),
+        limits(zone.cooling_limit_entity, zone.cooling_limit),
     )
 
 

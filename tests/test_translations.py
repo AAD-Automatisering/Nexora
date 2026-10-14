@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from custom_components.zonentra.thermostat import PRESETS
+
 ROOT = Path(__file__).parents[1] / "custom_components" / "zonentra"
 FILES = {
     "strings": ROOT / "strings.json",
@@ -195,3 +197,40 @@ def test_every_sensor_state_has_a_label(language, key, states):
     assert label(language, "entity", "sensor", key, "name")
     for state in states:
         assert label(language, "entity", "sensor", key, "state", state)
+
+
+# 0.9: control entities on the zone and central devices, and service errors.
+@pytest.mark.parametrize("language", list(FILES))
+@pytest.mark.parametrize(
+    ("platform", "key"),
+    [
+        ("switch", "active_mode_control"),
+        ("switch", "room_regulation"),
+        ("number", "comfort_heating_limit"),
+        ("number", "comfort_cooling_limit"),
+    ],
+)
+def test_control_entities_have_a_name(language, platform, key):
+    assert label(language, "entity", platform, key, "name")
+
+
+@pytest.mark.parametrize("language", list(FILES))
+@pytest.mark.parametrize("preset", PRESETS)
+def test_thermostat_presets_are_translated(language, preset):
+    path = ("entity", "climate", "thermostat", "state_attributes", "preset_mode")
+    assert label(language, *path, "state", preset)
+
+
+def service_error_codes():
+    source = "".join(
+        (ROOT / name).read_text()
+        for name in ("thermostat.py", "runtime.py", "entity.py")
+    )
+    codes = set(re.findall(r'ValueError\("(\w+)"\)', source))
+    return sorted(codes | set(re.findall(r'translation_key="(\w+)"', source)))
+
+
+@pytest.mark.parametrize("language", list(FILES))
+@pytest.mark.parametrize("code", service_error_codes())
+def test_every_service_error_has_a_message(language, code):
+    assert label(language, "exceptions", code, "message")

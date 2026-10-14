@@ -93,6 +93,9 @@ class BuildingSettings:
     away_cooling_limit: float = 30.0
     motion_delay_seconds: float = 30.0
     motion_off_delay_minutes: float = 30.0
+    # 0.9 room regulation: self-regulating setpoint of running indoor units.
+    setpoint_max_offset: float = 2.0
+    setpoint_interval_seconds: float = 300.0
 
 
 def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
@@ -206,6 +209,8 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
             raise ValueError("invalid_limits")
     _range(settings.motion_delay_seconds, 0, 600)
     _range(settings.motion_off_delay_minutes, 1, 240)
+    _range(settings.setpoint_max_offset, 0, 5)
+    _range(settings.setpoint_interval_seconds, 60, 3600)
     _validate_sensor_validation(settings)
     _validate_limits(settings)
     zones, groups, equipment = (

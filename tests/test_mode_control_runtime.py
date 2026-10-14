@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from homeassistant.core import Context
 from homeassistant.helpers import entity_registry as er
+from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
@@ -24,7 +25,10 @@ from tests.test_entry_layout import (
 UNIT = "climate.west_ac"
 
 
-def mock_climate(hass):
+async def mock_climate(hass):
+    # 0.9: the zone thermostat loads the climate integration. Set it up first,
+    # so its real services do not replace the mocks.
+    assert await async_setup_component(hass, "climate", {})
     return (
         async_mock_service(hass, "climate", "set_hvac_mode"),
         async_mock_service(hass, "climate", "turn_off"),
@@ -55,7 +59,7 @@ def switch_id(hass, central):
 
 
 async def test_preset_pulse_without_override_and_restart_memory(hass):
-    set_mode, turn_off = mock_climate(hass)
+    set_mode, turn_off = await mock_climate(hass)
     central, zone = await office(hass)
     runtime = central.runtime_data
     assert hass.states.get(switch_id(hass, central)).state == "on"  # Active by default.
@@ -89,7 +93,7 @@ async def test_preset_pulse_without_override_and_restart_memory(hass):
 
 
 async def test_wrong_manual_mode_is_corrected_and_automation_is_no_override(hass):
-    set_mode, _ = mock_climate(hass)
+    set_mode, _ = await mock_climate(hass)
     central, _ = await office(hass)
     runtime = central.runtime_data
     set_mode.clear()
@@ -116,7 +120,7 @@ async def test_wrong_manual_mode_is_corrected_and_automation_is_no_override(hass
 async def test_kill_switch_stops_commands_and_group_change_switches_units(
     hass, freezer
 ):
-    set_mode, _ = mock_climate(hass)
+    set_mode, _ = await mock_climate(hass)
     central, _ = await office(hass)
     set_mode.clear()
     # Finish the first preset pulse: heat (ours), off after a few seconds.
@@ -147,7 +151,7 @@ async def test_kill_switch_stops_commands_and_group_change_switches_units(
 
 
 async def test_minimum_switch_interval_and_missing_climate_service(hass, freezer):
-    set_mode, _ = mock_climate(hass)
+    set_mode, _ = await mock_climate(hass)
     central, _ = await office(hass)
     set_mode.clear()
     hass.states.async_set("sensor.west_temperature", "25", CELSIUS)
@@ -162,6 +166,8 @@ async def test_minimum_switch_interval_and_missing_climate_service(hass, freezer
 
 
 async def test_no_climate_service_means_no_commands(hass):
+    assert await async_setup_component(hass, "climate", {})
+    hass.services.async_remove("climate", "set_hvac_mode")
     central, _ = await office(hass)
     control = central.runtime_data.mode_controls["outdoor_1"]
     assert control.status == "climate_service_unavailable"
