@@ -37,7 +37,8 @@
           "motion_delay_seconds": "Motion detection delay (seconds)",
           "motion_off_delay_minutes": "Time occupied after last motion (minutes)",
           "setpoint_max_offset": "Room regulation: maximum setpoint correction of an indoor unit (°C)",
-          "setpoint_interval_seconds": "Room regulation: minimum time between setpoint changes (seconds)"
+          "setpoint_interval_seconds": "Room regulation: minimum time between setpoint changes (seconds)",
+          "window_delay_seconds": "Open window: delay before the room stops (seconds)"
         }
       },
       "zone": {
@@ -57,7 +58,10 @@
           "contact_entities": "Window and door contacts (optional)",
           "floor_heating_entities": "Floor heating (optional)",
           "shading_entities": "Shading (optional)",
-          "ventilation_entities": "Ventilation (optional)"
+          "ventilation_entities": "Ventilation (optional)",
+          "vane_entity": "Vane (optional; select, number or switch entity of the indoor unit)",
+          "vane_cool_value": "Vane when cooling (up): option, number, or on/off for a switch",
+          "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch"
         }
       },
       "zone_parameters": {
@@ -202,7 +206,8 @@
           "motion_delay_seconds": "Motion detection delay (seconds)",
           "motion_off_delay_minutes": "Time occupied after last motion (minutes)",
           "setpoint_max_offset": "Room regulation: maximum setpoint correction of an indoor unit (°C)",
-          "setpoint_interval_seconds": "Room regulation: minimum time between setpoint changes (seconds)"
+          "setpoint_interval_seconds": "Room regulation: minimum time between setpoint changes (seconds)",
+          "window_delay_seconds": "Open window: delay before the room stops (seconds)"
         }
       },
       "zone_settings": {
@@ -222,7 +227,10 @@
           "contact_entities": "Window and door contacts (optional)",
           "floor_heating_entities": "Floor heating (optional)",
           "shading_entities": "Shading (optional)",
-          "ventilation_entities": "Ventilation (optional)"
+          "ventilation_entities": "Ventilation (optional)",
+          "vane_entity": "Vane (optional; select, number or switch entity of the indoor unit)",
+          "vane_cool_value": "Vane when cooling (up): option, number, or on/off for a switch",
+          "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch"
         }
       },
       "zone_parameters": {
@@ -340,6 +348,45 @@
           "eco": "Eco",
           "away": "Away"
         }
+      },
+      "presence": {
+        "name": "Presence",
+        "state": {
+          "present": "Present",
+          "absent": "Absent",
+          "unknown": "Unknown",
+          "not_configured": "Not configured"
+        }
+      },
+      "safety": {
+        "name": "Safety",
+        "state": {
+          "safe": "Safe",
+          "sensor_fault": "Sensor fault"
+        }
+      },
+      "window": {
+        "name": "Window",
+        "state": {
+          "closed": "Closed",
+          "opening": "Open (waiting)",
+          "open": "Open",
+          "bypass": "Bypass",
+          "not_configured": "Not configured",
+          "unknown": "Unknown"
+        }
+      },
+      "regulated_setpoint": {
+        "name": "Regulated setpoint"
+      },
+      "ema_temperature": {
+        "name": "Smoothed temperature"
+      },
+      "temperature_slope": {
+        "name": "Temperature trend"
+      },
+      "auto_fan": {
+        "name": "Auto fan speed"
       }
     },
     "switch": {
@@ -348,6 +395,9 @@
       },
       "room_regulation": {
         "name": "Room regulation"
+      },
+      "window_bypass": {
+        "name": "Window bypass"
       }
     },
     "climate": {
@@ -355,10 +405,14 @@
         "state_attributes": {
           "preset_mode": {
             "state": {
-              "activity": "Activity (presence and motion)",
               "comfort": "Comfort",
               "eco": "Eco",
               "away": "Away"
+            }
+          },
+          "fan_mode": {
+            "state": {
+              "auto": "Auto"
             }
           }
         }

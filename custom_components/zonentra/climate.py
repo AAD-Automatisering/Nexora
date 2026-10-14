@@ -10,8 +10,8 @@
   as ``auto``; ``dry`` and ``fan_only`` and the fan speeds that every unit
   supports are offered too. With room regulation on, Zonentra runs the units
   in dry / fan_only and passes the fan speed on.
-* Presets: ``activity`` (presence and motion choose comfort/eco/away) or a
-  fixed comfort / eco / away. The band that applies is an attribute.
+* Presets: ``comfort`` (presence and motion may lower it to eco/away) or a
+  fixed eco / away. The band that applies is an attribute.
 * Whether Zonentra really switches the room's indoor units is the separate
   "Room regulation" switch (off by default: simulation only).
 """
@@ -27,6 +27,7 @@ from homeassistant.components.climate import (
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
 from .entity import ZoneEntity, zone_context
+from .roomstate import AUTO_FAN
 from .thermostat import PRESETS, UNIT_MODES, single_target
 
 BASE_FEATURES = (
@@ -88,7 +89,11 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
 
     @property
     def fan_modes(self) -> list[str] | None:
-        return list(self._options()[1]) or None
+        """The units' fan speeds; plus Zonentra's ``auto`` if they have none."""
+        fans = list(self._options()[1])
+        if fans and AUTO_FAN not in fans:
+            fans.insert(0, AUTO_FAN)
+        return fans or None
 
     @property
     def fan_mode(self) -> str | None:
@@ -188,6 +193,8 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
             "zone_demand": demand.demand,
             "zone_demand_reason": demand.reason,
             "room_regulation": runtime.regulated(self._zone_id),
+            "window": runtime.windows.get(self._zone_id),
+            "safety": runtime.safety.get(self._zone_id, ("unknown",))[0],
         }
 
     async def async_set_temperature(self, **kwargs) -> None:

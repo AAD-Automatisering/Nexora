@@ -8,6 +8,7 @@
 * Zone device: room regulation (0.9). Off by default: the room is only
   simulated. On, Zonentra switches the room's indoor units on and off and
   steers their setpoints. Stored with the room thermostat.
+* Zone device: window bypass (0.10): an open window is ignored.
 """
 
 from homeassistant.components.switch import SwitchEntity
@@ -21,7 +22,13 @@ from .topology import ENTRY_TYPE, ZONE
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     if entry.data.get(ENTRY_TYPE) == ZONE:
-        async_add_entities([RoomRegulationSwitch(entry, **zone_context(hass, entry))])
+        context = zone_context(hass, entry)
+        async_add_entities(
+            [
+                RoomRegulationSwitch(entry, **context),
+                WindowBypassSwitch(entry, **context),
+            ]
+        )
         return
     runtime = entry.runtime_data
     async_add_entities(
@@ -83,3 +90,24 @@ class RoomRegulationSwitch(ZoneEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         self._change(regulation=False)
+
+
+class WindowBypassSwitch(ZoneEntity, SwitchEntity):
+    """Ignore an open window in this room (like VTherm's window bypass)."""
+
+    _attr_icon = "mdi:window-shutter-open"
+    _attr_translation_key = "window_bypass"
+
+    def __init__(self, entry, provider, signal, device) -> None:
+        super().__init__(entry, provider, signal, device)
+        self._attr_unique_id = f"{entry.entry_id}_window_bypass"
+
+    @property
+    def is_on(self) -> bool:
+        return self.thermostat.window_bypass
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._change(window_bypass=True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._change(window_bypass=False)

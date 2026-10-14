@@ -1,4 +1,4 @@
-# Zonentra 0.9.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.10.0 — uitlegbare klimaatintelligentie
 
 Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
 commando en verandert ook niet de intern bijgehouden actuele modus. De actieve
@@ -434,7 +434,8 @@ geen override. Dit is een sterke aanwijzing, geen bewijs.
 herlaad van de centrale configuratie een net gemaakte wijziging niet verliest.
 
 **Band.** `active_band(preset, bezetting)`: bij een afwezig gebouw altijd `away`;
-preset `activity` volgt de bezetting uit 0.8; anders de vaste preset. De
+preset `comfort` volgt de bezetting uit 0.8 (zonder beweging eco); `eco` en
+`away` zijn vaste presets. De
 comfortband is de eigen band van de thermostaat als die is ingesteld, anders de
 geconfigureerde grenzen (`demand.comfort_limits`). Eco en afwezig blijven centraal.
 Een eigen band moet voldoen aan `verwarmen + 2·hysterese < koelen`, beide 5–35 °C.
@@ -492,6 +493,37 @@ eigen setpoint bevestigt, `automation_setpoint` met een `parent_id`-context en
 kunnen alleen aan- en uitschakelen, dus zo'n wijziging komt van de unit of gateway
 zelf en wordt na de wachttijd teruggestuurd. Alleen een wijziging door een
 HA-gebruiker (`user_id`) is `manual_setpoint`.
+
+## Ruimtetoestand (0.10)
+
+`roomstate.py` is puur.
+
+**Raam.** `window_state`: geen contacten → `not_configured`; geen open contact →
+`closed` (alle contacten ongeldig → `unknown`; een onbekend contact telt als dicht);
+bypass → `bypass`; anders `opening` tot `window_delay_seconds` (standaard 30 s) na
+het eerste open contact, daarna `open`. Bij `open` wordt de klimaatvraag `neutral`
+(`window_open`) en zet de ruimteregeling draaiende units direct uit, zonder
+minimale aantijd; er gaat niets aan tot het raam dicht is.
+
+**Veiligheid.** `safe` als de ruimtetemperatuur `valid` is, anders `sensor_fault`
+(de klimaatvraag is dan al `unknown` en er wordt niet op temperatuur geregeld).
+
+**Trend.** Per nieuwe meting (nieuwe `reported_at`) een exponentieel gemiddelde
+`ema += α·(T − ema)` met `α = 1 − e^(−Δt/300 s)`, en de helling
+`(ema_nieuw − ema_oud)/Δt` in °C/h, gladgestreken met tijdconstante 900 s. Een
+onveranderde waarde wordt na 600 s opnieuw bemonsterd, zodat de helling terugloopt
+naar nul. Alleen in het geheugen.
+
+**Automatische ventilator.** Alleen als de units zelf geen `auto` hebben. Afstand =
+verwarmen: grens + hysterese − T; koelen: T − (grens − hysterese). Stand = de
+`int(afstand / 0,5)`-de van de units (zonder `off`), begrensd op de hoogste; zonder
+verwarmen of koelen de laagste. Gestuurd via `set_fan_mode`, eenmaal per gekozen
+stand en hooguit eens per `setpoint_interval_seconds`.
+
+**Lamel.** Draaiende units van de ruimte in `cool`/`dry` → koelstand, in `heat` →
+verwarmstand (`vane_mode`). Via `select.select_option`, `number.set_value` of `switch.turn_on/turn_off`
+(ook `input_*`; een schakelaar voor lamel auto/stop of swing/stop), eenmaal per start of modewissel; alle units uit wist het
+geheugen, zodat de volgende start de stand opnieuw zet.
 
 ## Events en herbeoordeling
 

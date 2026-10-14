@@ -33,7 +33,7 @@ NOW = datetime(2026, 10, 14, 16, tzinfo=UTC)
 def test_defaults_keep_0_8_behaviour():
     thermostat = Thermostat()
     assert thermostat.hvac_mode == "heat_cool"
-    assert thermostat.preset == "activity"
+    assert thermostat.preset == "comfort"
     assert thermostat.regulation is False  # Room regulation is off by default.
     assert not thermostat.has_band
 
@@ -107,14 +107,14 @@ ABSENT = Occupancy("away", "building_absent", "absent", "active")
 @pytest.mark.parametrize(
     ("preset", "occupancy", "expected"),
     [
-        ("activity", OCCUPIED, ("comfort", "motion")),
-        ("activity", NO_MOTION, ("eco", "no_motion")),
-        ("activity", ABSENT, ("away", "building_absent")),
-        ("comfort", NO_MOTION, ("comfort", "preset")),
+        # Comfort follows presence and motion (eco without motion, away).
+        ("comfort", OCCUPIED, ("comfort", "motion")),
+        ("comfort", NO_MOTION, ("eco", "no_motion")),
         ("eco", OCCUPIED, ("eco", "preset")),
         ("away", OCCUPIED, ("away", "preset")),
         # Building absence always wins, also over a fixed preset.
         ("comfort", ABSENT, ("away", "building_absent")),
+        ("away", NO_MOTION, ("away", "preset")),
         ("eco", ABSENT, ("away", "building_absent")),
     ],
 )
@@ -523,3 +523,24 @@ FANS = ("off", "25%", "50%", "75%", "100%")
 )
 def test_fan_speed_is_passed_once(desired, unit_mode, unit_fan, applied, expected):
     assert plan_fan(desired, unit_mode, unit_fan, applied, FANS) == expected
+
+
+def test_window_sensor_options_match_the_window_states():
+    import ast
+    from pathlib import Path
+
+    from custom_components.zonentra.roomstate import WINDOW_STATES
+
+    tree = ast.parse(
+        (Path(__file__).parents[1] / "custom_components/zonentra/sensor.py").read_text()
+    )
+    window = next(
+        node for node in tree.body if getattr(node, "name", "") == "WindowSensor"
+    )
+    options = next(
+        statement.value
+        for statement in window.body
+        if isinstance(statement, ast.Assign)
+        and statement.targets[0].id == "_attr_options"
+    )
+    assert [item.value for item in options.elts] == list(WINDOW_STATES)

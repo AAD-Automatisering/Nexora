@@ -12,7 +12,7 @@ from homeassistant.util import dt as dt_util
 
 from .control import plan
 from .decision import Observation, simulate
-from .demand import calculate_demand, collect_zone, comfort_limits
+from .demand import ZoneDemand, calculate_demand, collect_zone, comfort_limits
 from .engine import GroupMemory, evaluate, observe_mode
 from .executor import (
     ModeCommand,
@@ -31,6 +31,17 @@ from .observations import (
 )
 from .override import CommandTracker, classify_transition, update_override
 from .presence import MotionMemory, Occupancy, motion_state, occupancy, read_presence
+from .roomstate import (
+    AUTO_FAN,
+    Trend,
+    auto_fan,
+    fan_speeds,
+    safety_state,
+    update_trend,
+    vane_command,
+    vane_mode,
+    window_state,
+)
 from .thermostat import (
     UNIT_MODES,
     RoomUnitControl,
@@ -116,6 +127,14 @@ class BuildingRuntime:
         self._setpoint_checks: list = []
         self.mode_applied: dict[str, str] = {}  # dry / fan_only set per unit
         self.fan_applied: dict[str, str] = {}  # fan speed sent per unit
+        # 0.10 room state (like VTherm's sensors): window, safety, trend, fan.
+        self.windows: dict[str, str] = {}
+        self.safety: dict[str, tuple[str, str]] = {}
+        self.trends: dict[str, Trend] = {}
+        self.auto_fans: dict[str, str | None] = {}
+        self.fan_sent_at: dict = {}
+        self._window_checks: list = []
+        self.vane_applied: dict[str, str] = {}  # zone -> heat / cool position set
         # 0.5 simulated control. In memory only: nothing survives a restart.
         self.overrides = {}
         self.last_transitions = {}
@@ -200,6 +219,7 @@ class BuildingRuntime:
             )
             for zone in self.building.zones
         }
+        self._room_state(now)
         demands = {}
         for zone in self.building.zones:
             demand = calculate_demand(
@@ -210,7 +230,13 @@ class BuildingRuntime:
                 else "unknown",
             )
             # Thermostat mode: off asks nothing, heat/cool only one direction.
-            demands[zone.id] = room_demand(self.thermostat(zone.id).hvac_mode, demand)
+            demand = room_demand(self.thermostat(zone.id).hvac_mode, demand)
+            if self.windows[zone.id] == "open" and demand.demand != "unknown":
+                # An open window: the room asks for nothing (like VTherm).
+                demand = ZoneDemand(
+                    zone.id, "neutral", 0.0, 0.0, "window_open", demand.sensor_health
+                )
+            demands[zone.id] = demand
         self.zone_demands = demands
         for group in self.building.groups:
             mode = observe_mode(group, sources, now)
@@ -304,6 +330,7 @@ class BuildingRuntime:
         deadlines.extend(due for due, _, _ in self.pending_offs)
         deadlines.extend(self._motion_checks)
         deadlines.extend(self._setpoint_checks)
+        deadlines.extend(self._window_checks)
         for group_id, control in self.mode_controls.items():
             if control.blocked_until:
                 deadlines.append(control.blocked_until)
@@ -348,6 +375,34 @@ class BuildingRuntime:
         self._motion_checks = checks
 
     # --- Room thermostats (0.9) -----------------------------------------------
+
+    def _room_state(self, now) -> None:
+        """Window, safety and temperature trend per zone (0.10)."""
+        settings = self.building.settings
+        checks = []
+        for zone in self.building.zones:
+            snapshot = self.zone_snapshots[zone.id]
+            state, check = window_state(
+                snapshot.contacts,
+                settings.window_delay_seconds,
+                self.thermostat(zone.id).window_bypass,
+                now,
+            )
+            self.windows[zone.id] = state
+            if check:
+                checks.append(check)
+            self.safety[zone.id] = safety_state(snapshot.temperature)
+            reading = snapshot.temperature
+            if reading.quality == "valid" and isinstance(reading.value, (int, float)):
+                trend = update_trend(
+                    self.trends.get(zone.id),
+                    float(reading.value),
+                    reading.reported_at or now,
+                    now,
+                )
+                if trend is not None:
+                    self.trends[zone.id] = trend
+        self._window_checks = checks
 
     def thermostat(self, zone_id: str) -> Thermostat:
         return self.thermostats.get(zone_id) or Thermostat()
@@ -417,7 +472,24 @@ class BuildingRuntime:
                 item.entity_id, now
             )
             override = self.overrides.get(item.id)
-            if thermostat.hvac_mode in UNIT_MODES:
+            if self.windows.get(item.zone_id) == "open" and enabled:
+                # Open window: running units go off at once (no minimum run
+                # time), nothing starts until it closes.
+                running = unit is not None and unit.selected_mode not in (
+                    "off",
+                    "unknown",
+                )
+                if running and not unit_busy:
+                    control = RoomUnitControl(
+                        item.id,
+                        "turn_off",
+                        ModeCommand(
+                            item.id, item.entity_id, "turn_off", None, 0, "window_open"
+                        ),
+                    )
+                else:
+                    control = RoomUnitControl(item.id, "window_open")
+            elif thermostat.hvac_mode in UNIT_MODES:
                 if enabled and override and override.active(now):
                     control = RoomUnitControl(item.id, "manual_override")
                 elif unit is None or not unit.available:
@@ -455,7 +527,8 @@ class BuildingRuntime:
                     self.mode_applied[item.id] = thermostat.hvac_mode
                 self._execute(control.command, now)
             elif enabled and unit and unit.available and not unit_busy:
-                self._fan(item, unit, thermostat, now, available)
+                if check := self._fan(item, unit, thermostat, now, available):
+                    checks.append(check)
             plan = self._setpoint_plan(item, zones[item.zone_id], settings, now)
             if (
                 plan.send
@@ -499,25 +572,108 @@ class BuildingRuntime:
         )
         return until if now < until else None
 
-    def _fan(self, item, unit, thermostat, now, available) -> None:
-        """Pass the thermostat's fan speed to a running unit, once per change."""
+    def _vanes(self, now) -> None:
+        """Vane up when the room's units cool, down when they heat (0.10).
+
+        Set once per start or mode change; a vane moved by hand afterwards is
+        not fought. Works with the outdoor-stand control, also without room
+        regulation, because it only follows what the units already do.
+        """
+        for zone in self.building.zones:
+            if not zone.vane_entity:
+                continue
+            units = [
+                item
+                for item in self.building.equipment
+                if item.kind == "hvac" and item.zone_id == zone.id
+            ]
+            modes = {
+                unit.selected_mode
+                for item in units
+                if (unit := self.indoor_units.get(item.id)) and unit.available
+            }
+            mode = vane_mode(modes)
+            if mode is None:
+                self.vane_applied.pop(zone.id, None)  # Off: set again on start.
+                continue
+            if self.vane_applied.get(zone.id) == mode:
+                continue
+            command = vane_command(
+                zone.vane_entity, mode, zone.vane_cool_value, zone.vane_heat_value
+            )
+            if command is None:
+                continue
+            domain, service, data = command
+            if not self.hass.services.has_service(domain, service):
+                continue
+            self.vane_applied[zone.id] = mode
+            entry = self._log(
+                ModeCommand(
+                    units[0].id if units else zone.id,
+                    zone.vane_entity,
+                    service,
+                    None,
+                    0,
+                    f"vane_{mode}",
+                    domain=domain,
+                    value=data.get("option", data.get("value", service)),
+                ),
+                now,
+                "sending",
+            )
+            self.hass.async_create_task(self._call(service, data, entry, domain))
+
+    def zone_auto_fan(self, zone_id: str) -> bool:
+        """The thermostat runs Zonentra's automatic fan (units have no auto)."""
+        return self.thermostat(zone_id).fan_mode == AUTO_FAN and (
+            AUTO_FAN not in self.unit_options(zone_id)[1]
+        )
+
+    def _fan(self, item, unit, thermostat, now, available):
+        """Pass the thermostat's fan speed to a running unit, once per change.
+
+        With the automatic fan the speed follows the distance to the target,
+        changed at most once per setpoint interval.
+        """
         if thermostat.fan_mode is None:
             self.fan_applied.pop(item.id, None)
-            return
+            return None
         state = self.hass.states.get(item.entity_id)
         supported = tuple((state.attributes.get("fan_modes") or ()) if state else ())
+        desired = thermostat.fan_mode
+        if self.zone_auto_fan(item.zone_id):
+            snapshot = self.zone_snapshots[item.zone_id]
+            zone = next(z for z in self.building.zones if z.id == item.zone_id)
+            desired = auto_fan(
+                fan_speeds(supported),
+                unit.selected_mode,
+                snapshot.temperature.value
+                if snapshot.temperature.quality == "valid"
+                else None,
+                snapshot.heating_limit.value,
+                snapshot.cooling_limit.value,
+                zone.hysteresis,
+            )
+            self.auto_fans[item.zone_id] = desired
+            last = self.fan_sent_at.get(item.id)
+            interval = self.building.settings.setpoint_interval_seconds
+            if last and (now - last).total_seconds() < interval:
+                if desired != unit.fan_mode:
+                    return last + timedelta(seconds=interval)
+                return None
         fan = plan_fan(
-            thermostat.fan_mode,
+            desired,
             unit.selected_mode,
             unit.fan_mode,
             self.fan_applied.get(item.id),
             supported,
         )
-        if unit.fan_mode == thermostat.fan_mode:
-            self.fan_applied[item.id] = thermostat.fan_mode
+        if unit.fan_mode == desired:
+            self.fan_applied[item.id] = desired
         if fan is None or not available:
-            return
+            return None
         self.fan_applied[item.id] = fan
+        self.fan_sent_at[item.id] = now
         self._execute(
             ModeCommand(
                 item.id,
@@ -682,6 +838,7 @@ class BuildingRuntime:
             self._execute(command, now)
         busy |= {command.equipment_id for _, command, _ in self.pending_offs}
         self._regulate(sources, now, busy, available)
+        self._vanes(now)
 
     def _execute(self, command, now) -> None:
         data = {"entity_id": command.entity_id}
@@ -701,10 +858,10 @@ class BuildingRuntime:
         entry = self._log(command, now, "sending")
         self.hass.async_create_task(self._call(command.service, data, entry))
 
-    async def _call(self, service, data, entry) -> None:
+    async def _call(self, service, data, entry, domain="climate") -> None:
         try:
             await self.hass.services.async_call(
-                "climate", service, data, blocking=True, context=Context()
+                domain, service, data, blocking=True, context=Context()
             )
         except Exception as err:  # noqa: BLE001 - report, never crash the runtime
             entry["result"] = f"failed: {type(err).__name__}"
@@ -729,6 +886,7 @@ class BuildingRuntime:
             "hvac_mode": command.hvac_mode,
             "temperature": command.temperature,
             "fan_mode": command.fan_mode,
+            "value": command.value,
             "reason": command.reason,
             "result": result,
         }

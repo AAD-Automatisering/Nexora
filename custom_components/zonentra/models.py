@@ -18,6 +18,15 @@ ZONE_ENTITY_FIELDS = (
     "cooling_limit_entity",
     "humidity_entity",
     "co2_entity",
+    "vane_entity",
+)
+VANE_DOMAINS = (
+    "select",
+    "input_select",
+    "number",
+    "input_number",
+    "switch",
+    "input_boolean",
 )
 
 
@@ -42,6 +51,11 @@ class Zone:
     sensor_validation: str = STATE_BASED
     use_building_limits: bool = False
     use_building_parameters: bool = False
+    # 0.10 vane: position for cooling (up) and heating (down) of the room's
+    # indoor units, set through a separate entity (select or number).
+    vane_entity: str | None = None
+    vane_cool_value: str | None = None
+    vane_heat_value: str | None = None
 
 
 @dataclass(frozen=True)
@@ -96,6 +110,8 @@ class BuildingSettings:
     # 0.9 room regulation: self-regulating setpoint of running indoor units.
     setpoint_max_offset: float = 2.0
     setpoint_interval_seconds: float = 300.0
+    # 0.10 open window: the room stops after this delay (like VTherm).
+    window_delay_seconds: float = 30.0
 
 
 def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
@@ -211,6 +227,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _range(settings.motion_off_delay_minutes, 1, 240)
     _range(settings.setpoint_max_offset, 0, 5)
     _range(settings.setpoint_interval_seconds, 60, 3600)
+    _range(settings.window_delay_seconds, 0, 3600)
     _validate_sensor_validation(settings)
     _validate_limits(settings)
     zones, groups, equipment = (
@@ -234,7 +251,9 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     for zone in zone_models:
         for field in ZONE_ENTITY_FIELDS:
             domains = (
-                ("binary_sensor",)
+                VANE_DOMAINS
+                if field == "vane_entity"
+                else ("binary_sensor",)
                 if field == "occupancy_entity"
                 else ("sensor", "number", "input_number")
                 if field.endswith("limit_entity")

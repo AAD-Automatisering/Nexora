@@ -111,14 +111,23 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 
 ### Versie 0.9.0 — Zonentra-thermostaat per ruimte (geïmplementeerd)
 
-- [x] Climate-entiteit per ruimte met comfortband, standaardmodi heat/cool/heat_cool/off en presets (activiteit, comfort, eco, afwezig).
+- [x] Climate-entiteit per ruimte met comfortband, standaardmodi heat/cool/heat_cool/off en presets (comfort, eco, afwezig).
 - [x] Comfortband als instellingen op het ruimteapparaat en een sensor Actieve band.
 - [x] Schakelaar Ruimteregeling per ruimte, standaard uit; thermostaat bewaard in HA-opslag.
 - [x] Ruimteregeling: binnenunits aan/uit op de klimaatvraag, alleen in de stand van de buitenunit.
 - [x] Zelfregulerend setpoint op de ruimtesensor, begrensd en met minimale wachttijd.
 - [x] Handmatig uit en handmatig setpoint in een geregelde ruimte starten een Manual Override.
 - [ ] Praktijkperiode met één ruimte: commandolog, setpointgedrag en comfort beoordelen.
-- [ ] Ventilatorstand en raamcontacten (raam open → unit uit) in de ruimteregeling.
+- [x] Ventilatorstand en raamcontacten (raam open → unit uit) in de ruimteregeling (0.10).
+
+### Versie 0.10.0 — ruimtesensoren zoals Versatile Thermostat (geïmplementeerd)
+
+- [x] Sensoren aanwezigheid, veiligheid, raam, geregeld setpoint, gladgestreken temperatuur en temperatuurtrend.
+- [x] Raamdetectie met vertraging en bypass-schakelaar; raam open → units direct uit.
+- [x] Automatische ventilatorstand op de afstand tot het doel.
+- [x] Lamel omhoog bij koelen, omlaag bij verwarmen (select of number).
+- [x] Preset `comfort` volgt aanwezigheid en beweging (vervangt `activity`).
+- [ ] Energie en overbelasting: alleen met vermogensmeting per airco.
 
 ### Vervolg vóór actieve regeling
 

@@ -3,9 +3,13 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.9.0** geeft iedere ruimte een eigen **Zonentra-thermostaat** zoals
+Versie **0.10.0** vult het ruimteapparaat aan met de sensoren en bediening die
+Versatile Thermostat ook heeft: aanwezigheid, veiligheid, raam (met bypass),
+geregeld setpoint, gladgestreken temperatuur, temperatuurtrend en een automatische
+ventilatorstand, plus een lamel die omhoog gaat bij koelen en omlaag bij verwarmen.
+Versie 0.9.0 gaf iedere ruimte een eigen **Zonentra-thermostaat** zoals
 Versatile Thermostat: een climate-entiteit met de comfortband van de ruimte,
-presets (activiteit, comfort, eco, afwezig) en instellingen op het apparaat. Met de
+presets (comfort, eco, afwezig) en instellingen op het apparaat. Met de
 schakelaar **Ruimteregeling** (standaard uit) regelt Zonentra de ruimte echt: de
 binnenunits aan en uit op de klimaatvraag, en een zelfregulerend setpoint op basis
 van de ruimtesensor. Versie 0.8.0 voegde **aanwezigheid en beweging** toe:
@@ -66,6 +70,14 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.10.0 — ruimtesensoren, raam, ventilator en lamel
+
+Werk bij via HACS, herstart Home Assistant en herlaad de browser volledig. Iedere
+ruimte krijgt de nieuwe sensoren en de schakelaar **Raambypass** vanzelf. Raamcontacten
+die je al bij een ruimte had gekoppeld, doen nu echt iets: een open raam stopt de
+ruimte na 30 s (centraal instelbaar). Voor de lamel vul je per ruimte bij
+**Configureren** de lamel-entiteit en de standen voor koelen en verwarmen in.
 
 ### Bijwerken naar 0.9.0 — Zonentra-thermostaat per ruimte
 
@@ -283,6 +295,35 @@ niet voor elke score een aparte entiteit nodig is.
 | Binnenunit Regelactie | turn_on_heat / turn_on_cool / turn_off / correct_mode / hold / blocked | simulation (false bij ruimteregeling), room_regulation, room_regulation_status, setpoint_status, setpoint_target, setpoint_base, setpoint_offset, last_commands, zone, observed_mode, desired_mode, zone_demand, intended_action, steps, reason, blocked_reason, blocked_until, manual_override_active, override_remaining_seconds, override_expires_at, seconds_since_transition, group_coordination_phase, availability, evaluated_at |
 | Buitenunit Gesimuleerde coördinatie | idle / preparing / stopping / waiting / applying / verifying / completed / blocked / failed | simulation, desired_mode, group_mode, group_mode_reason, coordinated_mode, derived_mode, member_indoor_units, available_indoor_units, conflicts, switch_needed, switch_from, switch_to, switch_allowed_in_simulation, active_switch_permitted (altijd false), phase_reason, waiting_until, blockers, planned_actions |
 
+### Ruimtesensoren, raam, ventilator en lamel (0.10)
+
+| Entiteit op het ruimteapparaat | Betekenis |
+|---|---|
+| **Aanwezigheid** | Aanwezigheid van het gebouw zoals die voor deze ruimte geldt (`present`, `absent`, `unknown`, `not_configured`), met beweging als attribuut |
+| **Veiligheid** | `safe`, of `sensor_fault` als de ruimtetemperatuur niet te vertrouwen is; dan regelt Zonentra niet op temperatuur |
+| **Raam** | `closed`, `opening` (open, wacht op de vertraging), `open`, `bypass`, `not_configured`, `unknown` |
+| **Raambypass** (schakelaar) | Negeert een open raam in deze ruimte |
+| **Geregeld setpoint** | Het setpoint waar Zonentra de binnenunit naartoe stuurt (of zou sturen) |
+| **Gladgestreken temperatuur** | Exponentieel gemiddelde van de ruimtetemperatuur (tijdconstante 5 min) |
+| **Temperatuurtrend** | Hoe snel de ruimte opwarmt (+) of afkoelt (−), in °C per uur |
+| **Automatische ventilatorstand** | De stand die de automatische ventilator nu kiest |
+
+- **Open raam:** na de vertraging vraagt de ruimte niets meer. Met Ruimteregeling gaan
+  draaiende units direct uit (ook binnen de minimale aantijd) en gaat er niets aan tot
+  het raam dicht is. Een onbekend contact telt als dicht.
+- **Automatische ventilator:** de thermostaat biedt `auto` als de units zelf geen
+  automatische stand hebben. Met Ruimteregeling kiest Zonentra dan per 0,5 °C afstand
+  tot het doel één stand hoger (bij jullie unit 25 → 50 → 75 → 100%), hooguit eens per
+  setpoint-wachttijd. In `dry` en `fan_only` draait de laagste stand.
+- **Lamel:** stel per ruimte een select-, number- of schakelaar-entiteit in met een
+  stand voor koelen (omhoog) en verwarmen (omlaag); bij een schakelaar (bijvoorbeeld
+  KNX "vane auto/stop", DPT 1.001) zijn de standen `on` of `off`. Zodra een unit van de ruimte gaat koelen
+  (of drogen) of verwarmen, zet Zonentra de lamel eenmaal in die stand; ook zonder
+  Ruimteregeling, want het volgt alleen wat de unit al doet. Na uitschakelen wordt hij
+  bij de volgende start opnieuw gezet; met de hand verplaatsen wordt niet teruggedraaid.
+- Energie en overbelasting (Versatile Thermostat) ontbreken bewust: daarvoor is een
+  vermogensmeter per airco nodig.
+
 ### Zonentra-thermostaat en ruimteregeling (0.9)
 
 Iedere ruimte heeft een eigen thermostaat (climate-entiteit) op haar apparaat:
@@ -296,8 +337,8 @@ Iedere ruimte heeft een eigen thermostaat (climate-entiteit) op haar apparaat:
 | Modus `off` | De ruimte vraagt niets |
 | Ventilatorstand | De standen die alle binnenunits kennen; met ruimteregeling krijgt een draaiende unit de gekozen stand (eenmaal per wijziging) |
 | Doel / onder- en bovengrens | De comfortband: verwarmen tot / koelen vanaf. Zolang je niets instelt, gelden de grenzen van de ruimte of het gebouw |
-| Preset `activity` | Aanwezigheid en beweging kiezen comfort, eco of afwezig (0.8) |
-| Preset `comfort` / `eco` / `away` | Vaste band; een afwezig gebouw gaat altijd voor |
+| Preset `comfort` (standaard) | Comfortband; zonder beweging eco en bij een afwezig gebouw afwezig (0.8) |
+| Preset `eco` / `away` | Vaste band; een afwezig gebouw gaat altijd voor |
 | Comfort verwarmen tot / koelen vanaf | Dezelfde comfortband als instellingen op het apparaat |
 | Sensor **Actieve band** | Welke band nu geldt, met reden en grenzen |
 | Schakelaar **Ruimteregeling** | Standaard uit (simulatie). Aan: Zonentra regelt de binnenunits van deze ruimte echt |
@@ -530,6 +571,7 @@ custom_components/zonentra/
   executor.py                   actieve standregeling: welke modus-commando's nodig zijn
   presence.py                   aanwezigheid (gebouw) en beweging (ruimte) → comfort/eco/afwezig
   thermostat.py                 ruimtethermostaat, band, ruimteregeling en zelfregulerend setpoint
+  roomstate.py                  raam, veiligheid, temperatuurtrend, automatische ventilator, lamel
   entity.py                     gedeelde basis voor bedieningsentiteiten op het ruimteapparaat
   climate.py                    Zonentra-thermostaat per ruimte
   number.py                     comfortband als instellingen op het ruimteapparaat

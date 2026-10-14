@@ -37,7 +37,8 @@
           "motion_delay_seconds": "Bewegingsdetectie-vertraging (seconden)",
           "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)",
           "setpoint_max_offset": "Ruimteregeling: maximale setpointcorrectie van een binnenunit (°C)",
-          "setpoint_interval_seconds": "Ruimteregeling: minimale tijd tussen setpointwijzigingen (seconden)"
+          "setpoint_interval_seconds": "Ruimteregeling: minimale tijd tussen setpointwijzigingen (seconden)",
+          "window_delay_seconds": "Raam open: vertraging voordat de ruimte stopt (seconden)"
         }
       },
       "zone": {
@@ -57,7 +58,10 @@
           "contact_entities": "Raam- en deurcontacten (optioneel)",
           "floor_heating_entities": "Vloerverwarming (optioneel)",
           "shading_entities": "Zonwering (optioneel)",
-          "ventilation_entities": "Ventilatie (optioneel)"
+          "ventilation_entities": "Ventilatie (optioneel)",
+          "vane_entity": "Lamel (optioneel; select-, number- of schakelaar-entiteit van de binnenunit)",
+          "vane_cool_value": "Lamel bij koelen (omhoog): keuze, getal, of on/off bij een schakelaar",
+          "vane_heat_value": "Lamel bij verwarmen (omlaag): keuze, getal, of on/off bij een schakelaar"
         }
       },
       "zone_parameters": {
@@ -202,7 +206,8 @@
           "motion_delay_seconds": "Bewegingsdetectie-vertraging (seconden)",
           "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)",
           "setpoint_max_offset": "Ruimteregeling: maximale setpointcorrectie van een binnenunit (°C)",
-          "setpoint_interval_seconds": "Ruimteregeling: minimale tijd tussen setpointwijzigingen (seconden)"
+          "setpoint_interval_seconds": "Ruimteregeling: minimale tijd tussen setpointwijzigingen (seconden)",
+          "window_delay_seconds": "Raam open: vertraging voordat de ruimte stopt (seconden)"
         }
       },
       "zone_settings": {
@@ -222,7 +227,10 @@
           "contact_entities": "Raam- en deurcontacten (optioneel)",
           "floor_heating_entities": "Vloerverwarming (optioneel)",
           "shading_entities": "Zonwering (optioneel)",
-          "ventilation_entities": "Ventilatie (optioneel)"
+          "ventilation_entities": "Ventilatie (optioneel)",
+          "vane_entity": "Lamel (optioneel; select-, number- of schakelaar-entiteit van de binnenunit)",
+          "vane_cool_value": "Lamel bij koelen (omhoog): keuze, getal, of on/off bij een schakelaar",
+          "vane_heat_value": "Lamel bij verwarmen (omlaag): keuze, getal, of on/off bij een schakelaar"
         }
       },
       "zone_parameters": {
@@ -340,6 +348,45 @@
           "eco": "Eco",
           "away": "Afwezig"
         }
+      },
+      "presence": {
+        "name": "Aanwezigheid",
+        "state": {
+          "present": "Aanwezig",
+          "absent": "Afwezig",
+          "unknown": "Onbekend",
+          "not_configured": "Niet ingesteld"
+        }
+      },
+      "safety": {
+        "name": "Veiligheid",
+        "state": {
+          "safe": "Veilig",
+          "sensor_fault": "Sensorfout"
+        }
+      },
+      "window": {
+        "name": "Raam",
+        "state": {
+          "closed": "Dicht",
+          "opening": "Open (wacht)",
+          "open": "Open",
+          "bypass": "Bypass",
+          "not_configured": "Niet ingesteld",
+          "unknown": "Onbekend"
+        }
+      },
+      "regulated_setpoint": {
+        "name": "Geregeld setpoint"
+      },
+      "ema_temperature": {
+        "name": "Gladgestreken temperatuur"
+      },
+      "temperature_slope": {
+        "name": "Temperatuurtrend"
+      },
+      "auto_fan": {
+        "name": "Automatische ventilatorstand"
       }
     },
     "switch": {
@@ -348,6 +395,9 @@
       },
       "room_regulation": {
         "name": "Ruimteregeling"
+      },
+      "window_bypass": {
+        "name": "Raambypass"
       }
     },
     "climate": {
@@ -355,10 +405,14 @@
         "state_attributes": {
           "preset_mode": {
             "state": {
-              "activity": "Activiteit (aanwezigheid en beweging)",
               "comfort": "Comfort",
               "eco": "Eco",
               "away": "Afwezig"
+            }
+          },
+          "fan_mode": {
+            "state": {
+              "auto": "Auto"
             }
           }
         }

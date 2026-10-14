@@ -100,7 +100,7 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
     assert thermostat.attributes["target_temp_low"] == 22  # Central comfort band.
     assert thermostat.attributes["target_temp_high"] == 24
     assert thermostat.attributes["current_temperature"] == 21
-    assert thermostat.attributes["preset_mode"] == "activity"
+    assert thermostat.attributes["preset_mode"] == "comfort"
     assert thermostat.attributes["active_band"] == "comfort"
     assert thermostat.attributes["room_regulation"] is False
     assert thermostat.attributes["hvac_action"] == "idle"
@@ -165,10 +165,10 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
 
 async def test_thermostat_is_stored(hass, freezer, hass_storage):
     central, _ = await office(hass, freezer)
-    central.runtime_data.set_thermostat("west", preset="comfort")
+    central.runtime_data.set_thermostat("west", preset="eco")
     await hass.async_block_till_done()
     stored = hass_storage[f"{DOMAIN}.{central.entry_id}.thermostats"]["data"]
-    assert stored["zones"]["west"]["preset"] == "comfort"
+    assert stored["zones"]["west"]["preset"] == "eco"
     assert stored["zones"]["west"]["regulation"] is False
 
 
@@ -341,7 +341,8 @@ async def test_thermostat_offers_the_units_options(hass, freezer):
         "fan_only",
         "off",
     ]
-    assert thermostat.attributes["fan_modes"] == KNX["fan_modes"]
+    # Plus Zonentra's automatic fan (0.10), as the units have none of their own.
+    assert thermostat.attributes["fan_modes"] == ["auto", *KNX["fan_modes"]]
     assert thermostat.attributes["fan_mode"] == "50%"
     assert runtime.thermostat("west").hvac_mode == "heat_cool"  # Stored as such.
 

@@ -1,6 +1,11 @@
 """Compact read-only diagnostics for the building, zones, indoor units and groups."""
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
+from homeassistant.const import UnitOfTemperature
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -69,6 +74,18 @@ def _zone_entities(hass, entry) -> list:
             **shared,
         ),
         ActiveBandSensor(entry, zone, **shared),
+        *(
+            sensor(entry, zone, **shared)
+            for sensor in (
+                PresenceSensor,
+                SafetySensor,
+                WindowSensor,
+                RegulatedSetpointSensor,
+                EmaTemperatureSensor,
+                TemperatureSlopeSensor,
+                AutoFanSensor,
+            )
+        ),
     ]
     for record in zone_equipment(options):
         if record["kind"] != "hvac":
@@ -432,6 +449,177 @@ class ActiveBandSensor(ZonentraDiagnosticSensor):
             "building_presence": occupancy.presence if occupancy else None,
             "motion": occupancy.motion if occupancy else None,
         }
+
+
+class ZoneStateSensor(ZonentraDiagnosticSensor):
+    """A room-state sensor on the zone device, like Versatile Thermostat's."""
+
+    _attr_entity_category = None
+    key = ""
+
+    def __init__(self, entry, zone, **shared):
+        super().__init__(entry, **shared)
+        self._zone = zone
+        self._attr_unique_id = f"{entry.entry_id}_{self.key}"
+
+    def _present(self, runtime) -> bool:
+        return self._zone.id in runtime.zone_demands and runtime.active_capable
+
+    def _units(self):
+        runtime = self.runtime
+        return [
+            item
+            for item in runtime.building.equipment
+            if item.zone_id == self._zone.id and item.kind == "hvac"
+        ]
+
+
+class PresenceSensor(ZoneStateSensor):
+    """Building presence as it applies to this room."""
+
+    key = "presence"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["present", "absent", "unknown", "not_configured"]
+    _attr_icon = "mdi:home-account"
+    _attr_translation_key = "presence"
+
+    @property
+    def native_value(self):
+        occupancy = self.runtime.zone_occupancy.get(self._zone.id)
+        return occupancy.presence if occupancy else "unknown"
+
+    @property
+    def extra_state_attributes(self):
+        occupancy = self.runtime.zone_occupancy.get(self._zone.id)
+        return {
+            "motion": occupancy.motion if occupancy else None,
+            "occupancy_mode": occupancy.mode if occupancy else None,
+        }
+
+
+class SafetySensor(ZoneStateSensor):
+    """Safe while the room temperature can be trusted; else no regulation."""
+
+    key = "safety"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["safe", "sensor_fault"]
+    _attr_icon = "mdi:shield-check-outline"
+    _attr_translation_key = "safety"
+
+    @property
+    def native_value(self):
+        return self.runtime.safety[self._zone.id][0]
+
+    @property
+    def extra_state_attributes(self):
+        return {"temperature_quality": self.runtime.safety[self._zone.id][1]}
+
+
+class WindowSensor(ZoneStateSensor):
+    """Open window: after the delay the room stops (unless bypassed)."""
+
+    key = "window"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "closed",
+        "opening",
+        "open",
+        "bypass",
+        "not_configured",
+        "unknown",
+    ]
+    _attr_icon = "mdi:window-open-variant"
+    _attr_translation_key = "window"
+
+    @property
+    def native_value(self):
+        return self.runtime.windows[self._zone.id]
+
+    @property
+    def extra_state_attributes(self):
+        snapshot = self.runtime.zone_snapshots[self._zone.id]
+        return {
+            "open_contacts": sum(c.value == "open" for c in snapshot.contacts),
+            "contacts": len(snapshot.contacts),
+            "delay_seconds": self.runtime.building.settings.window_delay_seconds,
+        }
+
+
+class RegulatedSetpointSensor(ZoneStateSensor):
+    """The setpoint Zonentra steers the indoor unit to (or would)."""
+
+    key = "regulated_setpoint"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_icon = "mdi:thermometer-auto"
+    _attr_translation_key = "regulated_setpoint"
+
+    def _plan(self):
+        plans = self.runtime.setpoint_plans
+        return next(
+            (plans[item.id] for item in self._units() if item.id in plans), None
+        )
+
+    @property
+    def native_value(self):
+        plan = self._plan()
+        return plan.setpoint if plan else None
+
+    @property
+    def extra_state_attributes(self):
+        plan = self._plan()
+        return {
+            "status": plan.status if plan else None,
+            "base": plan.base if plan else None,
+            "offset": plan.offset if plan else None,
+            "room_regulation": self.runtime.regulated(self._zone.id),
+        }
+
+
+class EmaTemperatureSensor(ZoneStateSensor):
+    """Exponentially smoothed room temperature (5 min time constant)."""
+
+    key = "ema_temperature"
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_suggested_display_precision = 2
+    _attr_translation_key = "ema_temperature"
+
+    @property
+    def native_value(self):
+        trend = self.runtime.trends.get(self._zone.id)
+        return trend.ema if trend else None
+
+
+class TemperatureSlopeSensor(ZoneStateSensor):
+    """How fast the room warms (+) or cools (-), in °C per hour."""
+
+    key = "temperature_slope"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "°C/h"
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:thermometer-chevron-up"
+    _attr_translation_key = "temperature_slope"
+
+    @property
+    def native_value(self):
+        trend = self.runtime.trends.get(self._zone.id)
+        return trend.slope if trend else None
+
+
+class AutoFanSensor(ZoneStateSensor):
+    """Fan speed the automatic fan chose (only with fan mode auto)."""
+
+    key = "auto_fan"
+    _attr_icon = "mdi:fan-auto"
+    _attr_translation_key = "auto_fan"
+
+    @property
+    def native_value(self):
+        if not self.runtime.zone_auto_fan(self._zone.id):
+            return None
+        return self.runtime.auto_fans.get(self._zone.id)
 
 
 def _iso(value):

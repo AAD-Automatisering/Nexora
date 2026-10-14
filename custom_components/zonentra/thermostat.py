@@ -9,8 +9,8 @@ small and persistent:
   comfort band) or ``off`` (the room asks for nothing; regulated units are
   switched off). The room mode never forces the outdoor unit: the group still
   weighs every room's demand, and a heat-only room waits while its group cools;
-* ``preset``: ``activity`` (presence and motion choose comfort/eco/away, as in
-  0.8) or a fixed ``comfort`` / ``eco`` / ``away``; building absence always
+* ``preset``: ``comfort`` (presence and motion still lower the band to eco or
+  away, as in 0.8), or a fixed ``eco`` / ``away``; building absence always
   wins;
 * ``heating_limit`` / ``cooling_limit``: the room's own comfort band, set from
   the thermostat or the number entities. Unset means the configured limits;
@@ -39,7 +39,7 @@ IGNORED_DEMAND = {
     "heat": ("cooling_demand", "thermostat_heat_only"),
     "cool": ("heating_demand", "thermostat_cool_only"),
 }
-PRESETS = ("activity", "comfort", "eco", "away")
+PRESETS = ("comfort", "eco", "away")
 BANDS = ("comfort", "eco", "away")
 DEFAULT_MIN_SETPOINT = 16.0
 DEFAULT_MAX_SETPOINT = 30.0
@@ -48,11 +48,12 @@ DEFAULT_MAX_SETPOINT = 30.0
 @dataclass(frozen=True)
 class Thermostat:
     hvac_mode: str = "heat_cool"
-    preset: str = "activity"
+    preset: str = "comfort"
     heating_limit: float | None = None
     cooling_limit: float | None = None
     regulation: bool = False
     fan_mode: str | None = None  # None: leave the units' fan speed alone
+    window_bypass: bool = False  # 0.10: an open window is ignored
 
     @classmethod
     def from_dict(cls, data: Any) -> "Thermostat":
@@ -73,11 +74,12 @@ class Thermostat:
             data.get("hvac_mode")
             if data.get("hvac_mode") in THERMOSTAT_MODES
             else "heat_cool",
-            data.get("preset") if data.get("preset") in PRESETS else "activity",
+            data.get("preset") if data.get("preset") in PRESETS else "comfort",
             heat,
             cool,
             data.get("regulation") is True,
             data.get("fan_mode") if isinstance(data.get("fan_mode"), str) else None,
+            data.get("window_bypass") is True,
         )
 
     def as_dict(self) -> dict:
@@ -96,8 +98,9 @@ def update_thermostat(
         raise ValueError("invalid_hvac_mode")
     if "preset" in changes and changes["preset"] not in PRESETS:
         raise ValueError("invalid_preset")
-    if "regulation" in changes and not isinstance(changes["regulation"], bool):
-        raise ValueError("invalid_parameters")
+    for key in ("regulation", "window_bypass"):
+        if key in changes and not isinstance(changes[key], bool):
+            raise ValueError("invalid_parameters")
     if "fan_mode" in changes and not isinstance(changes["fan_mode"], str | None):
         raise ValueError("invalid_parameters")
     new = replace(current, **changes)
@@ -161,7 +164,7 @@ def active_band(preset: str, occupancy: Occupancy) -> tuple[str, str]:
     """(band, reason). Building absence always wins, as in 0.8."""
     if occupancy.mode == "away" or preset == "away":
         return "away", occupancy.reason if occupancy.mode == "away" else "preset"
-    if preset == "activity":
+    if preset == "comfort":  # Comfort, lowered by presence and motion.
         return occupancy.mode, occupancy.reason
     return preset, "preset"
 

@@ -124,9 +124,10 @@ def sensor_translations():
             if isinstance(target, ast.Name)
         }
         if "_attr_translation_key" in values:
+            options = values.get("_attr_options")
             yield (
                 values["_attr_translation_key"].value,
-                [item.value for item in values["_attr_options"].elts],
+                [item.value for item in options.elts] if options else [],
             )
 
 
@@ -206,6 +207,7 @@ def test_every_sensor_state_has_a_label(language, key, states):
     [
         ("switch", "active_mode_control"),
         ("switch", "room_regulation"),
+        ("switch", "window_bypass"),
         ("number", "comfort_heating_limit"),
         ("number", "comfort_cooling_limit"),
     ],

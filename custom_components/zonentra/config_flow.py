@@ -26,6 +26,7 @@ from .migration import (
     migrate_options,
 )
 from .models import (
+    VANE_DOMAINS,
     ZONE_ENTITY_FIELDS,
     BuildingSettings,
     EquipmentGroup,
@@ -93,6 +94,7 @@ def building_fields() -> dict:
         # Room regulation (0.9): self-regulating setpoint of running units.
         vol.Optional("setpoint_max_offset"): numeric(0, 5, unit="°C"),
         vol.Optional("setpoint_interval_seconds"): numeric(60, 3600, 1, "s"),
+        vol.Optional("window_delay_seconds"): numeric(0, 3600, 1, "s"),
     }
 
 
@@ -117,6 +119,7 @@ def building_defaults() -> dict:
                 "motion_off_delay_minutes",
                 "setpoint_max_offset",
                 "setpoint_interval_seconds",
+                "window_delay_seconds",
             )
         },
     }
@@ -156,6 +159,10 @@ def zone_fields(groups: list[dict]) -> dict:
         vol.Optional("floor_heating_entities"): multi(["climate", "number"]),
         vol.Optional("shading_entities"): multi("cover"),
         vol.Optional("ventilation_entities"): multi(["fan", "switch"]),
+        # Vane (0.10): up when cooling, down when heating.
+        vol.Optional("vane_entity"): entity_selector(list(VANE_DOMAINS)),
+        vol.Optional("vane_cool_value"): selector.TextSelector(),
+        vol.Optional("vane_heat_value"): selector.TextSelector(),
     }
 
 

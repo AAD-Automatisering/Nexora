@@ -127,6 +127,15 @@ Grenzen van de ruimteregeling:
   setpoint-tracker, met commandolog; mensen gaan voor via Manual Override;
 - vloerverwarming, ventilatie en zonwering blijven simulatie.
 
+## Ruimtetoestand (0.10)
+
+`roomstate.py` (puur) levert per ruimte raam, veiligheid, temperatuurtrend en de
+automatische ventilatorstand; de runtime bewaart trend en lamelstand alleen in het
+geheugen. Raamstatus en bypass werken via de bestaande klimaatvraag (`neutral`) en de
+ruimteregeling. De lamel is een tweede domein naast `climate`
+(`select`/`number`), alleen voor de centrale opbouw, eenmaal per start of modewissel
+en met commandolog.
+
 ## Config entries (0.6)
 
 Zoals Versatile Thermostat bestaat Zonentra uit één **centrale configuratie**
