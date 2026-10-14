@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import EVENT_STATE_REPORTED, Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_state_change_event
@@ -118,6 +119,17 @@ async def _async_setup_zone(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }:
         # A newly created zone: let the central runtime include it.
         hass.config_entries.async_schedule_reload(central.entry_id)
+    # The zone device hangs below the central device (via_device_id).
+    devices = dr.async_get(hass)
+    central_device = devices.async_get_device(identifiers={(DOMAIN, central.entry_id)})
+    devices.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, entry.entry_id)},
+        name=entry.title,
+        manufacturer="Zonentra",
+        model="Zone",
+        via_device_id=central_device.id if central_device else None,
+    )
     entry.async_on_unload(entry.add_update_listener(_async_zone_updated))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

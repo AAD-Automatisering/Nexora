@@ -60,11 +60,13 @@ def _zone_entities(hass, entry) -> list:
     central = central_entry(hass)
 
     def provider():
-        return (
-            central.runtime_data
-            if central and central.state is ConfigEntryState.LOADED
-            else None
-        )
+        # The central runtime already notifies while its setup is in progress.
+        if central and central.state in (
+            ConfigEntryState.LOADED,
+            ConfigEntryState.SETUP_IN_PROGRESS,
+        ):
+            return getattr(central, "runtime_data", None)
+        return None
 
     options = dict(entry.options)
     shared = {
@@ -75,7 +77,6 @@ def _zone_entities(hass, entry) -> list:
             name=entry.title,
             manufacturer="Zonentra",
             model="Zone",
-            via_device=(DOMAIN, central.entry_id),
         ),
     }
     entities = [
@@ -245,17 +246,17 @@ class GroupModeSensor(ZonentraDiagnosticSensor):
 
     def __init__(self, entry, group):
         super().__init__(entry)
-        self.group = group
+        self._group = group  # Not "group": HA reserves that entity attribute.
         self._attr_translation_placeholders = {"group": group.name}
         self._attr_unique_id = f"{entry.entry_id}_group_{group.id}_mode"
 
     @property
     def native_value(self):
-        return self.runtime.group_decisions[self.group.id].proposed_mode
+        return self.runtime.group_decisions[self._group.id].proposed_mode
 
     @property
     def extra_state_attributes(self):
-        decision = self.runtime.group_decisions[self.group.id]
+        decision = self.runtime.group_decisions[self._group.id]
         return {
             "read_only": True,
             "current_mode": decision.current_mode,
@@ -276,9 +277,9 @@ class GroupModeSensor(ZonentraDiagnosticSensor):
             "mode_feedback_quality": decision.mode_quality,
             "physical_mode_feedback_available": decision.mode_quality == "valid",
             "derived_group_mode": self.runtime.group_observations[
-                self.group.id
+                self._group.id
             ].derived_mode,
-            "observation_reason": self.runtime.mode_comparisons[self.group.id],
+            "observation_reason": self.runtime.mode_comparisons[self._group.id],
         }
 
 
@@ -348,18 +349,18 @@ class DerivedGroupModeSensor(ZonentraDiagnosticSensor):
 
     def __init__(self, entry, group):
         super().__init__(entry)
-        self.group = group
+        self._group = group  # Not "group": HA reserves that entity attribute.
         self._attr_translation_placeholders = {"group": group.name}
         self._attr_unique_id = f"{entry.entry_id}_group_{group.id}_derived_mode"
 
     @property
     def native_value(self):
-        return self.runtime.group_observations[self.group.id].derived_mode
+        return self.runtime.group_observations[self._group.id].derived_mode
 
     @property
     def extra_state_attributes(self):
-        observation = self.runtime.group_observations[self.group.id]
-        decision = self.runtime.group_decisions[self.group.id]
+        observation = self.runtime.group_observations[self._group.id]
+        decision = self.runtime.group_decisions[self._group.id]
         return {
             "read_only": True,
             "derived_from": "indoor_units",
@@ -381,7 +382,7 @@ class DerivedGroupModeSensor(ZonentraDiagnosticSensor):
             "desired_mode": decision.desired_mode,
             "physical_mode": decision.current_mode,
             "physical_mode_feedback_available": decision.mode_quality == "valid",
-            "observation_reason": self.runtime.mode_comparisons[self.group.id],
+            "observation_reason": self.runtime.mode_comparisons[self._group.id],
         }
 
 
@@ -467,17 +468,17 @@ class GroupCoordinationSensor(ZonentraDiagnosticSensor):
 
     def __init__(self, entry, group):
         super().__init__(entry)
-        self.group = group
+        self._group = group  # Not "group": HA reserves that entity attribute.
         self._attr_translation_placeholders = {"group": group.name}
         self._attr_unique_id = f"{entry.entry_id}_group_{group.id}_coordination"
 
     @property
     def native_value(self):
-        return self.runtime.coordinations[self.group.id].phase
+        return self.runtime.coordinations[self._group.id].phase
 
     @property
     def extra_state_attributes(self):
-        item = self.runtime.coordinations[self.group.id]
+        item = self.runtime.coordinations[self._group.id]
         names = {e.id: e.name for e in self.runtime.building.equipment}
         return {
             "simulation": True,
