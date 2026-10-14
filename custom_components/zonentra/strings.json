@@ -12,7 +12,7 @@
       },
       "central": {
         "title": "Central configuration",
-        "description": "Building-wide settings used by every zone that takes the central values. Add outdoor unit groups afterwards via Configure. The room regulation settings only apply to rooms whose Room regulation switch is on.",
+        "description": "Building-wide settings used by every zone that takes the central values. Add outdoor unit groups afterwards via Configure. The room regulation settings only apply to rooms whose Room regulation switch is on. Comfort, eco and away limits are set afterwards on the central device.",
         "data": {
           "name": "Building name",
           "outdoor_temperature_entity": "Outdoor temperature sensor (whole building)",
@@ -66,7 +66,7 @@
       },
       "zone_parameters": {
         "title": "Local zone values",
-        "description": "These values apply only to this zone.",
+        "description": "These values apply only to this zone. Fixed comfort, eco and away limits are set on the zone's device.",
         "data": {
           "heating_limit": "Heating limit (°C)",
           "cooling_limit": "Cooling limit (°C)",
@@ -235,7 +235,7 @@
       },
       "zone_parameters": {
         "title": "Local zone values",
-        "description": "These values apply only to this zone.",
+        "description": "These values apply only to this zone. Fixed comfort, eco and away limits are set on the zone's device.",
         "data": {
           "heating_limit": "Heating limit (°C)",
           "cooling_limit": "Cooling limit (°C)",
@@ -380,7 +380,7 @@
         "name": "Regulated setpoint"
       },
       "ema_temperature": {
-        "name": "Smoothed temperature"
+        "name": "Average temperature"
       },
       "temperature_slope": {
         "name": "Temperature trend"
@@ -424,6 +424,41 @@
       },
       "comfort_cooling_limit": {
         "name": "Comfort cooling limit"
+      },
+      "central_heating_limit": {
+        "name": "Comfort heating limit"
+      },
+      "central_cooling_limit": {
+        "name": "Comfort cooling limit"
+      },
+      "central_eco_heating_limit": {
+        "name": "Eco heating limit"
+      },
+      "central_eco_cooling_limit": {
+        "name": "Eco cooling limit"
+      },
+      "central_away_heating_limit": {
+        "name": "Away heating limit"
+      },
+      "central_away_cooling_limit": {
+        "name": "Away cooling limit"
+      },
+      "eco_heating_limit": {
+        "name": "Eco heating limit"
+      },
+      "eco_cooling_limit": {
+        "name": "Eco cooling limit"
+      },
+      "away_heating_limit": {
+        "name": "Away heating limit"
+      },
+      "away_cooling_limit": {
+        "name": "Away cooling limit"
+      }
+    },
+    "button": {
+      "use_central_limits": {
+        "name": "Use central limits"
       }
     }
   },

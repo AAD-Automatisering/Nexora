@@ -8,6 +8,16 @@ LIMIT_FIELDS = (
     "heating_limit_entity",
     "cooling_limit_entity",
 )
+# Eco and away bands (0.8): central, optionally different per zone (0.10).
+BAND_FIELDS = (
+    "eco_heating_limit",
+    "eco_cooling_limit",
+    "away_heating_limit",
+    "away_cooling_limit",
+)
+# Static limits that the central configuration sets on its device (0.10),
+# not in the wizard: comfort, eco and away.
+DEVICE_LIMITS = ("heating_limit", "cooling_limit", *BAND_FIELDS)
 PARAMETER_FIELDS = ("hysteresis", "max_age_seconds", "sensor_validation")
 NEW_BUILDING_DEFAULTS = {
     "heating_limit": 21.0,

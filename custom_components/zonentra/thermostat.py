@@ -40,6 +40,12 @@ IGNORED_DEMAND = {
     "cool": ("heating_demand", "thermostat_cool_only"),
 }
 PRESETS = ("comfort", "eco", "away")
+BAND_KEYS = (
+    "eco_heating_limit",
+    "eco_cooling_limit",
+    "away_heating_limit",
+    "away_cooling_limit",
+)
 BANDS = ("comfort", "eco", "away")
 DEFAULT_MIN_SETPOINT = 16.0
 DEFAULT_MAX_SETPOINT = 30.0
@@ -54,6 +60,11 @@ class Thermostat:
     regulation: bool = False
     fan_mode: str | None = None  # None: leave the units' fan speed alone
     window_bypass: bool = False  # 0.10: an open window is ignored
+    # 0.10: the room's own eco / away limits (None: the central value).
+    eco_heating_limit: float | None = None
+    eco_cooling_limit: float | None = None
+    away_heating_limit: float | None = None
+    away_cooling_limit: float | None = None
 
     @classmethod
     def from_dict(cls, data: Any) -> "Thermostat":
@@ -80,10 +91,20 @@ class Thermostat:
             data.get("regulation") is True,
             data.get("fan_mode") if isinstance(data.get("fan_mode"), str) else None,
             data.get("window_bypass") is True,
+            *(number(key) for key in BAND_KEYS),
         )
 
     def as_dict(self) -> dict:
         return asdict(self)
+
+    @property
+    def bands(self) -> dict[str, float]:
+        """The room's own eco/away limits that are set."""
+        return {
+            key: getattr(self, key)
+            for key in BAND_KEYS
+            if getattr(self, key) is not None
+        }
 
     @property
     def has_band(self) -> bool:
@@ -101,6 +122,14 @@ def update_thermostat(
     for key in ("regulation", "window_bypass"):
         if key in changes and not isinstance(changes[key], bool):
             raise ValueError("invalid_parameters")
+    for key in BAND_KEYS:
+        value = changes.get(key)
+        if value is not None and (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not 5 <= value <= 35
+        ):
+            raise ValueError("invalid_limits")
     if "fan_mode" in changes and not isinstance(changes["fan_mode"], str | None):
         raise ValueError("invalid_parameters")
     new = replace(current, **changes)

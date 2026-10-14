@@ -5,7 +5,7 @@ Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integr
 
 Versie **0.10.0** vult het ruimteapparaat aan met de sensoren en bediening die
 Versatile Thermostat ook heeft: aanwezigheid, veiligheid, raam (met bypass),
-geregeld setpoint, gladgestreken temperatuur, temperatuurtrend en een automatische
+geregeld setpoint, gemiddelde temperatuur, temperatuurtrend en een automatische
 ventilatorstand, plus een lamel die omhoog gaat bij koelen en omlaag bij verwarmen.
 Versie 0.9.0 gaf iedere ruimte een eigen **Zonentra-thermostaat** zoals
 Versatile Thermostat: een climate-entiteit met de comfortband van de ruimte,
@@ -74,7 +74,10 @@ De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
 ### Bijwerken naar 0.10.0 — ruimtesensoren, raam, ventilator en lamel
 
 Werk bij via HACS, herstart Home Assistant en herlaad de browser volledig. Iedere
-ruimte krijgt de nieuwe sensoren en de schakelaar **Raambypass** vanzelf. Raamcontacten
+ruimte krijgt de nieuwe sensoren en de schakelaar **Raambypass** vanzelf. De vaste
+comfort-, eco- en afwezig-grenzen staan niet meer in de wizard maar op de apparaten:
+het centrale apparaat voor het hele gebouw (je bestaande waarden blijven staan) en
+het ruimteapparaat om per ruimte af te wijken. Raamcontacten
 die je al bij een ruimte had gekoppeld, doen nu echt iets: een open raam stopt de
 ruimte na 30 s (centraal instelbaar). Voor de lamel vul je per ruimte bij
 **Configureren** de lamel-entiteit en de standen voor koelen en verwarmen in.
@@ -237,7 +240,7 @@ Bewerk daarna een ruimte via **Opties → Ruimte toevoegen of bewerken**:
 | Ruimte-instelling | Gebruik |
 |---|---|
 | Ruimtetemperatuursensor | De externe KNX-temperatuursensor |
-| Centrale klimaatgrenzen gebruiken | Standaard aan voor nieuwe ruimtes; neemt beide grenzen en grensentiteiten over |
+| Centrale klimaatgrenzen gebruiken | Standaard aan. Uit: de volgende stap vraagt alleen om grensentiteiten voor deze ruimte. Vaste grenzen stel je sinds 0.10 in op het apparaat (zie hieronder) |
 | Centrale meetparameters gebruiken | Standaard aan; neemt hysterese, sensorvalidatie en maximale updateleeftijd over |
 | Ruimteweging | Standaard 1; belangrijkere ruimtes kunnen zwaarder meewegen |
 | Buitenunitgroep | Optionele standaard voor HVAC-apparatuur in deze ruimte |
@@ -295,6 +298,19 @@ niet voor elke score een aparte entiteit nodig is.
 | Binnenunit Regelactie | turn_on_heat / turn_on_cool / turn_off / correct_mode / hold / blocked | simulation (false bij ruimteregeling), room_regulation, room_regulation_status, setpoint_status, setpoint_target, setpoint_base, setpoint_offset, last_commands, zone, observed_mode, desired_mode, zone_demand, intended_action, steps, reason, blocked_reason, blocked_until, manual_override_active, override_remaining_seconds, override_expires_at, seconds_since_transition, group_coordination_phase, availability, evaluated_at |
 | Buitenunit Gesimuleerde coördinatie | idle / preparing / stopping / waiting / applying / verifying / completed / blocked / failed | simulation, desired_mode, group_mode, group_mode_reason, coordinated_mode, derived_mode, member_indoor_units, available_indoor_units, conflicts, switch_needed, switch_from, switch_to, switch_allowed_in_simulation, active_switch_permitted (altijd false), phase_reason, waiting_until, blockers, planned_actions |
 
+### Grenzen op de apparaten (0.10)
+
+Zoals de presettemperaturen bij Versatile Thermostat:
+
+| Apparaat | Instellingen |
+|---|---|
+| Centraal apparaat | Comfort verwarmen tot / koelen vanaf, Eco verwarmen tot / koelen vanaf, Afwezig verwarmen tot / koelen vanaf. Direct actief, zonder herladen |
+| Ruimteapparaat | Dezelfde zes, voor deze ruimte. Tot je er een wijzigt, tonen ze de centrale waarde (attribuut `source`: `central` of `zone`) |
+| Ruimteapparaat, knop **Centrale grenzen gebruiken** | Wist de eigen grenzen van de ruimte; daarna geldt weer alles centraal |
+
+Een band moet geldig blijven: verwarmen + 2 × hysterese < koelen. Grensentiteiten
+(`input_number` e.d.) stel je nog wel in de wizard in.
+
 ### Ruimtesensoren, raam, ventilator en lamel (0.10)
 
 | Entiteit op het ruimteapparaat | Betekenis |
@@ -304,7 +320,7 @@ niet voor elke score een aparte entiteit nodig is.
 | **Raam** | `closed`, `opening` (open, wacht op de vertraging), `open`, `bypass`, `not_configured`, `unknown` |
 | **Raambypass** (schakelaar) | Negeert een open raam in deze ruimte |
 | **Geregeld setpoint** | Het setpoint waar Zonentra de binnenunit naartoe stuurt (of zou sturen) |
-| **Gladgestreken temperatuur** | Exponentieel gemiddelde van de ruimtetemperatuur (tijdconstante 5 min) |
+| **Gemiddelde temperatuur** | Exponentieel gemiddelde van de ruimtetemperatuur (tijdconstante 5 min) |
 | **Temperatuurtrend** | Hoe snel de ruimte opwarmt (+) of afkoelt (−), in °C per uur |
 | **Automatische ventilatorstand** | De stand die de automatische ventilator nu kiest |
 

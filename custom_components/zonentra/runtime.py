@@ -216,6 +216,7 @@ class BuildingRuntime:
                 self.outdoor_temperature,
                 bands[zone.id][0],
                 comfort[zone.id],
+                self.thermostat(zone.id).bands,
             )
             for zone in self.building.zones
         }
@@ -404,6 +405,12 @@ class BuildingRuntime:
                     self.trends[zone.id] = trend
         self._window_checks = checks
 
+    @callback
+    def apply_building(self, building: Building) -> None:
+        """New limits set on the central device: same inputs, no reload."""
+        self.building = building
+        self.refresh()
+
     def thermostat(self, zone_id: str) -> Thermostat:
         return self.thermostats.get(zone_id) or Thermostat()
 
@@ -418,6 +425,19 @@ class BuildingRuntime:
         if zone is None or not self.active_capable:
             raise ValueError("zone_not_loaded")
         new = update_thermostat(self.thermostat(zone_id), zone.hysteresis, **changes)
+        settings = self.building.settings
+        for band in ("eco", "away"):
+            # The room's eco/away band with the central value for unset limits.
+            heat, cool = (
+                getattr(new, key)
+                if getattr(new, key) is not None
+                else getattr(zone, key)
+                if getattr(zone, key) is not None
+                else getattr(settings, key)
+                for key in (f"{band}_heating_limit", f"{band}_cooling_limit")
+            )
+            if heat + 2 * zone.hysteresis >= cool:
+                raise ValueError("invalid_limits")
         self.thermostats[zone_id] = new
         if self.thermostat_cache is not None:
             self.thermostat_cache[zone_id] = new.as_dict()

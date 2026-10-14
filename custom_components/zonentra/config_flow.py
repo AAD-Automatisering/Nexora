@@ -20,6 +20,8 @@ from . import central_entry
 from . import zone_entries as config_zone_entries
 from .const import DOMAIN, KINDS, TOPOLOGY_KEYS
 from .migration import (
+    BAND_FIELDS,
+    DEVICE_LIMITS,
     LIMIT_FIELDS,
     NEW_BUILDING_DEFAULTS,
     PARAMETER_FIELDS,
@@ -61,9 +63,13 @@ def choice(options):
     return selector.SelectSelector({"options": options, "mode": "dropdown"})
 
 
-def building_fields() -> dict:
-    """Central building settings, shared by the central and legacy flows."""
-    return {
+def building_fields(limits: bool = True) -> dict:
+    """Central building settings, shared by the central and legacy flows.
+
+    The central configuration (0.10) sets its static limits on its device;
+    only the legacy entry keeps them in the form (``limits``).
+    """
+    fields = {
         vol.Optional("outdoor_temperature_entity"): entity_selector("sensor"),
         vol.Optional("outdoor_max_age_seconds"): numeric(0, 86400, 1, "s"),
         vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
@@ -96,6 +102,13 @@ def building_fields() -> dict:
         vol.Optional("setpoint_interval_seconds"): numeric(60, 3600, 1, "s"),
         vol.Optional("window_delay_seconds"): numeric(0, 3600, 1, "s"),
     }
+    if not limits:
+        fields = {
+            marker: value
+            for marker, value in fields.items()
+            if marker.schema not in DEVICE_LIMITS
+        }
+    return fields
 
 
 def building_defaults() -> dict:
@@ -172,8 +185,8 @@ def zone_parameter_fields(record: dict) -> dict:
     if not record.get("use_building_limits", True):
         fields.update(
             {
-                vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
-                vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
+                # Static comfort/eco/away limits of a zone are set on its
+                # device (0.10); here only limits that follow an entity.
                 vol.Optional("heating_limit_entity"): entity_selector(
                     ["sensor", "number", "input_number"]
                 ),
@@ -203,7 +216,7 @@ def merge_zone(previous: dict, submitted: dict) -> dict:
     """New zone settings; earlier local limits/parameters stay dormant."""
     dormant = {
         key: previous[key]
-        for key in (*LIMIT_FIELDS, *PARAMETER_FIELDS)
+        for key in (*LIMIT_FIELDS, *BAND_FIELDS, *PARAMETER_FIELDS)
         if key in previous
     }
     record = {"id": previous["id"], **dormant, **clean(submitted)}
@@ -300,9 +313,17 @@ class ZonentraConfigFlow(ZoneFormMixin, ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             name = str(user_input.get("name", "")).strip()
             settings = {
-                key: value
-                for key, value in user_input.items()
-                if key != "name" and value != ""
+                # Limits start at the defaults; set them on the device later.
+                **{
+                    key: value
+                    for key, value in building_defaults().items()
+                    if key in DEVICE_LIMITS
+                },
+                **{
+                    key: value
+                    for key, value in user_input.items()
+                    if key != "name" and value != ""
+                },
             }
             if not name:
                 errors["name"] = "invalid_name"
@@ -321,7 +342,10 @@ class ZonentraConfigFlow(ZoneFormMixin, ConfigFlow, domain=DOMAIN):
                     )
         schema = self.add_suggested_values_to_schema(
             vol.Schema(
-                {vol.Required("name"): selector.TextSelector(), **building_fields()}
+                {
+                    vol.Required("name"): selector.TextSelector(),
+                    **building_fields(limits=False),
+                }
             ),
             {**building_defaults(), **(user_input or {})},
         )
@@ -416,6 +440,8 @@ class ZoneOptionsFlow(ZoneFormMixin, OptionsFlow):
 class ZonentraOptionsFlow(OptionsFlowWithReload):
     """Legacy (pre-0.6) single entry: collect edits and save only via Finish."""
 
+    _limits_in_form = True
+
     def __init__(self):
         self.topology: dict[str, Any] | None = None
         self.selected: str | None = None
@@ -437,6 +463,13 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
         if user_input is not None:
             candidate = deepcopy(self.topology)
             settings = {key: value for key, value in user_input.items() if value != ""}
+            if not self._limits_in_form:
+                # Set on the device: keep them when the form is saved.
+                current = self.topology.get("building", {})
+                settings = {
+                    **{key: current[key] for key in DEVICE_LIMITS if key in current},
+                    **settings,
+                }
             candidates = self.topology.get("building", {}).get(
                 "outdoor_temperature_candidates", []
             )
@@ -450,7 +483,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
             else:
                 self.topology = candidate
                 return await self.async_step_init()
-        fields = building_fields()
+        fields = building_fields(limits=self._limits_in_form)
         defaults = building_defaults()
         current = self.topology.get("building", {})
         schema = self.add_suggested_values_to_schema(
@@ -749,6 +782,8 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
 
 class CentralOptionsFlow(ZonentraOptionsFlow):
     """Central configuration: building settings and outdoor unit groups."""
+
+    _limits_in_form = False  # Comfort/eco/away limits are set on the device.
 
     async def async_step_init(self, user_input=None):
         if self.topology is None:

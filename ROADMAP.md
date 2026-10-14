@@ -122,7 +122,7 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 
 ### Versie 0.10.0 — ruimtesensoren zoals Versatile Thermostat (geïmplementeerd)
 
-- [x] Sensoren aanwezigheid, veiligheid, raam, geregeld setpoint, gladgestreken temperatuur en temperatuurtrend.
+- [x] Sensoren aanwezigheid, veiligheid, raam, geregeld setpoint, gemiddelde temperatuur en temperatuurtrend.
 - [x] Raamdetectie met vertraging en bypass-schakelaar; raam open → units direct uit.
 - [x] Automatische ventilatorstand op de afstand tot het doel.
 - [x] Lamel omhoog bij koelen, omlaag bij verwarmen (select of number).

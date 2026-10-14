@@ -1,5 +1,7 @@
 """0.10.0 integration: room-state sensors, open window and automatic fan."""
 
+import pytest
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import async_mock_service
 
@@ -149,3 +151,65 @@ async def test_vane_follows_cooling_and_heating(hass, freezer):
         "vane_cool",
     )
     clear(mocks)
+
+
+async def test_limits_are_set_on_the_devices_not_in_the_wizard(hass, freezer):
+    mocks = await mock_climate(hass)
+    central, zone = await office(hass, freezer, mocks)
+    runtime = central.runtime_data
+    # The central wizard no longer asks for fixed limits.
+    flow = await hass.config_entries.options.async_init(central.entry_id)
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"next_step_id": "building"}
+    )
+    schema = flow["data_schema"].schema
+    assert "heating_limit" not in schema and "eco_heating_limit" not in schema
+    assert "heating_limit_entity" in schema
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"hysteresis": 0.3}
+    )
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"next_step_id": "finish"}
+    )
+    await hass.async_block_till_done()
+    central = hass.config_entries.async_get_entry(central.entry_id)
+    assert central.options["building"]["heating_limit"] == 22  # Kept.
+    runtime = central.runtime_data
+
+    # Central device: the building's eco band, applied without a reload.
+    eco_id = entity(hass, "number", f"{central.entry_id}_eco_heating_limit")
+    assert float(hass.states.get(eco_id).state) == 19
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": eco_id, "value": 18}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert central.options["building"]["eco_heating_limit"] == 18
+    assert central.runtime_data is runtime  # No reload.
+    assert runtime.building.settings.eco_heating_limit == 18
+    with pytest.raises(ServiceValidationError):
+        await hass.services.async_call(
+            "number", "set_value", {"entity_id": eco_id, "value": 26}, blocking=True
+        )
+
+    # Zone device: its own eco limit wins, the rest follows the central device.
+    zone_eco = entity(hass, "number", f"{zone.entry_id}_eco_heating_limit")
+    assert float(hass.states.get(zone_eco).state) == 18
+    assert hass.states.get(zone_eco).attributes["source"] == "central"
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": zone_eco, "value": 20}, blocking=True
+    )
+    await hass.async_block_till_done()
+    assert hass.states.get(zone_eco).attributes["source"] == "zone"
+    runtime.set_thermostat("west", preset="eco")
+    snapshot = runtime.zone_snapshots["west"]
+    assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (20, 26)
+    # Button: back to the central limits.
+    await hass.services.async_call(
+        "button",
+        "press",
+        {"entity_id": entity(hass, "button", f"{zone.entry_id}_use_central_limits")},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert runtime.zone_snapshots["west"].heating_limit.value == 18
+    assert hass.states.get(zone_eco).attributes["source"] == "central"

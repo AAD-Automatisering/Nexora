@@ -12,7 +12,7 @@
       },
       "central": {
         "title": "Centrale configuratie",
-        "description": "Gebouwbrede instellingen voor iedere ruimte die de centrale waarden gebruikt. Voeg daarna buitenunitgroepen toe via Configureren. De instellingen voor ruimteregeling gelden alleen voor ruimtes waarvan de schakelaar Ruimteregeling aan staat.",
+        "description": "Gebouwbrede instellingen voor iedere ruimte die de centrale waarden gebruikt. Voeg daarna buitenunitgroepen toe via Configureren. De instellingen voor ruimteregeling gelden alleen voor ruimtes waarvan de schakelaar Ruimteregeling aan staat. De comfort-, eco- en afwezig-grenzen stel je daarna in op het centrale apparaat.",
         "data": {
           "name": "Gebouwnaam",
           "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
@@ -66,7 +66,7 @@
       },
       "zone_parameters": {
         "title": "Eigen waarden ruimte",
-        "description": "Deze waarden gelden alleen voor deze ruimte.",
+        "description": "Deze waarden gelden alleen voor deze ruimte. Vaste comfort-, eco- en afwezig-grenzen stel je in op het apparaat van de ruimte.",
         "data": {
           "heating_limit": "Verwarmingsgrens (°C)",
           "cooling_limit": "Koelgrens (°C)",
@@ -235,7 +235,7 @@
       },
       "zone_parameters": {
         "title": "Eigen waarden ruimte",
-        "description": "Deze waarden gelden alleen voor deze ruimte.",
+        "description": "Deze waarden gelden alleen voor deze ruimte. Vaste comfort-, eco- en afwezig-grenzen stel je in op het apparaat van de ruimte.",
         "data": {
           "heating_limit": "Verwarmingsgrens (°C)",
           "cooling_limit": "Koelgrens (°C)",
@@ -380,7 +380,7 @@
         "name": "Geregeld setpoint"
       },
       "ema_temperature": {
-        "name": "Gladgestreken temperatuur"
+        "name": "Gemiddelde temperatuur"
       },
       "temperature_slope": {
         "name": "Temperatuurtrend"
@@ -424,6 +424,41 @@
       },
       "comfort_cooling_limit": {
         "name": "Comfort koelen vanaf"
+      },
+      "central_heating_limit": {
+        "name": "Comfort verwarmen tot"
+      },
+      "central_cooling_limit": {
+        "name": "Comfort koelen vanaf"
+      },
+      "central_eco_heating_limit": {
+        "name": "Eco verwarmen tot"
+      },
+      "central_eco_cooling_limit": {
+        "name": "Eco koelen vanaf"
+      },
+      "central_away_heating_limit": {
+        "name": "Afwezig verwarmen tot"
+      },
+      "central_away_cooling_limit": {
+        "name": "Afwezig koelen vanaf"
+      },
+      "eco_heating_limit": {
+        "name": "Eco verwarmen tot"
+      },
+      "eco_cooling_limit": {
+        "name": "Eco koelen vanaf"
+      },
+      "away_heating_limit": {
+        "name": "Afwezig verwarmen tot"
+      },
+      "away_cooling_limit": {
+        "name": "Afwezig koelen vanaf"
+      }
+    },
+    "button": {
+      "use_central_limits": {
+        "name": "Centrale grenzen gebruiken"
       }
     }
   },

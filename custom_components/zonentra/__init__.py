@@ -25,9 +25,15 @@ from .topology import CENTRAL, ENTRY_TYPE, ZONE, assemble
 
 ZonentraConfigEntry = ConfigEntry[BuildingRuntime]
 PLATFORMS = [Platform.SENSOR]
-CENTRAL_PLATFORMS = [Platform.SENSOR, Platform.SWITCH]
+CENTRAL_PLATFORMS = [Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
 # 0.9: every zone gets a Zonentra thermostat, like Versatile Thermostat.
-ZONE_PLATFORMS = [Platform.CLIMATE, Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
+ZONE_PLATFORMS = [
+    Platform.BUTTON,
+    Platform.CLIMATE,
+    Platform.NUMBER,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 
 
 def platforms(entry: ConfigEntry) -> list[Platform]:
@@ -92,9 +98,12 @@ def zone_entries(hass: HomeAssistant) -> list[ConfigEntry]:
     ]
 
 
-def central_topology(hass: HomeAssistant, central: ConfigEntry) -> dict:
+def central_topology(
+    hass: HomeAssistant, central: ConfigEntry, options: dict | None = None
+) -> dict:
     return assemble(
-        dict(central.options), [dict(entry.options) for entry in zone_entries(hass)]
+        dict(central.options if options is None else options),
+        [dict(entry.options) for entry in zone_entries(hass)],
     )
 
 

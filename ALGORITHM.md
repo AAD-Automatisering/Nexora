@@ -498,6 +498,12 @@ HA-gebruiker (`user_id`) is `manual_setpoint`.
 
 `roomstate.py` is puur.
 
+**Grenzen per ruimte.** Volgorde per grens: de eigen waarde van de ruimte (gezet op
+het ruimteapparaat, bewaard bij de thermostaat), dan een eventuele waarde uit de
+ruimteconfiguratie, dan de centrale waarde (centraal apparaat). Een ruimte zonder
+eigen grens of grensentiteit houdt de centrale comfortgrenzen. Elke band moet
+voldoen aan verwarmen + 2·hysterese < koelen, beide 5–35 °C.
+
 **Raam.** `window_state`: geen contacten → `not_configured`; geen open contact →
 `closed` (alle contacten ongeldig → `unknown`; een onbekend contact telt als dicht);
 bypass → `bypass`; anders `opening` tot `window_delay_seconds` (standaard 30 s) na

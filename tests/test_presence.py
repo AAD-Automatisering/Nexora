@@ -162,3 +162,73 @@ def test_bands_are_configurable_and_validated():
     with pytest.raises(ValueError, match="invalid_parameters"):
         building(motion_off_delay_minutes=0)
     assert building(presence_entity="alarm_control_panel.office").settings
+
+
+# 0.10: eco/away bands per zone when the zone does not use the central limits.
+def zone_bands(**zone):
+    return build_model(
+        "building",
+        "Building",
+        {
+            "building": {"heating_limit": 21, "cooling_limit": 24, "hysteresis": 0.3},
+            "zones": [
+                {
+                    "id": "office",
+                    "name": "Office",
+                    "temperature_entity": "sensor.office",
+                    "use_building_parameters": True,
+                    **zone,
+                }
+            ],
+        },
+    )
+
+
+def band_limits(model, band):
+    sources = {"sensor.office": SourceState("20", "°C", NOW)}
+    snapshot = collect_zone(model, model.zones[0], sources, NOW, band=band)
+    return snapshot.heating_limit.value, snapshot.cooling_limit.value
+
+
+def test_zone_has_its_own_eco_and_away_bands():
+    model = zone_bands(
+        use_building_limits=False,
+        heating_limit=22,
+        cooling_limit=25,
+        eco_heating_limit=20,
+        eco_cooling_limit=27,
+        away_heating_limit=17,
+        away_cooling_limit=29,
+    )
+    assert band_limits(model, "eco") == (20, 27)
+    assert band_limits(model, "away") == (17, 29)
+
+
+def test_missing_zone_bands_take_the_central_values():
+    model = zone_bands(
+        use_building_limits=False,
+        heating_limit=22,
+        cooling_limit=25,
+        eco_heating_limit=20,
+        eco_cooling_limit=27,
+    )
+    assert band_limits(model, "eco") == (20, 27)
+    assert band_limits(model, "away") == (16, 30)  # Central default.
+
+
+def test_central_limits_ignore_dormant_zone_bands():
+    model = zone_bands(
+        use_building_limits=True, eco_heating_limit=20, eco_cooling_limit=27
+    )
+    assert band_limits(model, "eco") == (19, 26)
+
+
+def test_invalid_zone_band_is_rejected():
+    with pytest.raises(ValueError, match="invalid_limits"):
+        zone_bands(
+            use_building_limits=False,
+            heating_limit=22,
+            cooling_limit=25,
+            eco_heating_limit=25,
+            eco_cooling_limit=25.2,
+        )

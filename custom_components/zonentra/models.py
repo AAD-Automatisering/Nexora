@@ -7,7 +7,7 @@ from dataclasses import field as dataclass_field
 from typing import Any
 
 from .const import KINDS
-from .migration import LIMIT_FIELDS, PARAMETER_FIELDS, migrate_options
+from .migration import BAND_FIELDS, LIMIT_FIELDS, PARAMETER_FIELDS, migrate_options
 from .observations import STATE_BASED, UPDATE_BASED, VALIDATION_STRATEGIES
 from .presence import PRESENCE_DOMAINS
 
@@ -51,6 +51,12 @@ class Zone:
     sensor_validation: str = STATE_BASED
     use_building_limits: bool = False
     use_building_parameters: bool = False
+    # 0.10: own eco/away bands when the zone does not use the central limits;
+    # None takes the central value.
+    eco_heating_limit: float | None = None
+    eco_cooling_limit: float | None = None
+    away_heating_limit: float | None = None
+    away_cooling_limit: float | None = None
     # 0.10 vane: position for cooling (up) and heating (down) of the room's
     # indoor units, set through a separate entity (select or number).
     vane_entity: str | None = None
@@ -116,8 +122,18 @@ class BuildingSettings:
 
 def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
     values = {}
-    if zone.use_building_limits:
+    own_limits = any(getattr(zone, key) is not None for key in LIMIT_FIELDS)
+    if zone.use_building_limits or not own_limits:
+        # 0.10: static limits are set on the device; a zone without its own
+        # limit (entities) keeps the central ones.
         values.update({key: getattr(settings, key) for key in LIMIT_FIELDS})
+    values.update(
+        {
+            key: getattr(settings, key)
+            for key in BAND_FIELDS
+            if zone.use_building_limits or getattr(zone, key) is None
+        }
+    )
     if zone.use_building_parameters:
         values.update({key: getattr(settings, key) for key in PARAMETER_FIELDS})
     return replace(zone, **values)
@@ -216,13 +232,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     for key in ("min_on_seconds", "min_off_seconds", "changeover_wait_seconds"):
         _range(getattr(settings, key), 0, 3600)
     _entity(settings.presence_entity, PRESENCE_DOMAINS)
-    for band in ("eco", "away"):
-        heat = getattr(settings, f"{band}_heating_limit")
-        cool = getattr(settings, f"{band}_cooling_limit")
-        _range(heat, 5, 35)
-        _range(cool, 5, 35)
-        if heat + 2 * settings.hysteresis >= cool:
-            raise ValueError("invalid_limits")
+    _validate_bands(settings, settings.hysteresis)
     _range(settings.motion_delay_seconds, 0, 600)
     _range(settings.motion_off_delay_minutes, 1, 240)
     _range(settings.setpoint_max_offset, 0, 5)
@@ -269,6 +279,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         _range(zone.max_age_seconds, 0, 86400)
         _validate_sensor_validation(zone)
         _validate_limits(zone)
+        _validate_bands(zone, zone.hysteresis)
     for group in group_models:
         _entity(group.mode_entity, ("sensor", "select", "climate"))
         _range(group.min_switch_seconds, 0, 86400)
@@ -307,6 +318,16 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     return Building(
         building_id, name, zone_models, group_models, tuple(equipment_models), settings
     )
+
+
+def _validate_bands(config, hysteresis) -> None:
+    for band in ("eco", "away"):
+        heat = getattr(config, f"{band}_heating_limit")
+        cool = getattr(config, f"{band}_cooling_limit")
+        _range(heat, 5, 35)
+        _range(cool, 5, 35)
+        if heat + 2 * hysteresis >= cool:
+            raise ValueError("invalid_limits")
 
 
 def _validate_sensor_validation(config) -> None:

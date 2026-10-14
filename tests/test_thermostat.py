@@ -156,12 +156,52 @@ def test_thermostat_band_replaces_comfort_but_not_eco_or_away():
 
 
 def test_thermostat_band_gives_a_zone_without_limits_a_demand():
-    building = zone_model(use_building_limits=False)
+    building = build_model(
+        "b",
+        "B",
+        {
+            "zones": [
+                {"id": "room", "name": "Room", "temperature_entity": "sensor.room"}
+            ]
+        },
+    )
     zone = building.zones[0]
     sources = {"sensor.room": SourceState("20", "°C", NOW)}
     assert collect_zone(building, zone, sources, NOW).heating_limit.quality != "valid"
     own = collect_zone(building, zone, sources, NOW, comfort=(21, 24))
     assert own.heating_limit.quality == "valid"
+
+
+def test_zone_without_own_limits_keeps_the_central_ones():
+    # 0.10: static limits are set on the device; the wizard only has entities.
+    zone = zone_model(use_building_limits=False).zones[0]
+    assert (zone.heating_limit, zone.cooling_limit) == (21, 24)
+
+
+def test_room_bands_win_over_the_central_ones():
+    building = zone_model()
+    zone = building.zones[0]
+    sources = {"sensor.room": SourceState("20", "°C", NOW)}
+    eco = collect_zone(
+        building,
+        zone,
+        sources,
+        NOW,
+        band="eco",
+        bands={"eco_heating_limit": 18},
+    )
+    assert (eco.heating_limit.value, eco.cooling_limit.value) == (18, 26)
+
+
+def test_room_band_limits_are_stored_and_validated():
+    thermostat = update_thermostat(Thermostat(), 0.3, eco_heating_limit=18.5)
+    assert thermostat.bands == {"eco_heating_limit": 18.5}
+    restored = Thermostat.from_dict(thermostat.as_dict())
+    assert restored.eco_heating_limit == 18.5 and restored.away_cooling_limit is None
+    with pytest.raises(ValueError, match="invalid_limits"):
+        update_thermostat(Thermostat(), 0.3, away_cooling_limit=40)
+    cleared = update_thermostat(thermostat, 0.3, eco_heating_limit=None)
+    assert cleared.bands == {}
 
 
 # --- Room regulation: switching on and off ------------------------------------

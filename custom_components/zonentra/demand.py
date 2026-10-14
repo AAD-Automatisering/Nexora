@@ -48,11 +48,14 @@ def collect_zone(
     outdoor_temperature: Reading | None = None,
     band: str = "comfort",
     comfort: tuple[float, float] | None = None,
+    bands: Mapping[str, float] | None = None,
 ) -> ZoneSnapshot:
     """Snapshot of one zone; ``band`` eco/away replaces the comfort limits.
 
     ``comfort`` is the room thermostat's own band (0.9); it replaces the
-    configured comfort limits, never the central eco/away bands.
+    configured comfort limits, never the central eco/away bands. ``bands`` are
+    the room's own eco/away limits set on its device (0.10); they win over the
+    zone configuration and the central values.
     """
     # Measurements follow the zone strategy; state_based applies no age limit.
     max_age = max_age_for(zone.sensor_validation, zone.max_age_seconds)
@@ -70,10 +73,19 @@ def collect_zone(
             if item.zone_id == zone.id and item.kind == kind
         )
 
-    if band in ("eco", "away"):  # Central eco/away bands (presence, motion).
+    if band in ("eco", "away"):  # Eco/away bands: the zone's, else central.
         settings = building.settings
-        heating = configured_limit(getattr(settings, f"{band}_heating_limit"))
-        cooling = configured_limit(getattr(settings, f"{band}_cooling_limit"))
+
+        def band_limit(direction):
+            key = f"{band}_{direction}_limit"
+            value = (bands or {}).get(key)
+            if value is None:
+                value = getattr(zone, key)
+            return configured_limit(
+                value if value is not None else getattr(settings, key)
+            )
+
+        heating, cooling = band_limit("heating"), band_limit("cooling")
     else:
         heating, cooling = comfort_limits(zone, sources, now, comfort)
     return ZoneSnapshot(
