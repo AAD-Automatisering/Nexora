@@ -1,6 +1,6 @@
 # Zonentra — architectuur
 
-Status: versie 0.6.0, VTherm-achtige opbouw (centrale configuratie + ruimte-items), gesimuleerde regelstrategie en Manual Override, binnenunitobservatie, sensorvalidatie, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
+Status: versie 0.7.0, eerste actieve functie (standregeling buitenunitgroep), VTherm-achtige opbouw (centrale configuratie + ruimte-items), gesimuleerde regelstrategie en Manual Override, binnenunitobservatie, sensorvalidatie, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
 
 ## Projectnaam en integratie-identiteit
 
@@ -85,6 +85,17 @@ meetvervaldatum of omschakeldeadline. Een gefilterde state_reported-listener nee
 ook nieuwe rapporten met dezelfde waarde mee; last_changed wordt niet als freshness
 gebruikt. Sinds 0.3.1 krijgen alleen bronnen met `update_based`-validatie een
 vervaldatum; standaard (`state_based`) keurt de timer geen geldige waarde af. Alle subscriptions en timers worden opgeruimd bij unload.
+
+## Eerste actieve functie: standregeling (0.7)
+
+Installatiefeit: de eerste binnenunit die aangaat bepaalt de buitenunitstand, en
+er is geen fysieke terugmelding. Zonentra vervangt daarom de handmatige
+"airco-stand"-automation door per groep alle binnenunits klaar te zetten in de
+gewenste groepsmodus. Dit is bewust de kleinste actieve stap: alleen de modus,
+alleen voor de centrale opbouw, met een noodstop-schakelaar per groep, CommandTracker
+voor eigen commando's, een commandolog met resultaat en opslag van de laatst gezette
+stand. Aan/uit per ruimte en setpoints blijven gesimuleerd
+(`active_switch_permitted` blijft false).
 
 ## Config entries (0.6)
 

@@ -15,6 +15,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
 from .migration import migrate_options
@@ -24,6 +25,11 @@ from .topology import CENTRAL, ENTRY_TYPE, ZONE, assemble
 
 ZonentraConfigEntry = ConfigEntry[BuildingRuntime]
 PLATFORMS = [Platform.SENSOR]
+CENTRAL_PLATFORMS = [Platform.SENSOR, Platform.SWITCH]
+
+
+def platforms(entry: ConfigEntry) -> list[Platform]:
+    return CENTRAL_PLATFORMS if entry_type(entry) == CENTRAL else PLATFORMS
 
 
 def entry_type(entry: ConfigEntry) -> str:
@@ -84,7 +90,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
             raise ConfigEntryError(
                 "Zonentra diagnostic entities cannot be source inputs"
             )
-    runtime = entry.runtime_data = BuildingRuntime(hass, building)
+    runtime = entry.runtime_data = BuildingRuntime(
+        hass, building, active=kind == CENTRAL
+    )
+    if kind == CENTRAL:
+        # The last applied outdoor-stand per group survives restarts.
+        runtime.mode_store = Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.mode_control")
+        runtime.load_presets(await runtime.mode_store.async_load())
     tracked_entity_ids = building.entity_ids
     if tracked_entity_ids:
         entry.async_on_unload(
@@ -103,7 +115,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
         )
     entry.async_on_unload(runtime.close)
     runtime.refresh()
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await hass.config_entries.async_forward_entry_setups(entry, platforms(entry))
     return True
 
 
@@ -144,7 +156,7 @@ async def _async_zone_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> bool:
     """Unload diagnostic entities; HA removes entry callbacks on success."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return await hass.config_entries.async_unload_platforms(entry, platforms(entry))
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:

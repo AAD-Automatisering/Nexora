@@ -89,6 +89,7 @@ def classify_transition(
     old_present: bool = True,
     trusted: bool = True,
     zonentra_initiated: bool = False,
+    origin: str = "device",
 ) -> str:
     """Classify one HA state_changed event of a linked indoor unit."""
     if not old_present:
@@ -104,7 +105,8 @@ def classify_transition(
     if not trusted:
         return "untrusted"  # restored or assumed state
     if old_state == "off" and new_state in ACTIVE_MODES:
-        return "manual_on"
+        # Automations and scripts are not people at a room controller.
+        return "automation_on" if origin == "automation" else "manual_on"
     if old_state in ACTIVE_MODES and new_state == "off":
         return "manual_off"
     if old_state in ACTIVE_MODES and new_state in ACTIVE_MODES:

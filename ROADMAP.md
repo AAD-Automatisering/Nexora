@@ -92,6 +92,16 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] Oud enkel item werkt door met reparatiemelding (opnieuw aanmaken).
 - [ ] Overstap op de kantoorinstallatie: oud item vervangen door centraal + ruimtes.
 
+### Versie 0.7.0 — actieve standregeling (geïmplementeerd)
+
+- [x] Zonentra zet per buitenunitgroep de stand van alle binnenunits (vervangt de eigen automation).
+- [x] Lopende units wisselen mee; units die uit staan krijgen een klaarzet-puls.
+- [x] Correctie van units die in de verkeerde stand worden aangezet.
+- [x] Noodstop-schakelaar per groep, commandolog en opgeslagen laatste stand.
+- [x] Herkomst via HA-context: automations starten geen Manual Override.
+- [ ] Afgeleide buitenunitmodus ("eerste aan bepaalt") als extra diagnose.
+- [ ] Praktijkperiode: commandolog en gedrag beoordelen vóór verdere aansturing.
+
 ### Vervolg vóór actieve regeling
 
 Inventariseer de fysieke topologie, betrouwbare gatewayfeedback en huidige

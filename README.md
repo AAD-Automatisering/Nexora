@@ -3,7 +3,11 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.6.0** maakt Zonentra aan zoals Versatile Thermostat: eenmalig een
+Versie **0.7.0** is de eerste versie die iets **echt aanstuurt**: Zonentra zet per
+buitenunitgroep de **stand** (verwarmen/koelen) van alle binnenunits, op basis van
+de gewogen klimaatvraag. Al het andere (aan/uit per ruimte, setpoints, vloerverwarming,
+ventilatie, zonwering) blijft simulatie. Per groep is er een noodstop-schakelaar.
+Versie 0.6.0 maakt Zonentra aan zoals Versatile Thermostat: eenmalig een
 **centrale configuratie** (gebouw, buitenunitgroepen, gedeelde instellingen) en
 daarna **per ruimte een eigen item** met een eigen apparaat in Home Assistant.
 Versie 0.5.0 simuleert de volledige regelstrategie: per buitenunitgroep een
@@ -18,9 +22,9 @@ klimaatvraag. Een afgeleide modus is nooit fysieke buitenunitfeedback. Versie
 0.3.1 herstelde de sensorvalidatie: een geldige temperatuur die lang niet
 verandert (zoals bij KNX) wordt niet langer onterecht `stale`. Versie 0.3.0
 voegde centrale gebouwinstellingen met optionele ruimteafwijkingen toe aan de
-uitlegbare klimaatvraag en gewogen buitenunitvoorstellen. Alles blijft
-read-only simulatie. Zonentra roept geen apparaatservices aan en wijzigt geen HVAC-, KNX-,
-zonwerings- of ventilatie-instellingen. De 16 °C-vloerverwarmingsgrens blijft intact.
+uitlegbare klimaatvraag en gewogen buitenunitvoorstellen. Behalve de
+actieve standregeling (0.7) blijft alles simulatie: Zonentra wijzigt geen setpoints en
+bedient geen vloerverwarming, zonwering of ventilatie. De 16 °C-vloerverwarmingsgrens blijft intact.
 Bestaande regelingen en automations blijven zelfstandig werken.
 
 ## Installatie
@@ -52,6 +56,21 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.7.0 — actieve standregeling
+
+**Let op: na de update stuurt Zonentra direct de stand van je airco's aan.**
+
+1. Zet je eigen automation uit die de airco-stand (verwarmen/koelen) voor alle
+   binnenunits zet, en de bijbehorende keuzehelper. Zonentra neemt die taak over;
+   twee systemen tegelijk werken elkaar tegen.
+2. Werk Zonentra bij via HACS en herstart Home Assistant.
+3. Controleer per buitenunitgroep de schakelaar **Actieve standregeling** op het
+   centrale apparaat. Die staat standaard aan; zet hem uit om alle commando's voor
+   die groep direct te stoppen.
+
+Alleen de nieuwe opbouw (centrale configuratie + ruimtes) stuurt aan. Een oud
+enkel Zonentra-item blijft puur simulatie.
 
 ### Bijwerken naar 0.6.0
 
@@ -230,6 +249,32 @@ niet voor elke score een aparte entiteit nodig is.
 | Binnenunit Gesimuleerde actie | turn_on_heat / turn_on_cool / turn_off / correct_mode / hold / blocked | simulation, zone, observed_mode, desired_mode, zone_demand, intended_action, steps, reason, blocked_reason, blocked_until, manual_override_active, override_remaining_seconds, override_expires_at, seconds_since_transition, group_coordination_phase, availability, evaluated_at |
 | Buitenunit Gesimuleerde coördinatie | idle / preparing / stopping / waiting / applying / verifying / completed / blocked / failed | simulation, desired_mode, group_mode, group_mode_reason, coordinated_mode, derived_mode, member_indoor_units, available_indoor_units, conflicts, switch_needed, switch_from, switch_to, switch_allowed_in_simulation, active_switch_permitted (altijd false), phase_reason, waiting_until, blockers, planned_actions |
 
+### Actieve standregeling (0.7)
+
+Bij deze Mitsubishi-installatie bepaalt de **eerste binnenunit die aangaat** de
+stand van de buitenunit; een unit in de andere stand doet dan niets, en er is geen
+terugmelding van de werkelijke buitenunitstand. Zonentra houdt daarom alle
+binnenunits van een groep klaargezet in de gewenste groepsmodus:
+
+| Situatie | Wat Zonentra doet |
+|---|---|
+| Groepsmodus wisselt (na hysterese en minimale wisseltijd) | Lopende units krijgen direct de nieuwe stand; units die uit staan krijgen een korte puls (`set_hvac_mode` → 3 s → `turn_off`), zodat ze bij de volgende inschakeling in de juiste stand starten |
+| Iemand zet een unit aan in de verkeerde stand | Na 30 s zet Zonentra de stand terug naar de groepsmodus (niet vaker dan eens per 2 min per unit) |
+| Groepsmodus neutraal of onbekend (bijv. sensorfout) | Niets; de laatst gezette stand blijft |
+| Schakelaar **Actieve standregeling** uit | Geen enkel commando meer, ook geen openstaande puls; het plan blijft zichtbaar als simulatie |
+
+`fan_only` (en bij koelen `dry`) blijven ongemoeid. De laatst gezette stand wordt
+bewaard, zodat een herstart niet opnieuw alle airco's laat pulsen. Na een herstart
+stuurt Zonentra pas iets zodra de schakelaar is hersteld. Commando's die Zonentra
+zelf geeft, starten geen Manual Override; een automation die een airco aanzet ook
+niet meer (herkend aan de HA-context), de roomcontroller en een HA-gebruiker wel.
+
+De sensor **Gesimuleerde coördinatie** van de groep toont `active_mode_control`,
+`mode_control_status`, `preset_mode`, `preset_changed_at` en de laatste commando's
+met resultaat. Statussen: `in_sync`, `group_mode_applied`, `corrected`,
+`minimum_switch_interval`, `neutral`, `no_group_mode`, `disabled`,
+`waiting_for_switch_state`, `climate_service_unavailable`.
+
 ### Gesimuleerde regeling en handmatige bediening (0.5)
 
 De groepsmodus (heat / cool / neutral / unknown) volgt uit de bestaande gewogen
@@ -281,7 +326,9 @@ Voorbeeld: ruimte met warmtevraag, airco uit → desired `heat`, afgeleid
 `inactive`, physical `unknown`, `observation_reason: heat_requested_units_inactive`.
 De afleidingsregels en alle reason codes staan in [ALGORITHM.md](ALGORITHM.md#binnenunits-en-afgeleide-groepsmodus-04).
 
-`read_only` bevestigt observatie/simulatie, ook bij een leeg gebouw. `degraded`
+`read_only` bevestigt observatie/simulatie, ook bij een leeg gebouw; de
+standregeling uit 0.7 staat daar los van en is per groep zichtbaar (`read_only: false`
+op de coördinatiesensor zolang de schakelaar aan staat). `degraded`
 betekent een ontbrekende/unknown/unavailable gekoppelde bron of een ongeldige
 klimaatvraag voor een ruimte met ingestelde grenzen. Optionele bronproblemen zijn
 zichtbaar, maar blokkeren de vraagberekening niet. `conflict` meldt tegengestelde
@@ -371,6 +418,8 @@ custom_components/zonentra/
   override.py                   Manual Override-detectie en command tracking
   control.py                    groepscoördinatie en gesimuleerde acties per unit
   topology.py                   centrale configuratie + ruimte-items → één gebouwmodel
+  executor.py                   actieve standregeling: welke modus-commando's nodig zijn
+  switch.py                     noodstop per buitenunitgroep (Actieve standregeling)
   sensor.py                     diagnostische sensoren
   diagnostics.py                geredigeerde diagnostiekdownload
   strings.json                  UI-teksten

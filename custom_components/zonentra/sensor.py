@@ -502,5 +502,42 @@ class GroupCoordinationSensor(ZonentraDiagnosticSensor):
             "planned_actions": {
                 names.get(unit, unit): action for unit, action in item.planned_actions
             },
+            # 0.7 active outdoor-stand control (central layout only).
+            **self._mode_control(),
             "evaluated_at": _iso(self.runtime.evaluated_at),
+        }
+
+    def _mode_control(self) -> dict:
+        runtime = self.runtime
+        if not runtime.active_capable:
+            return {"active_mode_control": False}
+        control = runtime.mode_controls.get(self._group.id)
+        memory = runtime.preset_memories.get(self._group.id)
+        active = runtime.mode_active.get(self._group.id)
+        return {
+            # Honest labelling: this group's stand is really controlled.
+            "read_only": not active,
+            "active_mode_control": active,
+            "mode_control_status": control.status if control else None,
+            "mode_control_target": control.target_mode if control else None,
+            "preset_mode": memory.mode if memory else None,
+            "preset_changed_at": _iso(memory.changed_at) if memory else None,
+            "mode_control_blocked_until": _iso(control.blocked_until)
+            if control
+            else None,
+            "last_commands": [
+                {
+                    key: entry[key]
+                    for key in (
+                        "at",
+                        "entity_id",
+                        "service",
+                        "hvac_mode",
+                        "reason",
+                        "result",
+                    )
+                }
+                for entry in runtime.command_log
+                if entry["group_id"] == self._group.id
+            ][-10:],
         }

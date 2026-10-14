@@ -315,6 +315,11 @@
           "unknown": "Unknown"
         }
       }
+    },
+    "switch": {
+      "active_mode_control": {
+        "name": "{group} Active stand control"
+      }
     }
   },
   "issues": {

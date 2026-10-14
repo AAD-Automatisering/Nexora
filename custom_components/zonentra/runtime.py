@@ -1,11 +1,11 @@
 """Event-driven read-only bridge from HA states to pure building models."""
 
 import logging
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import timedelta
 
 from homeassistant.const import EVENT_STATE_CHANGED
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_track_point_in_utc_time
 from homeassistant.util import dt as dt_util
@@ -14,6 +14,7 @@ from .control import plan
 from .decision import Observation, simulate
 from .demand import calculate_demand, collect_zone
 from .engine import GroupMemory, evaluate, observe_mode
+from .executor import PresetMemory, next_correction_check, plan_mode_commands
 from .indoor import compare_modes, observe_group, observe_unit
 from .models import Building
 from .observations import (
@@ -28,11 +29,35 @@ from .override import CommandTracker, classify_transition, update_override
 _LOGGER = logging.getLogger(__name__)
 
 
+def _origin(event) -> str:
+    """Who caused a state change, as far as Home Assistant can tell.
+
+    A KNX room controller produces a bare context; a service call from an
+    automation or script carries a parent context; the HA UI carries a user.
+    """
+    context = getattr(event, "context", None)
+    if context is not None and context.user_id:
+        return "ha_user"
+    if context is not None and context.parent_id:
+        return "automation"
+    return "device"
+
+
 class BuildingRuntime:
     """Own one building's observations; no service or hardware access."""
 
-    def __init__(self, hass: HomeAssistant, building: Building) -> None:
+    def __init__(
+        self, hass: HomeAssistant, building: Building, *, active: bool = False
+    ) -> None:
         self.hass = hass
+        # Active outdoor-stand control exists only for the central layout.
+        self.active_capable = active
+        self.mode_active: dict[str, bool | None] = {}  # None until switch restored
+        self.preset_memories: dict[str, PresetMemory] = {}
+        self.mode_controls = {}
+        self.pending_offs = []  # (due, ModeCommand, target mode)
+        self.command_log: list[dict] = []
+        self.mode_store = None
         self.building = building
         self.signal = f"zonentra_{building.id}_updated"
         self.observations: dict[str, Observation] = {}
@@ -164,6 +189,8 @@ class BuildingRuntime:
                 ],
             )
         self._plan(transitions, sources, now)
+        if self.active_capable:
+            self._control(sources, now)
         if self._cancel_deadline:
             self._cancel_deadline()
             self._cancel_deadline = None
@@ -207,12 +234,173 @@ class BuildingRuntime:
             for item in self.coordinations.values()
             if item.waiting_until
         )
+        deadlines.extend(due for due, _, _ in self.pending_offs)
+        for group_id, control in self.mode_controls.items():
+            if control.blocked_until:
+                deadlines.append(control.blocked_until)
+            group = next(g for g in self.building.groups if g.id == group_id)
+            if check := next_correction_check(
+                self._group_units(group),
+                self._changed_at(sources),
+                self.preset_memories.get(group_id, PresetMemory()),
+                control.target_mode,
+                now,
+            ):
+                deadlines.append(check)
         future = [deadline for deadline in deadlines if deadline > now]
         if future:
             self._cancel_deadline = async_track_point_in_utc_time(
                 self.hass, self.refresh, min(future)
             )
         async_dispatcher_send(self.hass, self.signal)
+
+    # --- Active outdoor-stand control (0.7) -----------------------------------
+
+    def load_presets(self, data: dict | None) -> None:
+        """Restore the last applied group modes, so a restart does not pulse."""
+        for group_id, item in ((data or {}).get("groups") or {}).items():
+            changed = dt_util.parse_datetime(item.get("changed_at") or "")
+            self.preset_memories[group_id] = PresetMemory(item.get("mode"), changed)
+
+    @callback
+    def set_mode_active(self, group_id: str, active: bool) -> None:
+        self.mode_active[group_id] = active
+        if not active:
+            # Emergency stop: nothing more is sent, not even a pending pulse-off.
+            group_units = {
+                item.id for item in self.building.equipment if item.group_id == group_id
+            }
+            self.pending_offs = [
+                item
+                for item in self.pending_offs
+                if item[1].equipment_id not in group_units
+            ]
+        self.refresh()
+
+    def _group_units(self, group):
+        return tuple(
+            self.indoor_units[item.id]
+            for item in self.building.equipment
+            if item.kind == "hvac"
+            and item.group_id == group.id
+            and item.id in self.indoor_units
+        )
+
+    def _changed_at(self, sources):
+        return {
+            item.id: sources[item.entity_id].changed_at
+            for item in self.building.equipment
+            if item.kind == "hvac" and item.entity_id in sources
+        }
+
+    def _control(self, sources, now) -> None:
+        """Plan and send mode commands; every command is tracked and logged."""
+        available = self.hass.services.has_service("climate", "set_hvac_mode")
+        changed_at = self._changed_at(sources)
+        entity_ids = {item.id: item.entity_id for item in self.building.equipment}
+        controls = {}
+        for group in self.building.groups:
+            previous = self.preset_memories.get(group.id, PresetMemory())
+            control, memory = plan_mode_commands(
+                group.id,
+                self.coordinations[group.id].group_mode,
+                self._group_units(group),
+                entity_ids,
+                changed_at,
+                previous,
+                group.min_switch_seconds,
+                now,
+                enabled=self.mode_active.get(group.id),
+            )
+            if control.commands and not available:
+                control = replace(
+                    control, status="climate_service_unavailable", commands=()
+                )
+                memory = previous
+            controls[group.id] = control
+            if memory != previous:
+                self.preset_memories[group.id] = memory
+                if memory.mode != previous.mode:
+                    self._save_presets()
+            for command in control.commands:
+                if command.delay_seconds:
+                    self.pending_offs.append(
+                        (
+                            now + timedelta(seconds=command.delay_seconds),
+                            command,
+                            control.target_mode,
+                        )
+                    )
+                else:
+                    self._execute(command, now)
+        self.mode_controls = controls
+        due = [item for item in self.pending_offs if item[0] <= now]
+        self.pending_offs = [item for item in self.pending_offs if item[0] > now]
+        for _, command, target in due:
+            source = sources.get(command.entity_id)
+            if source is None or source.state != target:
+                # Someone changed the unit during the pulse: leave it alone.
+                self._log(command, now, "skipped_changed_during_pulse")
+                continue
+            self._execute(command, now)
+
+    def _execute(self, command, now) -> None:
+        expected = command.hvac_mode if command.service == "set_hvac_mode" else "off"
+        self.command_tracker.register(command.entity_id, expected, now)
+        data = {"entity_id": command.entity_id}
+        if command.hvac_mode:
+            data["hvac_mode"] = command.hvac_mode
+        entry = self._log(command, now, "sending")
+        self.hass.async_create_task(self._call(command.service, data, entry))
+
+    async def _call(self, service, data, entry) -> None:
+        try:
+            await self.hass.services.async_call(
+                "climate", service, data, blocking=True, context=Context()
+            )
+        except Exception as err:  # noqa: BLE001 - report, never crash the runtime
+            entry["result"] = f"failed: {type(err).__name__}"
+            _LOGGER.warning("Zonentra %s on %s failed: %s", service, data, err)
+        else:
+            entry["result"] = "sent"
+
+    def _log(self, command, now, result) -> dict:
+        entry = {
+            "at": now.isoformat(),
+            "group_id": next(
+                (
+                    item.group_id
+                    for item in self.building.equipment
+                    if item.id == command.equipment_id
+                ),
+                None,
+            ),
+            "equipment_id": command.equipment_id,
+            "entity_id": command.entity_id,
+            "service": command.service,
+            "hvac_mode": command.hvac_mode,
+            "reason": command.reason,
+            "result": result,
+        }
+        self.command_log = [*self.command_log, entry][-30:]
+        _LOGGER.info("Zonentra mode control: %s", entry)
+        return entry
+
+    def _save_presets(self) -> None:
+        if self.mode_store is None:
+            return
+        data = {
+            "groups": {
+                group_id: {
+                    "mode": memory.mode,
+                    "changed_at": memory.changed_at.isoformat()
+                    if memory.changed_at
+                    else None,
+                }
+                for group_id, memory in self.preset_memories.items()
+            }
+        }
+        self.hass.async_create_task(self.mode_store.async_save(data))
 
     def _transitions(self, event, now) -> dict[str, str]:
         """Classify a state_changed event of a linked indoor unit, if any."""
@@ -241,6 +429,7 @@ class BuildingRuntime:
                     or new.attributes.get("assumed_state")
                 ),
                 zonentra_initiated=initiated,
+                origin=_origin(event),
             )
             self.last_transitions[item.id] = (transitions[item.id], now)
         return transitions

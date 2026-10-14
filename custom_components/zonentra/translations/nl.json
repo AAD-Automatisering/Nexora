@@ -315,6 +315,11 @@
           "unknown": "Onbekend"
         }
       }
+    },
+    "switch": {
+      "active_mode_control": {
+        "name": "{group} Actieve standregeling"
+      }
     }
   },
   "issues": {

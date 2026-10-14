@@ -536,3 +536,20 @@ def test_unavailable_unit_blocks_group_switch():
         memory=CoordinationMemory("heat", LONG_AGO),
     )
     assert coordinations["outdoor_1"].phase == "blocked"
+
+
+@pytest.mark.parametrize(
+    ("origin", "expected"),
+    [
+        ("device", "manual_on"),
+        ("ha_user", "manual_on"),
+        ("automation", "automation_on"),
+    ],
+)
+def test_origin_of_a_switch_on(origin, expected):
+    """0.7: only people (room controller or HA user) start a manual override."""
+    assert classify_transition("off", "heat", origin=origin) == expected
+    result, _ = update_override(
+        None, expected, "west", "heat", NOW, enabled=True, duration_minutes=30
+    )
+    assert (result is not None) == (expected == "manual_on")

@@ -1,4 +1,4 @@
-# Zonentra 0.6.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.7.0 — uitlegbare klimaatintelligentie
 
 Alles in dit document betreft **read-only analyse**. Een voorgestelde modus is
 geen commando, en verandert ook niet de intern bijgehouden actuele modus.
@@ -370,6 +370,39 @@ pure kern), waardoor alles deterministisch testbaar is.
 niet. Een verlopen override kan dus nooit terugkomen en een herstart start nooit
 een override. Een unit die na een herstart aan staat zonder vraag krijgt de normale
 `turn_off`-intentie (met minimale aan-tijd vanaf de herstart).
+
+## Actieve standregeling (0.7)
+
+Dit is de enige actieve functie. `executor.plan_mode_commands()` is puur; de runtime
+voert de commando's uit via `climate.set_hvac_mode` en `climate.turn_off`.
+
+**Doelmodus** = de leidende groepsmodus uit de coördinator (heat/cool). Bij neutral of
+unknown wordt niets gestuurd en blijft de laatst gezette stand (`PresetMemory`).
+
+**Wissel** (doel ≠ laatst gezette stand): alleen als sinds de vorige wissel de
+bestaande groepsparameter `min_switch_seconds` (standaard 900 s) verstreken is.
+Dan per beschikbare unit:
+- uit → `set_hvac_mode(doel)`, na 3 s `turn_off` (`preset_pulse`); de uit-puls wordt
+  overgeslagen als de unit intussen een andere state heeft;
+- aan in een niet-compatibele modus → `set_hvac_mode(doel)` (`switch_running_unit`);
+- aan in een compatibele modus (heat: heat, fan_only; cool: cool, dry, fan_only) → niets.
+
+**In sync:** een draaiende unit in een niet-compatibele modus wordt na 30 s
+gecorrigeerd (`correct_running_unit`), per unit hooguit eens per 120 s. De runtime
+plant een herbeoordeling op het moment dat een correctie mogelijk wordt.
+
+**Veiligheid:** elk commando wordt vooraf in de CommandTracker geregistreerd
+(verwachte state, 60 s), zodat de eigen overgang geen Manual Override start.
+Fouten worden gelogd (`failed: …`) en breken de runtime niet. Zonder climate-service
+wordt niets gestuurd en ook niets als "gezet" onthouden. De schakelaar per groep
+(RestoreEntity, standaard aan) stopt alle commando's direct, inclusief openstaande
+uit-pulsen; tot hij na een herstart is hersteld, wordt niets gestuurd. De laatst
+gezette stand staat in HA-opslag en overleeft herstarts.
+
+**Herkomst van overgangen** (Manual Override): de HA-context van het
+`state_changed`-event. Een gebruiker (`user_id`) of een kale context (KNX-roomcontroller)
+→ `manual_on`; een context met `parent_id` (automation/script) → `automation_on`,
+geen override. Dit is een sterke aanwijzing, geen bewijs.
 
 ## Events en herbeoordeling
 

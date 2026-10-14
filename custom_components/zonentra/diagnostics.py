@@ -109,6 +109,21 @@ async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -
                 }
                 for group_id, observation in runtime.group_observations.items()
             ],
+            "mode_control": {
+                "active_capable": runtime.active_capable,
+                "groups": [
+                    {
+                        "group_id": group_id,
+                        "active": runtime.mode_active.get(group_id),
+                        "status": control.status,
+                        "target_mode": control.target_mode,
+                        "preset_mode": control.preset_mode,
+                        "blocked_until": _iso(control.blocked_until),
+                    }
+                    for group_id, control in runtime.mode_controls.items()
+                ],
+                "command_log": list(runtime.command_log),
+            },
             "control_simulation": {
                 "simulation": True,
                 "coordinations": [
