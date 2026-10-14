@@ -157,8 +157,8 @@ async def test_config_flow_creates_central_then_zone(hass):
     assert "heating_limit_entity" in result["data_schema"].schema
     assert "heating_limit" not in result["data_schema"].schema
     assert "hysteresis" not in result["data_schema"].schema
-    hass.states.async_set("input_number.lab_heat", "19")
-    hass.states.async_set("input_number.lab_cool", "26")
+    hass.states.async_set("input_number.lab_heat", "19", CELSIUS)
+    hass.states.async_set("input_number.lab_cool", "26", CELSIUS)
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
