@@ -1,7 +1,11 @@
-# Zonentra 0.5.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.6.0 — uitlegbare klimaatintelligentie
 
 Alles in dit document betreft **read-only analyse**. Een voorgestelde modus is
 geen commando, en verandert ook niet de intern bijgehouden actuele modus.
+
+Sinds 0.6 worden de centrale configuratie en de losse ruimte-items vóór elke
+berekening samengevoegd tot één gebouwmodel (`topology.assemble`). De algoritmes
+hieronder zijn daardoor identiek voor het oude enkele item en de nieuwe opbouw.
 
 ## Gevalideerde bronnen en ruimtesnapshots
 

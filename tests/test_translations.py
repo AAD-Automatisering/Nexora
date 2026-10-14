@@ -19,7 +19,6 @@ FILES = {
 }
 TRANSLATIONS = {name: json.loads(path.read_text()) for name, path in FILES.items()}
 FLOW = ast.parse((ROOT / "config_flow.py").read_text())
-CATEGORIES = ("zone", "group", "equipment")
 
 
 def leaves(tree, prefix=()):
@@ -41,25 +40,60 @@ def keyword(call, name):
     return next((k.value for k in call.keywords if k.arg == name), None)
 
 
+def flow_classes():
+    """Map each flow class in config_flow.py to its translation section(s)."""
+    classes = {n.name: n for n in FLOW.body if isinstance(n, ast.ClassDef)}
+    roots = {"ConfigFlow": "config", "OptionsFlow": "options"}
+
+    def sections(name, seen=()):
+        found = set()
+        for base in classes[name].bases:
+            base_name = getattr(base, "id", "")
+            if base_name in roots or base_name == "OptionsFlowWithReload":
+                found.add(roots.get(base_name, "options"))
+            elif base_name in classes and base_name not in seen:
+                found |= sections(base_name, (*seen, name))
+        return found
+
+    result = {name: sections(name) for name in classes}
+    for name in classes:  # Mixins take the sections of the flows using them.
+        if not result[name]:
+            result[name] = set().union(
+                *(
+                    result[other]
+                    for other, node in classes.items()
+                    if name in {getattr(base, "id", "") for base in node.bases}
+                )
+            )
+    return classes, result
+
+
 def menus():
-    """(step_id, option) for every async_show_menu call in config_flow.py."""
-    for node in ast.walk(FLOW):
-        if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == (
-            "async_show_menu"
-        ):
-            step = keyword(node, "step_id").value
-            for option in keyword(node, "menu_options").elts:
-                yield step, option.value
+    """(section, step_id, option) for every async_show_menu call."""
+    classes, sections = flow_classes()
+    for name, cls in classes.items():
+        for node in ast.walk(cls):
+            if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == (
+                "async_show_menu"
+            ):
+                step = keyword(node, "step_id").value
+                for option in keyword(node, "menu_options").elts:
+                    for section in sections[name]:
+                        yield section, step, option.value
 
 
-def options_steps():
-    """Literal step IDs plus the generated category/details steps."""
-    steps = {"init", *CATEGORIES, *(f"{c}_details" for c in CATEGORIES)}
-    for node in ast.walk(FLOW):
-        if isinstance(node, ast.Call):
-            step = keyword(node, "step_id")
-            if isinstance(step, ast.Constant) and step.value != "user":
-                steps.add(step.value)
+def flow_steps():
+    """(section, step) for every async_step_* method that can show a step."""
+    classes, sections = flow_classes()
+    steps = set()
+    for name, cls in classes.items():
+        for node in cls.body:
+            if isinstance(node, ast.AsyncFunctionDef) and node.name.startswith(
+                "async_step_"
+            ):
+                step = node.name.removeprefix("async_step_")
+                if step != "finish":  # Saves only; never shows a form.
+                    steps |= {(section, step) for section in sections[name]}
     return sorted(steps)
 
 
@@ -114,22 +148,24 @@ def test_languages_have_identical_keys_and_no_empty_labels(language):
 
 
 @pytest.mark.parametrize("language", list(FILES))
-@pytest.mark.parametrize(("step", "option"), list(menus()))
-def test_every_menu_option_has_a_label(language, step, option):
-    assert label(language, "options", "step", step, "menu_options", option)
+@pytest.mark.parametrize(("section", "step", "option"), list(menus()))
+def test_every_menu_option_has_a_label(language, section, step, option):
+    assert label(language, section, "step", step, "menu_options", option)
 
 
 def test_menu_contains_central_configuration():
-    assert ("init", "building") in list(menus())
+    assert ("options", "init", "building") in list(menus())
     assert label("nl", "options", "step", "init", "menu_options", "building") == (
         "Centrale configuratie"
     )
+    assert ("config", "user", "central") in list(menus())
+    assert label("nl", "config", "step", "user", "menu_options", "zone") == "Ruimte"
 
 
 @pytest.mark.parametrize("language", list(FILES))
-@pytest.mark.parametrize("step", options_steps())
-def test_every_options_step_has_a_title(language, step):
-    assert label(language, "options", "step", step, "title")
+@pytest.mark.parametrize(("section", "step"), flow_steps())
+def test_every_flow_step_has_a_title(language, section, step):
+    assert label(language, section, "step", step, "title")
 
 
 @pytest.mark.parametrize("language", list(FILES))
@@ -141,9 +177,16 @@ def test_every_form_field_has_a_label(language, field):
 
 
 @pytest.mark.parametrize("language", list(FILES))
+@pytest.mark.parametrize("section", ["config", "options"])
 @pytest.mark.parametrize("code", error_codes())
-def test_every_error_has_a_message(language, code):
-    assert label(language, "options", "error", code)
+def test_every_error_has_a_message(language, section, code):
+    assert label(language, section, "error", code)
+
+
+@pytest.mark.parametrize("language", list(FILES))
+def test_legacy_repair_issue_is_translated(language):
+    assert label(language, "issues", "legacy_configuration", "title")
+    assert "{name}" in label(language, "issues", "legacy_configuration", "description")
 
 
 @pytest.mark.parametrize("language", list(FILES))

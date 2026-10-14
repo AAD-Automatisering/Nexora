@@ -3,19 +3,88 @@
   "config": {
     "step": {
       "user": {
-        "title": "Zonentra building",
-        "description": "One Home Assistant, one Zonentra, one building. Demand and outdoor unit proposals are simulations only; existing controllers remain independent.",
+        "title": "Add Zonentra",
+        "description": "Like Versatile Thermostat: first create the central configuration (building, outdoor unit groups and shared settings) once, then add every zone separately. Zonentra only reads and simulates; nothing is controlled.",
+        "menu_options": {
+          "central": "Central configuration",
+          "zone": "Zone"
+        }
+      },
+      "central": {
+        "title": "Central configuration",
+        "description": "Building-wide settings used by every zone that takes the central values. Add outdoor unit groups afterwards via Configure. No equipment is controlled.",
         "data": {
-          "name": "Building name"
+          "name": "Building name",
+          "outdoor_temperature_entity": "Outdoor temperature sensor (whole building)",
+          "outdoor_max_age_seconds": "Maximum outdoor temperature age (seconds; 0 = disabled)",
+          "heating_limit": "Central heating limit (°C)",
+          "cooling_limit": "Central cooling limit (°C)",
+          "heating_limit_entity": "Central heating limit entity (optional)",
+          "cooling_limit_entity": "Central cooling limit entity (optional)",
+          "hysteresis": "Central temperature hysteresis (°C)",
+          "sensor_validation": "Central sensor validation (state_based = default; update_based only for periodically reporting sensors)",
+          "max_age_seconds": "Central maximum update age for update_based (seconds; ignored by state_based)",
+          "manual_override_enabled": "Allow manual override via the room controller",
+          "manual_override_duration_minutes": "Manual override duration (minutes, 5–120)",
+          "min_on_seconds": "Minimum indoor unit on-time before switching off (seconds; comfort)",
+          "min_off_seconds": "Minimum indoor unit off-time before switching on (seconds; safety, check manufacturer)",
+          "changeover_wait_seconds": "Wait between stopping and the opposite mode on a group switch (seconds; safety)"
+        }
+      },
+      "zone": {
+        "title": "Zone",
+        "description": "One room with its temperature sensor, indoor units (existing climate entities) and outdoor unit group. Disable a central choice to enter local values in the next step. No equipment is controlled.",
+        "data": {
+          "name": "Name",
+          "temperature_entity": "Room temperature sensor",
+          "indoor_units": "Indoor units (climate entities)",
+          "group_id": "Outdoor unit group",
+          "weight": "Zone weight",
+          "use_building_limits": "Use central climate limits",
+          "use_building_parameters": "Use central regulation parameters",
+          "occupancy_entity": "Room occupancy sensor (optional)",
+          "humidity_entity": "Humidity (optional)",
+          "co2_entity": "CO₂ sensor (optional)",
+          "contact_entities": "Window and door contacts (optional)",
+          "floor_heating_entities": "Floor heating (optional)",
+          "shading_entities": "Shading (optional)",
+          "ventilation_entities": "Ventilation (optional)"
+        }
+      },
+      "zone_parameters": {
+        "title": "Local zone values",
+        "description": "These values apply only to this zone.",
+        "data": {
+          "heating_limit": "Heating limit (°C)",
+          "cooling_limit": "Cooling limit (°C)",
+          "heating_limit_entity": "Heating limit entity (optional)",
+          "cooling_limit_entity": "Cooling limit entity (optional)",
+          "hysteresis": "Temperature hysteresis (°C)",
+          "sensor_validation": "Sensor validation (state_based = default; update_based only for periodically reporting sensors)",
+          "max_age_seconds": "Maximum update age for update_based (seconds; ignored by state_based)"
         }
       }
     },
     "error": {
-      "invalid_name": "Enter a non-empty name."
+      "invalid_name": "Enter a non-empty name.",
+      "duplicate_id": "This ID already exists.",
+      "invalid_id": "Use lowercase letters, digits, underscores or hyphens (1–64 characters).",
+      "invalid_entity": "Choose an entity with the correct domain, outside Zonentra.",
+      "invalid_kind": "Choose a supported equipment type.",
+      "invalid_reference": "A zone or group is missing or is still referenced. Remove equipment links first.",
+      "invalid_group": "Only HVAC equipment can belong to an outdoor unit group.",
+      "duplicate_equipment_entity": "This entity is already linked as equipment (possibly in another zone). An indoor unit can belong to one zone only.",
+      "entity_not_found": "The new entity link must exist in Home Assistant.",
+      "add_zone_first": "Add a zone before registering equipment. Close this dialog and reopen Options.",
+      "invalid_parameters": "Invalid parameters: use finite values within the indicated ranges. update_based requires a maximum update age above 0.",
+      "invalid_limits": "Configure both limits. Heating limit plus twice the hysteresis must be lower than the cooling limit.",
+      "conflicting_group": "The equipment group differs from its zone group.",
+      "central_required": "Create the Zonentra central configuration first."
     },
     "abort": {
-      "single_instance_allowed": "Only one Zonentra building is allowed per Home Assistant installation.",
-      "already_configured": "Zonentra is already configured."
+      "already_configured": "Zonentra is already configured.",
+      "central_already_configured": "The central configuration already exists. Add zones or use Configure on the central configuration.",
+      "central_required": "Create the Zonentra central configuration first."
     }
   },
   "options": {
@@ -117,6 +186,39 @@
           "min_off_seconds": "Minimum indoor unit off-time before switching on (seconds; safety, check manufacturer)",
           "changeover_wait_seconds": "Wait between stopping and the opposite mode on a group switch (seconds; safety)"
         }
+      },
+      "zone_settings": {
+        "title": "Zone",
+        "description": "One room with its temperature sensor, indoor units (existing climate entities) and outdoor unit group. Disable a central choice to enter local values in the next step. No equipment is controlled.",
+        "data": {
+          "name": "Name",
+          "temperature_entity": "Room temperature sensor",
+          "indoor_units": "Indoor units (climate entities)",
+          "group_id": "Outdoor unit group",
+          "weight": "Zone weight",
+          "use_building_limits": "Use central climate limits",
+          "use_building_parameters": "Use central regulation parameters",
+          "occupancy_entity": "Room occupancy sensor (optional)",
+          "humidity_entity": "Humidity (optional)",
+          "co2_entity": "CO₂ sensor (optional)",
+          "contact_entities": "Window and door contacts (optional)",
+          "floor_heating_entities": "Floor heating (optional)",
+          "shading_entities": "Shading (optional)",
+          "ventilation_entities": "Ventilation (optional)"
+        }
+      },
+      "zone_parameters": {
+        "title": "Local zone values",
+        "description": "These values apply only to this zone.",
+        "data": {
+          "heating_limit": "Heating limit (°C)",
+          "cooling_limit": "Cooling limit (°C)",
+          "heating_limit_entity": "Heating limit entity (optional)",
+          "cooling_limit_entity": "Cooling limit entity (optional)",
+          "hysteresis": "Temperature hysteresis (°C)",
+          "sensor_validation": "Sensor validation (state_based = default; update_based only for periodically reporting sensors)",
+          "max_age_seconds": "Maximum update age for update_based (seconds; ignored by state_based)"
+        }
       }
     },
     "error": {
@@ -132,7 +234,8 @@
       "add_zone_first": "Add a zone before registering equipment. Close this dialog and reopen Options.",
       "invalid_parameters": "Invalid parameters: use finite values within the indicated ranges. update_based requires a maximum update age above 0.",
       "invalid_limits": "Configure both limits. Heating limit plus twice the hysteresis must be lower than the cooling limit.",
-      "conflicting_group": "The equipment group differs from its zone group."
+      "conflicting_group": "The equipment group differs from its zone group.",
+      "central_required": "Create the Zonentra central configuration first."
     }
   },
   "entity": {
@@ -202,7 +305,22 @@
           "blocked": "Blocked",
           "failed": "Failed"
         }
+      },
+      "room_demand": {
+        "name": "Climate demand",
+        "state": {
+          "heating_demand": "Heating demand",
+          "cooling_demand": "Cooling demand",
+          "neutral": "Neutral",
+          "unknown": "Unknown"
+        }
       }
+    }
+  },
+  "issues": {
+    "legacy_configuration": {
+      "title": "Recreate Zonentra as central configuration and zones",
+      "description": "The Zonentra entry \"{name}\" uses the pre-0.6 single-entry layout. It keeps working for now, but is deprecated. Remove it and add Zonentra again: first the central configuration, then each zone. Entity IDs will change."
     }
   }
 }

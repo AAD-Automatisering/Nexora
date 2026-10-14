@@ -83,6 +83,15 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] Geen enkele servicecall; `active_switch_permitted` altijd false.
 - [ ] Veiligheidswaarden verifiëren met Mitsubishi en praktijkvergelijking met de installatie.
 
+### Versie 0.6.0 — opbouw zoals Versatile Thermostat (geïmplementeerd)
+
+- [x] Eén centrale configuratie (gebouw, groepen, gedeelde instellingen).
+- [x] Per ruimte een eigen config entry en apparaat; per item Configureren.
+- [x] Pure samenvoeging naar het bestaande gebouwmodel; rekenkern ongewijzigd.
+- [x] Validatie: binnenunit in één ruimte, groep bestaat, centrale verplicht.
+- [x] Oud enkel item werkt door met reparatiemelding (opnieuw aanmaken).
+- [ ] Overstap op de kantoorinstallatie: oud item vervangen door centraal + ruimtes.
+
 ### Vervolg vóór actieve regeling
 
 Inventariseer de fysieke topologie, betrouwbare gatewayfeedback en huidige

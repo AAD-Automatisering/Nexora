@@ -1,6 +1,6 @@
 # Zonentra — architectuur
 
-Status: versie 0.5.0, gesimuleerde regelstrategie en Manual Override, binnenunitobservatie, sensorvalidatie, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
+Status: versie 0.6.0, VTherm-achtige opbouw (centrale configuratie + ruimte-items), gesimuleerde regelstrategie en Manual Override, binnenunitobservatie, sensorvalidatie, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
 
 ## Projectnaam en integratie-identiteit
 
@@ -85,6 +85,30 @@ meetvervaldatum of omschakeldeadline. Een gefilterde state_reported-listener nee
 ook nieuwe rapporten met dezelfde waarde mee; last_changed wordt niet als freshness
 gebruikt. Sinds 0.3.1 krijgen alleen bronnen met `update_based`-validatie een
 vervaldatum; standaard (`state_based`) keurt de timer geen geldige waarde af. Alle subscriptions en timers worden opgeruimd bij unload.
+
+## Config entries (0.6)
+
+Zoals Versatile Thermostat bestaat Zonentra uit één **centrale configuratie**
+(`entry_type: central`, unique ID `central`) en een **config entry per ruimte**
+(`entry_type: zone`). De centrale entry bewaart `building` (instellingen) en
+`groups`. Een ruimte bewaart haar eigen zone-record plus `indoor_units`,
+`floor_heating_entities`, `shading_entities` en `ventilation_entities`.
+
+`topology.assemble()` (puur) voegt beide samen tot het bestaande topologieformaat;
+`build_model()` en de hele rekenkern zijn ongewijzigd. Apparatuur-ID's volgen uit
+de gekoppelde entiteit (`hvac_<object_id>`), dus ze zijn stabiel en uniek, en een
+entiteit hoort bij precies één ruimte.
+
+Alleen de centrale entry bezit een `BuildingRuntime` met listeners en de timer.
+Een ruimte-entry heeft geen eigen logica: haar sensoren lezen de centrale runtime
+via een provider en luisteren naar het vaste signaal `zonentra_<central_id>_updated`,
+zodat ze een herlaadbeurt van de centrale entry overleven. Een nieuwe, gewijzigde
+of verwijderde ruimte laat de centrale entry opnieuw opbouwen. Een ruimte zonder
+centrale configuratie geeft een setupfout; is die nog niet geladen, dan probeert HA
+het later opnieuw (`ConfigEntryNotReady`).
+
+De pre-0.6-entry zonder `entry_type` ("legacy") werkt ongewijzigd door, met zijn
+oude opties-flow en unique ID's. Hij is verouderd en meldt een reparatie-issue.
 
 ## Datamodellen (geïmplementeerd)
 

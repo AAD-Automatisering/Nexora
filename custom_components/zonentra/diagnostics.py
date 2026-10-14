@@ -3,11 +3,31 @@
 from dataclasses import asdict
 
 from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.config_entries import ConfigEntryState
 
-from . import ZonentraConfigEntry
+from . import ZonentraConfigEntry, central_entry, entry_type
 from .models import ZONE_ENTITY_FIELDS
 from .observations import describe
+from .topology import EQUIPMENT_FIELDS, ZONE
 
+REDACT = {
+    "name",
+    "id",
+    "entity_id",
+    "zone_id",
+    "group_id",
+    "equipment_id",
+    "temperature_entity",
+    "controller_entity",
+    "occupancy_entity",
+    "mode_entity",
+    "outdoor_temperature_entity",
+    "outdoor_temperature_candidates",
+    "contact_entities",
+    "member_zone_ids",
+    *ZONE_ENTITY_FIELDS,
+    *(field for field, _ in EQUIPMENT_FIELDS),
+}
 # Interpretation only: no temperatures, fan modes or entity IDs leave the instance.
 UNIT_FIELDS = (
     "equipment_id",
@@ -52,6 +72,8 @@ def _source_validation(runtime) -> list[dict]:
 
 
 async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -> dict:
+    if entry_type(entry) == ZONE:
+        return _zone_diagnostics(hass, entry)
     runtime = entry.runtime_data
     return async_redact_data(
         {
@@ -126,21 +148,37 @@ async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -
                 for item in entry.runtime_data.group_decisions.values()
             ],
         },
-        {
-            "name",
-            "id",
-            "entity_id",
-            "zone_id",
-            "group_id",
-            "equipment_id",
-            "temperature_entity",
-            "controller_entity",
-            "occupancy_entity",
-            "mode_entity",
-            "outdoor_temperature_entity",
-            "outdoor_temperature_candidates",
-            "contact_entities",
-            "member_zone_ids",
-            *ZONE_ENTITY_FIELDS,
-        },
+        REDACT,
     )
+
+
+def _zone_diagnostics(hass, entry) -> dict:
+    """A zone entry explains its own part of the central simulation."""
+    central = central_entry(hass)
+    runtime = (
+        central.runtime_data
+        if central and central.state is ConfigEntryState.LOADED
+        else None
+    )
+    zone_id = entry.options.get("id")
+    data = {
+        "entry_type": ZONE,
+        "configuration": {"options": dict(entry.options)},
+        "central_loaded": runtime is not None,
+    }
+    if runtime and zone_id in runtime.zone_demands:
+        data["zone_demand"] = asdict(runtime.zone_demands[zone_id])
+        data["unit_intents"] = [
+            {
+                **{
+                    key: value
+                    for key, value in asdict(intent).items()
+                    if key not in ("blocked_until", "override_expires_at")
+                },
+                "blocked_until": _iso(intent.blocked_until),
+                "override_expires_at": _iso(intent.override_expires_at),
+            }
+            for intent in runtime.unit_intents.values()
+            if intent.zone_id == zone_id
+        ]
+    return async_redact_data(data, REDACT)

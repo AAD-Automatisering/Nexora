@@ -3,19 +3,88 @@
   "config": {
     "step": {
       "user": {
-        "title": "Zonentra-gebouw",
-        "description": "Eén Home Assistant, één Zonentra, één gebouw. Klimaatvraag en buitenunitvoorstellen zijn uitsluitend simulatie; bestaande regelingen blijven zelfstandig werken.",
+        "title": "Zonentra toevoegen",
+        "description": "Zoals bij Versatile Thermostat: maak eerst eenmalig de centrale configuratie (gebouw, buitenunitgroepen en gedeelde instellingen) en voeg daarna iedere ruimte apart toe. Zonentra leest en simuleert alleen; er wordt niets aangestuurd.",
+        "menu_options": {
+          "central": "Centrale configuratie",
+          "zone": "Ruimte"
+        }
+      },
+      "central": {
+        "title": "Centrale configuratie",
+        "description": "Gebouwbrede instellingen voor iedere ruimte die de centrale waarden gebruikt. Voeg daarna buitenunitgroepen toe via Configureren. Er wordt niets aangestuurd.",
         "data": {
-          "name": "Gebouwnaam"
+          "name": "Gebouwnaam",
+          "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
+          "outdoor_max_age_seconds": "Maximale buitentemperatuurleeftijd (seconden; 0 = uit)",
+          "heating_limit": "Centrale verwarmingsgrens (°C)",
+          "cooling_limit": "Centrale koelgrens (°C)",
+          "heating_limit_entity": "Centrale entiteit voor verwarmingsgrens (optioneel)",
+          "cooling_limit_entity": "Centrale entiteit voor koelgrens (optioneel)",
+          "hysteresis": "Centrale temperatuurhysterese (°C)",
+          "sensor_validation": "Centrale sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
+          "max_age_seconds": "Centrale maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)",
+          "manual_override_enabled": "Handmatige bediening via de roomcontroller toestaan",
+          "manual_override_duration_minutes": "Duur handmatige bediening (minuten, 5–120)",
+          "min_on_seconds": "Minimale inschakeltijd binnenunit vóór uitschakelen (seconden; comfort)",
+          "min_off_seconds": "Minimale uitschakeltijd binnenunit vóór inschakelen (seconden; veiligheid, controleer fabrikant)",
+          "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)"
+        }
+      },
+      "zone": {
+        "title": "Ruimte",
+        "description": "Eén ruimte met temperatuursensor, binnenunits (bestaande climate-entiteiten) en buitenunitgroep. Zet een centrale keuze uit om in de volgende stap eigen waarden in te vullen. Er wordt niets aangestuurd.",
+        "data": {
+          "name": "Naam",
+          "temperature_entity": "Ruimtetemperatuursensor",
+          "indoor_units": "Binnenunits (climate-entiteiten)",
+          "group_id": "Buitenunitgroep",
+          "weight": "Ruimteweging",
+          "use_building_limits": "Centrale klimaatgrenzen gebruiken",
+          "use_building_parameters": "Centrale regelparameters gebruiken",
+          "occupancy_entity": "Aanwezigheidssensor (optioneel)",
+          "humidity_entity": "Luchtvochtigheid (optioneel)",
+          "co2_entity": "CO₂-sensor (optioneel)",
+          "contact_entities": "Raam- en deurcontacten (optioneel)",
+          "floor_heating_entities": "Vloerverwarming (optioneel)",
+          "shading_entities": "Zonwering (optioneel)",
+          "ventilation_entities": "Ventilatie (optioneel)"
+        }
+      },
+      "zone_parameters": {
+        "title": "Eigen waarden ruimte",
+        "description": "Deze waarden gelden alleen voor deze ruimte.",
+        "data": {
+          "heating_limit": "Verwarmingsgrens (°C)",
+          "cooling_limit": "Koelgrens (°C)",
+          "heating_limit_entity": "Entiteit voor verwarmingsgrens (optioneel)",
+          "cooling_limit_entity": "Entiteit voor koelgrens (optioneel)",
+          "hysteresis": "Temperatuurhysterese (°C)",
+          "sensor_validation": "Sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
+          "max_age_seconds": "Maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)"
         }
       }
     },
     "error": {
-      "invalid_name": "Vul een naam in."
+      "invalid_name": "Vul een naam in.",
+      "duplicate_id": "Dit ID bestaat al.",
+      "invalid_id": "Gebruik kleine letters, cijfers, liggende streepjes of koppeltekens (1–64 tekens).",
+      "invalid_entity": "Kies een entiteit met het juiste domein, buiten Zonentra.",
+      "invalid_kind": "Kies een ondersteund apparaattype.",
+      "invalid_reference": "Een ruimte of groep ontbreekt of wordt nog gebruikt. Verwijder eerst de apparatuurkoppelingen.",
+      "invalid_group": "Alleen HVAC-apparatuur kan een buitenunitgroep hebben.",
+      "duplicate_equipment_entity": "Deze entiteit is al als apparatuur gekoppeld (mogelijk aan een andere ruimte). Een binnenunit hoort bij één ruimte.",
+      "entity_not_found": "De nieuwe entiteit moet bestaan in Home Assistant.",
+      "add_zone_first": "Voeg eerst een ruimte toe. Sluit dit venster en open Opties opnieuw.",
+      "invalid_parameters": "Ongeldige regelparameters: gebruik eindige waarden binnen de aangegeven grenzen. update_based vereist een maximale updateleeftijd groter dan 0.",
+      "invalid_limits": "Configureer beide grenzen. Verwarmingsgrens + tweemaal hysterese moet lager zijn dan de koelgrens.",
+      "conflicting_group": "De buitenunitgroep van het apparaat verschilt van die van de ruimte.",
+      "central_required": "Maak eerst de centrale configuratie van Zonentra aan."
     },
     "abort": {
-      "single_instance_allowed": "Er is maximaal één Zonentra-gebouw per Home Assistant-installatie toegestaan.",
-      "already_configured": "Zonentra is al geconfigureerd."
+      "already_configured": "Zonentra is al geconfigureerd.",
+      "central_already_configured": "De centrale configuratie bestaat al. Voeg ruimtes toe of gebruik Configureren bij de centrale configuratie.",
+      "central_required": "Maak eerst de centrale configuratie van Zonentra aan."
     }
   },
   "options": {
@@ -117,6 +186,39 @@
           "min_off_seconds": "Minimale uitschakeltijd binnenunit vóór inschakelen (seconden; veiligheid, controleer fabrikant)",
           "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)"
         }
+      },
+      "zone_settings": {
+        "title": "Ruimte",
+        "description": "Eén ruimte met temperatuursensor, binnenunits (bestaande climate-entiteiten) en buitenunitgroep. Zet een centrale keuze uit om in de volgende stap eigen waarden in te vullen. Er wordt niets aangestuurd.",
+        "data": {
+          "name": "Naam",
+          "temperature_entity": "Ruimtetemperatuursensor",
+          "indoor_units": "Binnenunits (climate-entiteiten)",
+          "group_id": "Buitenunitgroep",
+          "weight": "Ruimteweging",
+          "use_building_limits": "Centrale klimaatgrenzen gebruiken",
+          "use_building_parameters": "Centrale regelparameters gebruiken",
+          "occupancy_entity": "Aanwezigheidssensor (optioneel)",
+          "humidity_entity": "Luchtvochtigheid (optioneel)",
+          "co2_entity": "CO₂-sensor (optioneel)",
+          "contact_entities": "Raam- en deurcontacten (optioneel)",
+          "floor_heating_entities": "Vloerverwarming (optioneel)",
+          "shading_entities": "Zonwering (optioneel)",
+          "ventilation_entities": "Ventilatie (optioneel)"
+        }
+      },
+      "zone_parameters": {
+        "title": "Eigen waarden ruimte",
+        "description": "Deze waarden gelden alleen voor deze ruimte.",
+        "data": {
+          "heating_limit": "Verwarmingsgrens (°C)",
+          "cooling_limit": "Koelgrens (°C)",
+          "heating_limit_entity": "Entiteit voor verwarmingsgrens (optioneel)",
+          "cooling_limit_entity": "Entiteit voor koelgrens (optioneel)",
+          "hysteresis": "Temperatuurhysterese (°C)",
+          "sensor_validation": "Sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
+          "max_age_seconds": "Maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)"
+        }
       }
     },
     "error": {
@@ -132,7 +234,8 @@
       "add_zone_first": "Voeg eerst een ruimte toe. Sluit dit venster en open Opties opnieuw.",
       "invalid_parameters": "Ongeldige regelparameters: gebruik eindige waarden binnen de aangegeven grenzen. update_based vereist een maximale updateleeftijd groter dan 0.",
       "invalid_limits": "Configureer beide grenzen. Verwarmingsgrens + tweemaal hysterese moet lager zijn dan de koelgrens.",
-      "conflicting_group": "De buitenunitgroep van het apparaat verschilt van die van de ruimte."
+      "conflicting_group": "De buitenunitgroep van het apparaat verschilt van die van de ruimte.",
+      "central_required": "Maak eerst de centrale configuratie van Zonentra aan."
     }
   },
   "entity": {
@@ -202,7 +305,22 @@
           "blocked": "Geblokkeerd",
           "failed": "Mislukt"
         }
+      },
+      "room_demand": {
+        "name": "Klimaatvraag",
+        "state": {
+          "heating_demand": "Verwarmingsvraag",
+          "cooling_demand": "Koelvraag",
+          "neutral": "Neutraal",
+          "unknown": "Onbekend"
+        }
       }
+    }
+  },
+  "issues": {
+    "legacy_configuration": {
+      "title": "Zonentra opnieuw aanmaken als centrale configuratie en ruimtes",
+      "description": "Het Zonentra-item \"{name}\" gebruikt de indeling van vóór 0.6 met één item. Het blijft voorlopig werken, maar is verouderd. Verwijder het en voeg Zonentra opnieuw toe: eerst de centrale configuratie, daarna iedere ruimte. Entity-ID's veranderen."
     }
   }
 }

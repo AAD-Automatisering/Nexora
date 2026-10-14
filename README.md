@@ -3,7 +3,10 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.5.0** simuleert de volledige regelstrategie: per buitenunitgroep een
+Versie **0.6.0** maakt Zonentra aan zoals Versatile Thermostat: eenmalig een
+**centrale configuratie** (gebouw, buitenunitgroepen, gedeelde instellingen) en
+daarna **per ruimte een eigen item** met een eigen apparaat in Home Assistant.
+Versie 0.5.0 simuleert de volledige regelstrategie: per buitenunitgroep een
 leidende modus met een veilige omschakelprocedure, per binnenunit de actie die
 Zonentra zou nemen (verwarmen, koelen, uit, modus corrigeren, ongewijzigd of
 geblokkeerd), handmatige bediening via de KNX-roomcontroller (Manual Override,
@@ -28,9 +31,11 @@ De runtime heeft geen aanvullende Python-requirements en vereist geen VTherm.
 1. Kopieer `custom_components/zonentra` uit dit project naar
    `<Home Assistant config>/custom_components/zonentra`.
 2. Herstart Home Assistant.
-3. Ga naar **Instellingen → Apparaten & diensten → Integratie toevoegen → Zonentra**.
-4. Geef het gebouw een naam. Een tweede Zonentra-entry wordt geweigerd.
-5. Open de integratieopties (het tandwiel) om de gebouwindeling te configureren.
+3. Ga naar **Instellingen → Apparaten & diensten → Integratie toevoegen → Zonentra**
+   en kies **Centrale configuratie** (eenmalig): gebouwnaam en centrale instellingen.
+4. Open bij de centrale configuratie **Configureren** en voeg de buitenunitgroepen toe.
+5. Voeg daarna per ruimte opnieuw **Zonentra** toe en kies **Ruimte**: sensor,
+   binnenunits (bestaande climate-entiteiten), buitenunitgroep en optionele context.
 
 Er is geen YAML nodig.
 
@@ -47,6 +52,21 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.6.0
+
+Na de update blijft je bestaande Zonentra-item werken, maar het is verouderd:
+Home Assistant toont een reparatiemelding. Overstappen gaat zo:
+
+1. Noteer je instellingen (grenzen, groepen, ruimtes en gekoppelde airco's).
+2. Verwijder het oude Zonentra-item.
+3. Voeg Zonentra toe → **Centrale configuratie**, en voeg via **Configureren** de
+   buitenunitgroepen toe.
+4. Voeg Zonentra per ruimte toe → **Ruimte**.
+
+De entity-ID's veranderen: ruimtesensoren horen voortaan bij het apparaat van die
+ruimte. De groeps- en gebouwsensoren horen bij het centrale apparaat. De
+berekeningen zelf zijn ongewijzigd. Herlaad daarna de browserpagina volledig.
 
 ### Bijwerken naar 0.5.0
 
@@ -100,31 +120,33 @@ Bronnen: [HACS custom repositories](https://www.hacs.dev/docs/faq/custom_reposit
 
 ## Indeling configureren
 
-Gebruik **Ruimte toevoegen of bewerken**, **Buitenunitgroep toevoegen of bewerken**
-en **Apparatuur toevoegen of bewerken**. Selecteer een bestaand item of `Add new`.
-Geef elk item een herkenbare naam. Zonentra maakt automatisch een uniek intern ID
-aan; dit verschijnt niet in de formulieren en blijft behouden als je de naam wijzigt.
-Bestaande, eerder handmatig ingevulde IDs blijven ook behouden. Alle wijzigingen worden pas opgeslagen via
-**Opslaan**. Sluiten verwerpt de transactie.
+Zonentra 0.6 gebruikt dezelfde opbouw als Versatile Thermostat:
 
-Stel eerst de centrale configuratie in, maak daarna ruimtes, buitenunitgroepen en apparatuur aan. Voor het
-kantoor kunnen twee groepen met de namen `Buitenunit 1` en `Buitenunit 2` worden gemaakt. Koppel
-elke binnenunit aan zijn werkelijke ruimte en buitenunit; Zonentra raadt die relatie
-niet. Groepen modelleren maximaal één heat/cool-modus tegelijk.
+| Item | Hoeveel | Inhoud | Bewerken |
+|---|---|---|---|
+| Centrale configuratie | één per installatie | gebouwnaam, centrale grenzen en parameters, buitentemperatuur, handmatige bediening, anti-pendel en de **buitenunitgroepen** | Configureren → Centrale configuratie / Buitenunitgroep / Opslaan |
+| Ruimte | één per ruimte | naam, temperatuursensor, binnenunits, buitenunitgroep, weging, "centrale waarden gebruiken" of eigen waarden, optionele aanwezigheid/vocht/CO₂/contacten, vloerverwarming, zonwering en ventilatie | Configureren bij de ruimte |
 
-Een ruimte heeft optioneel een aparte KNX-temperatuursensor en een binary_sensor
-voor ruimtebezetting.
-Registreer de fysieke Mitsubishi-climate als HVAC-apparatuur. Meerdere apparaten
-per ruimte en groep zijn mogelijk. Floor heating, shading, ventilation en other
-kunnen ook worden geregistreerd; buitenunitgroepen zijn uitsluitend voor HVAC.
-Dit registreert entiteitkoppelingen, geen nieuwe bedienbare HA-apparaten.
+Een ruimte kun je pas toevoegen als de centrale configuratie bestaat. Zet je
+**Centrale klimaatgrenzen gebruiken** of **Centrale regelparameters gebruiken**
+uit, dan vraagt een tweede stap de eigen waarden. Eerder ingevulde eigen waarden
+blijven bewaard als je teruggaat naar centraal.
 
-Verwijder apparatuur eerst voordat een gebruikte groep of ruimte wordt verwijderd.
-Bij bewerken kunnen optionele koppelingen worden gewist. Nieuwe koppelingen moeten
-in HA bestaan; bestaande offline bronnen hoeven niet te worden verwijderd. De
-gebouwnaam wordt bij setup vastgelegd; deze eerste Options Flow bewerkt de indeling.
-Centrale alarmmapping, ventilatie-/CO₂-regeling, P1/PV en weeroptimalisatie volgen
-in latere fases. Optionele CO₂ en buitentemperatuur kunnen nu al als context worden gekoppeld.
+Koppel elke binnenunit aan zijn werkelijke ruimte en kies de buitenunitgroep;
+Zonentra raadt die relatie niet. Een binnenunit kan maar aan één ruimte gekoppeld
+zijn; een tweede koppeling geeft een duidelijke foutmelding. Meerdere binnenunits
+per ruimte zijn mogelijk. Een groep die nog door een ruimte wordt gebruikt, kan
+niet worden verwijderd. Nieuwe koppelingen moeten in HA bestaan.
+
+Elke ruimte krijgt een eigen apparaat met **Klimaatvraag** en per binnenunit de
+**Binnenunit-modus** en de **Gesimuleerde actie**. Het centrale apparaat bevat de
+**Status** en per buitenunitgroep de groepssensoren. Een ruimte toevoegen, wijzigen
+of verwijderen werkt de centrale berekening automatisch bij. Een ruimte zonder
+centrale configuratie start niet.
+
+Het oude enkele Zonentra-item (vóór 0.6) blijft voorlopig werken met de vorige
+opties-menu's, maar is verouderd. Centrale alarmmapping, ventilatie-/CO₂-regeling,
+P1/PV en weeroptimalisatie volgen in latere fases.
 
 ## Klimaatintelligentie configureren
 
@@ -348,6 +370,7 @@ custom_components/zonentra/
   indoor.py                     binnenunitobservatie en afgeleide groepsmodus
   override.py                   Manual Override-detectie en command tracking
   control.py                    groepscoördinatie en gesimuleerde acties per unit
+  topology.py                   centrale configuratie + ruimte-items → één gebouwmodel
   sensor.py                     diagnostische sensoren
   diagnostics.py                geredigeerde diagnostiekdownload
   strings.json                  UI-teksten

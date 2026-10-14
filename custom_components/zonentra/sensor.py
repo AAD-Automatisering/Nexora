@@ -1,39 +1,26 @@
 """Compact read-only diagnostics for the building, zones, indoor units and groups."""
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 
-from . import ZonentraConfigEntry
+from . import ZonentraConfigEntry, central_entry, entry_type
 from .const import DOMAIN
+from .models import Equipment, Zone
 from .observations import describe
+from .topology import ZONE, zone_equipment
 
 
 async def async_setup_entry(
     hass, entry: ZonentraConfigEntry, async_add_entities
 ) -> None:
-    runtime = entry.runtime_data
-    entities = [ZonentraStatusSensor(entry)]
-    entities.extend(ZoneDemandSensor(entry, zone) for zone in runtime.building.zones)
-    entities.extend(GroupModeSensor(entry, group) for group in runtime.building.groups)
-    entities.extend(
-        IndoorUnitSensor(entry, item)
-        for item in runtime.building.equipment
-        if item.kind == "hvac"
-    )
-    entities.extend(
-        DerivedGroupModeSensor(entry, group) for group in runtime.building.groups
-    )
-    entities.extend(
-        UnitControlSensor(entry, item)
-        for item in runtime.building.equipment
-        if item.kind == "hvac"
-    )
-    entities.extend(
-        GroupCoordinationSensor(entry, group) for group in runtime.building.groups
-    )
+    if entry_type(entry) == ZONE:
+        entities = _zone_entities(hass, entry)
+    else:
+        entities = _building_entities(entry)
     # Options reload removes obsolete diagnostics; renames retain stable IDs.
     expected = {entity.unique_id for entity in entities}
     registry = er.async_get(hass)
@@ -47,22 +34,110 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
+def _building_entities(entry) -> list:
+    """Legacy entries keep every entity; central entries keep building/groups."""
+    runtime = entry.runtime_data
+    legacy = entry_type(entry) == "legacy"
+    hvac = [item for item in runtime.building.equipment if item.kind == "hvac"]
+    groups = runtime.building.groups
+    entities = [ZonentraStatusSensor(entry)]
+    if legacy:
+        entities.extend(
+            ZoneDemandSensor(entry, zone) for zone in runtime.building.zones
+        )
+    entities.extend(GroupModeSensor(entry, group) for group in groups)
+    if legacy:
+        entities.extend(IndoorUnitSensor(entry, item) for item in hvac)
+    entities.extend(DerivedGroupModeSensor(entry, group) for group in groups)
+    if legacy:
+        entities.extend(UnitControlSensor(entry, item) for item in hvac)
+    entities.extend(GroupCoordinationSensor(entry, group) for group in groups)
+    return entities
+
+
+def _zone_entities(hass, entry) -> list:
+    """A zone device with its demand and indoor-unit sensors (central runtime)."""
+    central = central_entry(hass)
+
+    def provider():
+        return (
+            central.runtime_data
+            if central and central.state is ConfigEntryState.LOADED
+            else None
+        )
+
+    options = dict(entry.options)
+    shared = {
+        "provider": provider,
+        "signal": f"{DOMAIN}_{central.entry_id}_updated",
+        "device": DeviceInfo(
+            identifiers={(DOMAIN, entry.entry_id)},
+            name=entry.title,
+            manufacturer="Zonentra",
+            model="Zone",
+            via_device=(DOMAIN, central.entry_id),
+        ),
+    }
+    entities = [
+        ZoneDemandSensor(
+            entry,
+            Zone(options["id"], options.get("name", entry.title)),
+            unique_id=f"{entry.entry_id}_demand",
+            translation_key="room_demand",
+            **shared,
+        )
+    ]
+    for record in zone_equipment(options):
+        if record["kind"] != "hvac":
+            continue
+        state = hass.states.get(record["entity_id"])
+        item = Equipment(**{**record, "name": state.name if state else record["name"]})
+        entities.append(
+            IndoorUnitSensor(
+                entry,
+                item,
+                unique_id=f"{entry.entry_id}_{item.id}_indoor_unit",
+                **shared,
+            )
+        )
+        entities.append(
+            UnitControlSensor(
+                entry, item, unique_id=f"{entry.entry_id}_{item.id}_control", **shared
+            )
+        )
+    return entities
+
+
 class ZonentraDiagnosticSensor(SensorEntity):
     _attr_should_poll = False
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, entry):
-        self.runtime = entry.runtime_data
-        self._attr_device_info = DeviceInfo(
+    def __init__(self, entry, provider=None, signal=None, device=None):
+        self._provider = provider or (lambda: entry.runtime_data)
+        self._signal = signal or f"{DOMAIN}_{entry.entry_id}_updated"
+        self._attr_device_info = device or DeviceInfo(
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.data["name"],
             manufacturer="Zonentra",
         )
 
+    @property
+    def runtime(self):
+        """The building runtime; a zone reads the central one (None if unloaded)."""
+        return self._provider()
+
+    def _present(self, runtime) -> bool:
+        return True
+
+    @property
+    def available(self) -> bool:
+        runtime = self.runtime
+        return runtime is not None and self._present(runtime)
+
     async def async_added_to_hass(self) -> None:
         self.async_on_remove(
-            async_dispatcher_connect(self.hass, self.runtime.signal, self._updated)
+            async_dispatcher_connect(self.hass, self._signal, self._updated)
         )
 
     @callback
@@ -93,11 +168,23 @@ class ZoneDemandSensor(ZonentraDiagnosticSensor):
     _attr_icon = "mdi:home-thermometer-outline"
     _attr_translation_key = "zone_demand"
 
-    def __init__(self, entry, zone):
-        super().__init__(entry)
-        self.zone = zone
+    def __init__(self, entry, zone, unique_id=None, translation_key=None, **shared):
+        super().__init__(entry, **shared)
+        self._zone = zone
         self._attr_translation_placeholders = {"zone": zone.name}
-        self._attr_unique_id = f"{entry.entry_id}_zone_{zone.id}_demand"
+        self._attr_unique_id = unique_id or f"{entry.entry_id}_zone_{zone.id}_demand"
+        if translation_key:
+            self._attr_translation_key = translation_key
+
+    @property
+    def zone(self) -> Zone:
+        """The effective zone from the current building (after reloads)."""
+        runtime = self.runtime
+        zones = runtime.building.zones if runtime else ()
+        return next((zone for zone in zones if zone.id == self._zone.id), self._zone)
+
+    def _present(self, runtime) -> bool:
+        return self._zone.id in runtime.zone_demands
 
     @property
     def native_value(self):
@@ -212,11 +299,16 @@ class IndoorUnitSensor(ZonentraDiagnosticSensor):
     _attr_icon = "mdi:air-conditioner"
     _attr_translation_key = "indoor_unit"
 
-    def __init__(self, entry, item):
-        super().__init__(entry)
+    def __init__(self, entry, item, unique_id=None, **shared):
+        super().__init__(entry, **shared)
         self.item = item
         self._attr_translation_placeholders = {"unit": item.name}
-        self._attr_unique_id = f"{entry.entry_id}_equipment_{item.id}_indoor_unit"
+        self._attr_unique_id = (
+            unique_id or f"{entry.entry_id}_equipment_{item.id}_indoor_unit"
+        )
+
+    def _present(self, runtime) -> bool:
+        return self.item.id in runtime.indoor_units
 
     @property
     def native_value(self):
@@ -312,11 +404,16 @@ class UnitControlSensor(ZonentraDiagnosticSensor):
     _attr_icon = "mdi:play-box-outline"
     _attr_translation_key = "unit_control"
 
-    def __init__(self, entry, item):
-        super().__init__(entry)
+    def __init__(self, entry, item, unique_id=None, **shared):
+        super().__init__(entry, **shared)
         self.item = item
         self._attr_translation_placeholders = {"unit": item.name}
-        self._attr_unique_id = f"{entry.entry_id}_equipment_{item.id}_control"
+        self._attr_unique_id = (
+            unique_id or f"{entry.entry_id}_equipment_{item.id}_control"
+        )
+
+    def _present(self, runtime) -> bool:
+        return self.item.id in runtime.unit_intents
 
     @property
     def native_value(self):

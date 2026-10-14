@@ -9,12 +9,15 @@ from homeassistant.config_entries import (
     ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
+    OptionsFlow,
     OptionsFlowWithReload,
 )
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
+from . import central_entry
+from . import zone_entries as config_zone_entries
 from .const import DOMAIN, KINDS, TOPOLOGY_KEYS
 from .migration import (
     LIMIT_FIELDS,
@@ -22,8 +25,22 @@ from .migration import (
     PARAMETER_FIELDS,
     migrate_options,
 )
-from .models import BuildingSettings, EquipmentGroup, Zone, build_model
+from .models import (
+    ZONE_ENTITY_FIELDS,
+    BuildingSettings,
+    EquipmentGroup,
+    Zone,
+    build_model,
+)
 from .observations import VALIDATION_STRATEGIES
+from .topology import (
+    CENTRAL,
+    CENTRAL_UNIQUE_ID,
+    ENTRY_TYPE,
+    EQUIPMENT_FIELDS,
+    ZONE,
+    assemble,
+)
 
 
 def entity_selector(domain=None):
@@ -42,45 +59,335 @@ def choice(options):
     return selector.SelectSelector({"options": options, "mode": "dropdown"})
 
 
-class ZonentraConfigFlow(ConfigFlow, domain=DOMAIN):
+def building_fields() -> dict:
+    """Central building settings, shared by the central and legacy flows."""
+    return {
+        vol.Optional("outdoor_temperature_entity"): entity_selector("sensor"),
+        vol.Optional("outdoor_max_age_seconds"): numeric(0, 86400, 1, "s"),
+        vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
+        vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
+        vol.Optional("heating_limit_entity"): entity_selector(
+            ["sensor", "number", "input_number"]
+        ),
+        vol.Optional("cooling_limit_entity"): entity_selector(
+            ["sensor", "number", "input_number"]
+        ),
+        vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
+        vol.Optional("sensor_validation"): choice(list(VALIDATION_STRATEGIES)),
+        vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
+        # Simulated control (0.5): building-wide, no device is controlled.
+        vol.Optional("manual_override_enabled"): selector.BooleanSelector(),
+        vol.Optional("manual_override_duration_minutes"): numeric(5, 120, 1, "min"),
+        vol.Optional("min_on_seconds"): numeric(0, 3600, 1, "s"),
+        vol.Optional("min_off_seconds"): numeric(0, 3600, 1, "s"),
+        vol.Optional("changeover_wait_seconds"): numeric(0, 3600, 1, "s"),
+    }
+
+
+def building_defaults() -> dict:
+    default_settings = BuildingSettings()
+    return {
+        **NEW_BUILDING_DEFAULTS,
+        **{
+            key: getattr(default_settings, key)
+            for key in (
+                "outdoor_max_age_seconds",
+                "manual_override_enabled",
+                "manual_override_duration_minutes",
+                "min_on_seconds",
+                "min_off_seconds",
+                "changeover_wait_seconds",
+            )
+        },
+    }
+
+
+def multi(domain):
+    return selector.EntitySelector({"filter": {"domain": domain}, "multiple": True})
+
+
+ZONE_DEFAULTS = {
+    "weight": 1.0,
+    "use_building_limits": True,
+    "use_building_parameters": True,
+}
+ZONE_FLAGS = ("use_building_limits", "use_building_parameters")
+
+
+def zone_fields(groups: list[dict]) -> dict:
+    """Zone settings, shared by the zone config flow and its options flow."""
+    return {
+        vol.Required("name"): selector.TextSelector(),
+        vol.Optional("temperature_entity"): entity_selector("sensor"),
+        vol.Optional("indoor_units"): multi("climate"),
+        vol.Optional("group_id"): choice(
+            [
+                {"value": "", "label": "No group"},
+                *[{"value": group["id"], "label": group["name"]} for group in groups],
+            ]
+        ),
+        vol.Optional("weight"): numeric(0.1, 10),
+        vol.Optional("use_building_limits"): selector.BooleanSelector(),
+        vol.Optional("use_building_parameters"): selector.BooleanSelector(),
+        vol.Optional("occupancy_entity"): entity_selector("binary_sensor"),
+        vol.Optional("humidity_entity"): entity_selector("sensor"),
+        vol.Optional("co2_entity"): entity_selector("sensor"),
+        vol.Optional("contact_entities"): multi("binary_sensor"),
+        vol.Optional("floor_heating_entities"): multi(["climate", "number"]),
+        vol.Optional("shading_entities"): multi("cover"),
+        vol.Optional("ventilation_entities"): multi(["fan", "switch"]),
+    }
+
+
+def zone_parameter_fields(record: dict) -> dict:
+    """Local limits/parameters, only for the blocks not taken from the building."""
+    fields = {}
+    if not record.get("use_building_limits", True):
+        fields.update(
+            {
+                vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
+                vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
+                vol.Optional("heating_limit_entity"): entity_selector(
+                    ["sensor", "number", "input_number"]
+                ),
+                vol.Optional("cooling_limit_entity"): entity_selector(
+                    ["sensor", "number", "input_number"]
+                ),
+            }
+        )
+    if not record.get("use_building_parameters", True):
+        fields.update(
+            {
+                vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
+                vol.Optional("sensor_validation"): choice(list(VALIDATION_STRATEGIES)),
+                vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
+            }
+        )
+    return fields
+
+
+def clean(user_input: dict) -> dict:
+    return {
+        key: value for key, value in user_input.items() if value not in ("", None, [])
+    }
+
+
+def merge_zone(previous: dict, submitted: dict) -> dict:
+    """New zone settings; earlier local limits/parameters stay dormant."""
+    dormant = {
+        key: previous[key]
+        for key in (*LIMIT_FIELDS, *PARAMETER_FIELDS)
+        if key in previous
+    }
+    record = {"id": previous["id"], **dormant, **clean(submitted)}
+    for flag in ZONE_FLAGS:
+        record.setdefault(flag, previous.get(flag, True))
+    return record
+
+
+def zone_entities(record: dict) -> set[str]:
+    values = [record.get(field) for field in ZONE_ENTITY_FIELDS]
+    values += list(record.get("contact_entities", ()))
+    values += [
+        entity for field, _ in EQUIPMENT_FIELDS for entity in record.get(field, ())
+    ]
+    return {value for value in values if value}
+
+
+def check_zone(hass, record: dict, entry_id: str | None = None, partial=False) -> dict:
+    """Validate a zone against the central configuration and all other zones."""
+    central = central_entry(hass)
+    if central is None:
+        return {"base": "central_required"}
+    entries = config_zone_entries(hass)
+    previous = next((dict(e.options) for e in entries if e.entry_id == entry_id), {})
+    others = [dict(e.options) for e in entries if e.entry_id != entry_id]
+    candidate = dict(record)
+    if partial:  # Local limits/parameters follow in the next step.
+        candidate.update({flag: True for flag in ZONE_FLAGS})
+    try:
+        build_model(
+            central.entry_id,
+            central.data["name"],
+            assemble(dict(central.options), [*others, candidate]),
+        )
+        registry = er.async_get(hass)
+        known = zone_entities(previous)
+        for entity_id in zone_entities(record):
+            registered = registry.async_get(entity_id)
+            if registered and registered.platform == DOMAIN:
+                raise ValueError("invalid_entity")
+            if (
+                entity_id not in known
+                and not registered
+                and hass.states.get(entity_id) is None
+            ):
+                raise ValueError("entity_not_found")
+    except ValueError as err:
+        return {"base": str(err)}
+    return {}
+
+
+class ZoneFormMixin:
+    """Two-step zone form: settings, then local limits/parameters if needed."""
+
+    zone: dict
+
+    def _groups(self) -> list[dict]:
+        central = central_entry(self.hass)
+        return list(central.options.get("groups", [])) if central else []
+
+    def _zone_form(self, step_id, values, errors):
+        schema = self.add_suggested_values_to_schema(
+            vol.Schema(zone_fields(self._groups())), {**ZONE_DEFAULTS, **values}
+        )
+        return self.async_show_form(step_id=step_id, data_schema=schema, errors=errors)
+
+    def _parameters_form(self, values, errors):
+        central = central_entry(self.hass)
+        building = dict(central.options.get("building", {})) if central else {}
+        schema = self.add_suggested_values_to_schema(
+            vol.Schema(zone_parameter_fields(self.zone)),
+            {**building_defaults(), **building, **values},
+        )
+        return self.async_show_form(
+            step_id="zone_parameters", data_schema=schema, errors=errors
+        )
+
+
+class ZonentraConfigFlow(ZoneFormMixin, ConfigFlow, domain=DOMAIN):
+    """Like Versatile Thermostat: central configuration first, then zones."""
+
     VERSION = 3
 
+    def __init__(self):
+        self.zone: dict = {}
+
     async def async_step_user(self, user_input=None) -> ConfigFlowResult:
-        if self._async_current_entries():
-            return self.async_abort(reason="single_instance_allowed")
+        return self.async_show_menu(step_id="user", menu_options=["central", "zone"])
+
+    async def async_step_central(self, user_input=None) -> ConfigFlowResult:
+        if central_entry(self.hass):
+            return self.async_abort(reason="central_already_configured")
         errors = {}
         if user_input is not None:
-            name = user_input["name"].strip()
-            if name:
-                await self.async_set_unique_id(DOMAIN)
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=name,
-                    data={"name": name},
-                    options={
-                        **{key: [] for key in TOPOLOGY_KEYS},
-                        "building": dict(NEW_BUILDING_DEFAULTS),
-                    },
-                )
-            errors["name"] = "invalid_name"
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema(
-                {
-                    vol.Required("name"): selector.TextSelector(),
-                }
+            name = str(user_input.get("name", "")).strip()
+            settings = {
+                key: value
+                for key, value in user_input.items()
+                if key != "name" and value != ""
+            }
+            if not name:
+                errors["name"] = "invalid_name"
+            else:
+                try:
+                    build_model("central", name, {"building": settings})
+                except ValueError as err:
+                    errors["base"] = str(err)
+                else:
+                    await self.async_set_unique_id(CENTRAL_UNIQUE_ID)
+                    self._abort_if_unique_id_configured()
+                    return self.async_create_entry(
+                        title=name,
+                        data={ENTRY_TYPE: CENTRAL, "name": name},
+                        options={"building": settings, "groups": []},
+                    )
+        schema = self.add_suggested_values_to_schema(
+            vol.Schema(
+                {vol.Required("name"): selector.TextSelector(), **building_fields()}
             ),
-            errors=errors,
+            {**building_defaults(), **(user_input or {})},
+        )
+        return self.async_show_form(
+            step_id="central", data_schema=schema, errors=errors
+        )
+
+    async def async_step_zone(self, user_input=None) -> ConfigFlowResult:
+        if central_entry(self.hass) is None:
+            return self.async_abort(reason="central_required")
+        errors = {}
+        if user_input is not None:
+            self.zone = merge_zone(
+                {"id": self.zone.get("id") or uuid4().hex}, user_input
+            )
+            errors = check_zone(self.hass, self.zone, partial=True)
+            if not errors:
+                if zone_parameter_fields(self.zone):
+                    return await self.async_step_zone_parameters()
+                return await self._create_zone()
+        return self._zone_form("zone", user_input or self.zone, errors)
+
+    async def async_step_zone_parameters(self, user_input=None) -> ConfigFlowResult:
+        errors = {}
+        if user_input is not None:
+            self.zone = {**self.zone, **clean(user_input)}
+            errors = check_zone(self.hass, self.zone)
+            if not errors:
+                return await self._create_zone()
+        return self._parameters_form(user_input or self.zone, errors)
+
+    async def _create_zone(self) -> ConfigFlowResult:
+        await self.async_set_unique_id(self.zone["id"])
+        self._abort_if_unique_id_configured()
+        return self.async_create_entry(
+            title=self.zone["name"], data={ENTRY_TYPE: ZONE}, options=self.zone
         )
 
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry):
+        kind = config_entry.data.get(ENTRY_TYPE)
+        if kind == ZONE:
+            return ZoneOptionsFlow()
+        if kind == CENTRAL:
+            return CentralOptionsFlow()
         return ZonentraOptionsFlow()
 
 
+class ZoneOptionsFlow(ZoneFormMixin, OptionsFlow):
+    """Edit one zone; the zone's update listener rebuilds the building."""
+
+    def __init__(self):
+        self.zone: dict = {}
+
+    async def async_step_init(self, user_input=None):
+        return await self.async_step_zone_settings()
+
+    async def async_step_zone_settings(self, user_input=None):
+        previous = dict(self.config_entry.options)
+        errors = {}
+        if user_input is not None:
+            self.zone = merge_zone(previous, user_input)
+            errors = check_zone(
+                self.hass, self.zone, self.config_entry.entry_id, partial=True
+            )
+            if not errors:
+                if zone_parameter_fields(self.zone):
+                    return await self.async_step_zone_parameters()
+                return self._save()
+        return self._zone_form(
+            "zone_settings", user_input or self.zone or previous, errors
+        )
+
+    async def async_step_zone_parameters(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            self.zone = {**self.zone, **clean(user_input)}
+            errors = check_zone(self.hass, self.zone, self.config_entry.entry_id)
+            if not errors:
+                return self._save()
+        return self._parameters_form(user_input or self.zone, errors)
+
+    def _save(self):
+        # One update (title and options) triggers the reload listener once.
+        self.hass.config_entries.async_update_entry(
+            self.config_entry, title=self.zone["name"], options=self.zone
+        )
+        return self.async_create_entry(title="", data=self.zone)
+
+
 class ZonentraOptionsFlow(OptionsFlowWithReload):
-    """Collect edits in a private copy and save only via Finish."""
+    """Legacy (pre-0.6) single entry: collect edits and save only via Finish."""
 
     def __init__(self):
         self.topology: dict[str, Any] | None = None
@@ -116,42 +423,8 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
             else:
                 self.topology = candidate
                 return await self.async_step_init()
-        fields = {
-            vol.Optional("outdoor_temperature_entity"): entity_selector("sensor"),
-            vol.Optional("outdoor_max_age_seconds"): numeric(0, 86400, 1, "s"),
-            vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
-            vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
-            vol.Optional("heating_limit_entity"): entity_selector(
-                ["sensor", "number", "input_number"]
-            ),
-            vol.Optional("cooling_limit_entity"): entity_selector(
-                ["sensor", "number", "input_number"]
-            ),
-            vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
-            vol.Optional("sensor_validation"): choice(list(VALIDATION_STRATEGIES)),
-            vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
-            # Simulated control (0.5): building-wide, no device is controlled.
-            vol.Optional("manual_override_enabled"): selector.BooleanSelector(),
-            vol.Optional("manual_override_duration_minutes"): numeric(5, 120, 1, "min"),
-            vol.Optional("min_on_seconds"): numeric(0, 3600, 1, "s"),
-            vol.Optional("min_off_seconds"): numeric(0, 3600, 1, "s"),
-            vol.Optional("changeover_wait_seconds"): numeric(0, 3600, 1, "s"),
-        }
-        default_settings = BuildingSettings()
-        defaults = {
-            **NEW_BUILDING_DEFAULTS,
-            **{
-                key: getattr(default_settings, key)
-                for key in (
-                    "outdoor_max_age_seconds",
-                    "manual_override_enabled",
-                    "manual_override_duration_minutes",
-                    "min_on_seconds",
-                    "min_off_seconds",
-                    "changeover_wait_seconds",
-                )
-            },
-        }
+        fields = building_fields()
+        defaults = building_defaults()
         current = self.topology.get("building", {})
         schema = self.add_suggested_values_to_schema(
             vol.Schema(fields), {**defaults, **current, **(user_input or {})}
@@ -170,10 +443,16 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
 
     async def async_step_finish(self, user_input=None):
         # Revalidate at the transaction boundary.
-        build_model(
-            self.config_entry.entry_id, self.config_entry.data["name"], self.topology
+        self._model(self.topology)
+        return self.async_create_entry(title="", data=self._stored())
+
+    def _model(self, topology):
+        return build_model(
+            self.config_entry.entry_id, self.config_entry.data["name"], topology
         )
-        return self.async_create_entry(title="", data=self.topology)
+
+    def _stored(self) -> dict:
+        return self.topology
 
     async def _select(self, category, user_input):
         if user_input is not None:
@@ -414,12 +693,8 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
         )
 
     def _validate(self, candidate):
-        building = build_model(
-            self.config_entry.entry_id, self.config_entry.data["name"], candidate
-        )
-        previous = build_model(
-            self.config_entry.entry_id, self.config_entry.data["name"], self.topology
-        )
+        building = self._model(candidate)
+        previous = self._model(self.topology)
         known = previous.entity_ids | frozenset(
             previous.settings.outdoor_temperature_candidates
         )
@@ -443,3 +718,40 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
 
     async def async_step_equipment_details(self, user_input=None):
         return await self._edit("equipment", user_input)
+
+
+class CentralOptionsFlow(ZonentraOptionsFlow):
+    """Central configuration: building settings and outdoor unit groups."""
+
+    async def async_step_init(self, user_input=None):
+        if self.topology is None:
+            options = self.config_entry.options
+            self.topology = {
+                "building": dict(options.get("building", {})),
+                "groups": [dict(group) for group in options.get("groups", [])],
+                "zones": [],
+                "equipment": [],
+            }
+        return self.async_show_menu(
+            step_id="init", menu_options=["building", "group", "finish"]
+        )
+
+    def _model(self, topology):
+        # Validate against every zone: a referenced group cannot be removed.
+        return build_model(
+            self.config_entry.entry_id,
+            self.config_entry.data["name"],
+            assemble(
+                {
+                    "building": topology.get("building", {}),
+                    "groups": topology["groups"],
+                },
+                [dict(entry.options) for entry in config_zone_entries(self.hass)],
+            ),
+        )
+
+    def _stored(self) -> dict:
+        return {
+            "building": self.topology.get("building", {}),
+            "groups": self.topology["groups"],
+        }
