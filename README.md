@@ -353,7 +353,7 @@ Iedere ruimte heeft een eigen thermostaat (climate-entiteit) op haar apparaat:
 | Modus `off` | De ruimte vraagt niets |
 | Ventilatorstand | De standen die alle binnenunits kennen; met ruimteregeling krijgt een draaiende unit de gekozen stand (eenmaal per wijziging) |
 | Doel / onder- en bovengrens | De comfortband: verwarmen tot / koelen vanaf. Zolang je niets instelt, gelden de grenzen van de ruimte of het gebouw |
-| Preset `comfort` (standaard) | Comfortband; zonder beweging eco en bij een afwezig gebouw afwezig (0.8) |
+| Preset `comfort` (standaard) | Comfortband; zonder beweging eco en bij een afwezig gebouw afwezig (0.8). De thermostaat toont dan ook preset Eco of Afwezig met die grenzen, en springt terug naar Comfort zodra er weer iemand is. Doeltemperaturen wijzigen in Eco of Afwezig past de eigen eco- of afwezig-band van de ruimte aan |
 | Preset `eco` / `away` | Vaste band; een afwezig gebouw gaat altijd voor |
 | Comfort verwarmen tot / koelen vanaf | Dezelfde comfortband als instellingen op het apparaat |
 | Sensor **Actieve band** | Welke band nu geldt, met reden en grenzen |

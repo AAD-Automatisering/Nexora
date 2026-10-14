@@ -11,7 +11,9 @@
   supports are offered too. With room regulation on, Zonentra runs the units
   in dry / fan_only and passes the fan speed on.
 * Presets: ``comfort`` (presence and motion may lower it to eco/away) or a
-  fixed eco / away. The band that applies is an attribute.
+  fixed eco / away. The thermostat shows the band that applies now: its
+  preset becomes away when the building is absent and eco without motion, and
+  its targets are that band's limits (the choice is kept as an attribute).
 * Whether Zonentra really switches the room's indoor units is the separate
   "Room regulation" switch (off by default: simulation only).
 """
@@ -120,7 +122,12 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
 
     @property
     def preset_mode(self) -> str:
-        return self.thermostat.preset
+        """The band that applies now: away when the building is absent, eco
+        without motion, else the chosen preset. The choice itself is kept."""
+        return self.runtime.zone_bands[self._zone_id][0]
+
+    def _band(self) -> str:
+        return self.runtime.zone_bands[self._zone_id][0]
 
     @property
     def current_temperature(self) -> float | None:
@@ -142,11 +149,12 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
 
     @property
     def target_temperature_low(self) -> float | None:
-        return self.runtime.comfort[self._zone_id][0].value
+        """Heating limit of the band that applies now (comfort, eco, away)."""
+        return self.runtime.zone_snapshots[self._zone_id].heating_limit.value
 
     @property
     def target_temperature_high(self) -> float | None:
-        return self.runtime.comfort[self._zone_id][1].value
+        return self.runtime.zone_snapshots[self._zone_id].cooling_limit.value
 
     @property
     def hvac_action(self) -> HVACAction:
@@ -183,6 +191,9 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
         return {
             "active_band": band,
             "active_band_reason": reason,
+            "chosen_preset": thermostat.preset,
+            "comfort_heating_limit": runtime.comfort[self._zone_id][0].value,
+            "comfort_cooling_limit": runtime.comfort[self._zone_id][1].value,
             "active_heating_limit": snapshot.heating_limit.value,
             "active_cooling_limit": snapshot.cooling_limit.value,
             "comfort_source": "thermostat"
@@ -217,7 +228,11 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
             )
         low = self.target_temperature_low if low is None else low
         high = self.target_temperature_high if high is None else high
-        changes |= {"heating_limit": low, "cooling_limit": high}
+        # The shown band is the one that changes: comfort, or this room's
+        # own eco / away limits.
+        band = self._band()
+        prefix = "" if band == "comfort" else f"{band}_"
+        changes |= {f"{prefix}heating_limit": low, f"{prefix}cooling_limit": high}
         self._change(**changes)
 
     @staticmethod

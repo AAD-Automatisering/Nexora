@@ -142,6 +142,22 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
     await hass.async_block_till_done()
     assert hass.states.get(band_id).state == "eco"
     assert runtime.zone_snapshots["west"].heating_limit.value == 19
+    # The thermostat shows the band that applies, with its limits.
+    thermostat = hass.states.get(climate_id)
+    assert thermostat.attributes["preset_mode"] == "eco"
+    assert thermostat.attributes["target_temp_low"] == 19
+    assert thermostat.attributes["comfort_heating_limit"] == 21.5
+    # Changing the targets now changes this room's eco band, not comfort.
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": climate_id, "target_temp_low": 18, "target_temp_high": 27},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    assert runtime.thermostat("west").eco_heating_limit == 18
+    assert runtime.thermostat("west").heating_limit == 21.5
+    assert hass.states.get(climate_id).attributes["target_temp_high"] == 27
 
     # Off: the room asks for nothing (and does not steer the outdoor unit).
     await hass.services.async_call(
