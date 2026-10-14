@@ -120,6 +120,14 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [ ] Praktijkperiode met één ruimte: commandolog, setpointgedrag en comfort beoordelen.
 - [x] Ventilatorstand en raamcontacten (raam open → unit uit) in de ruimteregeling (0.10).
 
+### Versie 0.11.0 — zonwering (geïmplementeerd)
+
+- [x] Screens per ruimte op zon (vermogen zonnepanelen), zonnestand en gevel.
+- [x] Klimaat weegt het zwaarst: omlaag bij warmte/koeling, omhoog bij verwarming en 's nachts.
+- [x] Handmatige bediening respecteren; blokkeer-entiteit voor wind/regen.
+- [x] Schakelaar Zonweringregeling per ruimte, standaard uit (simulatie).
+- [ ] Praktijkperiode: drempel, vertragingen en zonweringsstand afstemmen.
+
 ### Versie 0.10.0 — ruimtesensoren zoals Versatile Thermostat (geïmplementeerd)
 
 - [x] Sensoren aanwezigheid, veiligheid, raam, geregeld setpoint, gemiddelde temperatuur en temperatuurtrend.

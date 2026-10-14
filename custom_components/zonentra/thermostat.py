@@ -64,6 +64,7 @@ class Thermostat:
     regulation: bool = False
     fan_mode: str | None = None  # None: leave the units' fan speed alone
     window_bypass: bool = False  # 0.10: an open window is ignored
+    screen_regulation: bool = False  # 0.11: Zonentra really moves the screens
     # 0.10: the room's own eco / away limits (None: the central value).
     eco_heating_limit: float | None = None
     eco_cooling_limit: float | None = None
@@ -111,6 +112,7 @@ class Thermostat:
             data.get("regulation") is True,
             data.get("fan_mode") if isinstance(data.get("fan_mode"), str) else None,
             data.get("window_bypass") is True,
+            data.get("screen_regulation") is True,
             *(number(key) for key in BAND_KEYS),
             **manual,
         )
@@ -152,7 +154,7 @@ def update_thermostat(
         raise ValueError("invalid_hvac_mode")
     if "preset" in changes and changes["preset"] not in PRESETS:
         raise ValueError("invalid_preset")
-    for key in ("regulation", "window_bypass"):
+    for key in ("regulation", "window_bypass", "screen_regulation"):
         if key in changes and not isinstance(changes[key], bool):
             raise ValueError("invalid_parameters")
     for key in BAND_KEYS:

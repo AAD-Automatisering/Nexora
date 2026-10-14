@@ -23,12 +23,13 @@ from .topology import ENTRY_TYPE, ZONE
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     if entry.data.get(ENTRY_TYPE) == ZONE:
         context = zone_context(hass, entry)
-        async_add_entities(
-            [
-                RoomRegulationSwitch(entry, **context),
-                WindowBypassSwitch(entry, **context),
-            ]
-        )
+        entities = [
+            RoomRegulationSwitch(entry, **context),
+            WindowBypassSwitch(entry, **context),
+        ]
+        if entry.options.get("shading_entities"):
+            entities.append(ScreenRegulationSwitch(entry, **context))
+        async_add_entities(entities)
         return
     runtime = entry.runtime_data
     async_add_entities(
@@ -111,3 +112,25 @@ class WindowBypassSwitch(ZoneEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         self._change(window_bypass=False)
+
+
+class ScreenRegulationSwitch(ZoneEntity, SwitchEntity):
+    """Zonentra really moves this room's screens (0.11); off: simulation."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:roller-shade"
+    _attr_translation_key = "screen_regulation"
+
+    def __init__(self, entry, provider, signal, device) -> None:
+        super().__init__(entry, provider, signal, device)
+        self._attr_unique_id = f"{entry.entry_id}_screen_regulation"
+
+    @property
+    def is_on(self) -> bool:
+        return self.thermostat.screen_regulation
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._change(screen_regulation=True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._change(screen_regulation=False)

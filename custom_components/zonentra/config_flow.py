@@ -37,6 +37,7 @@ from .models import (
 )
 from .observations import VALIDATION_STRATEGIES
 from .presence import PRESENCE_DOMAINS
+from .shading import FACADES
 from .topology import (
     CENTRAL,
     CENTRAL_UNIQUE_ID,
@@ -101,6 +102,14 @@ def building_fields(limits: bool = True) -> dict:
         vol.Optional("setpoint_max_offset"): numeric(0, 5, unit="°C"),
         vol.Optional("setpoint_interval_seconds"): numeric(60, 3600, 1, "s"),
         vol.Optional("window_delay_seconds"): numeric(0, 3600, 1, "s"),
+        # Screens (0.11): sunshine from solar power; wind alarm blocks.
+        vol.Optional("sun_power_entity"): entity_selector("sensor"),
+        vol.Optional("sun_power_threshold"): numeric(0, 1_000_000, 1, "W"),
+        vol.Optional("screen_block_entity"): entity_selector(
+            ["binary_sensor", "input_boolean"]
+        ),
+        vol.Optional("screen_shade_position"): numeric(0, 100, 1, "%"),
+        vol.Optional("screen_override_minutes"): numeric(5, 720, 1, "min"),
     }
     if not limits:
         fields = {
@@ -133,6 +142,9 @@ def building_defaults() -> dict:
                 "setpoint_max_offset",
                 "setpoint_interval_seconds",
                 "window_delay_seconds",
+                "sun_power_threshold",
+                "screen_shade_position",
+                "screen_override_minutes",
             )
         },
     }
@@ -171,6 +183,13 @@ def zone_fields(groups: list[dict]) -> dict:
         vol.Optional("contact_entities"): multi("binary_sensor"),
         vol.Optional("floor_heating_entities"): multi(["climate", "number"]),
         vol.Optional("shading_entities"): multi("cover"),
+        vol.Optional("facade"): selector.SelectSelector(
+            {
+                "options": list(FACADES),
+                "mode": "dropdown",
+                "translation_key": "facade",
+            }
+        ),
         vol.Optional("ventilation_entities"): multi(["fan", "switch"]),
         # Vane (0.10): up when cooling, down when heating.
         vol.Optional("vane_entity"): entity_selector(list(VANE_DOMAINS)),

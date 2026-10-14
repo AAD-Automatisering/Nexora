@@ -38,7 +38,12 @@
           "motion_off_delay_minutes": "Time occupied after last motion (minutes)",
           "setpoint_max_offset": "Room regulation: maximum setpoint correction of an indoor unit (°C)",
           "setpoint_interval_seconds": "Room regulation: minimum time between setpoint changes (seconds)",
-          "window_delay_seconds": "Open window: delay before the room stops (seconds)"
+          "window_delay_seconds": "Open window: delay before the room stops (seconds)",
+          "sun_power_entity": "Screens: solar power sensor (sunshine)",
+          "sun_power_threshold": "Screens: solar power above which the sun shines (W)",
+          "screen_block_entity": "Screens: block entity, e.g. wind alarm (optional; on = no commands)",
+          "screen_shade_position": "Screens: position when shading (%; 100 = open)",
+          "screen_override_minutes": "Screens: respect manual operation for (minutes)"
         }
       },
       "zone": {
@@ -61,7 +66,8 @@
           "ventilation_entities": "Ventilation (optional)",
           "vane_entity": "Vane (optional; select, number or switch entity of the indoor unit)",
           "vane_cool_value": "Vane when cooling (up): option, number, or on/off for a switch",
-          "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch"
+          "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch",
+          "facade": "Facade of the screens (optional)"
         }
       },
       "zone_parameters": {
@@ -207,7 +213,12 @@
           "motion_off_delay_minutes": "Time occupied after last motion (minutes)",
           "setpoint_max_offset": "Room regulation: maximum setpoint correction of an indoor unit (°C)",
           "setpoint_interval_seconds": "Room regulation: minimum time between setpoint changes (seconds)",
-          "window_delay_seconds": "Open window: delay before the room stops (seconds)"
+          "window_delay_seconds": "Open window: delay before the room stops (seconds)",
+          "sun_power_entity": "Screens: solar power sensor (sunshine)",
+          "sun_power_threshold": "Screens: solar power above which the sun shines (W)",
+          "screen_block_entity": "Screens: block entity, e.g. wind alarm (optional; on = no commands)",
+          "screen_shade_position": "Screens: position when shading (%; 100 = open)",
+          "screen_override_minutes": "Screens: respect manual operation for (minutes)"
         }
       },
       "zone_settings": {
@@ -230,7 +241,8 @@
           "ventilation_entities": "Ventilation (optional)",
           "vane_entity": "Vane (optional; select, number or switch entity of the indoor unit)",
           "vane_cool_value": "Vane when cooling (up): option, number, or on/off for a switch",
-          "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch"
+          "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch",
+          "facade": "Facade of the screens (optional)"
         }
       },
       "zone_parameters": {
@@ -387,6 +399,14 @@
       },
       "auto_fan": {
         "name": "Auto fan speed"
+      },
+      "screen": {
+        "name": "{screen} Screen",
+        "state": {
+          "open": "Open",
+          "shade": "Shade",
+          "hold": "Hold"
+        }
       }
     },
     "switch": {
@@ -398,6 +418,9 @@
       },
       "window_bypass": {
         "name": "Window bypass"
+      },
+      "screen_regulation": {
+        "name": "Screen regulation"
       }
     },
     "climate": {
@@ -484,6 +507,20 @@
     },
     "zone_not_loaded": {
       "message": "The Zonentra central configuration is not loaded, or this zone is not part of it yet."
+    }
+  },
+  "selector": {
+    "facade": {
+      "options": {
+        "north": "North",
+        "northeast": "North-east",
+        "east": "East",
+        "southeast": "South-east",
+        "south": "South",
+        "southwest": "South-west",
+        "west": "West",
+        "northwest": "North-west"
+      }
     }
   }
 }

@@ -42,6 +42,16 @@ from .roomstate import (
     vane_mode,
     window_state,
 )
+from .shading import (
+    MIN_STEP,
+    ScreenDecision,
+    ScreenMove,
+    SunMemory,
+    decide_screen,
+    plan_screen_move,
+    sun_on_facade,
+    sunny_state,
+)
 from .thermostat import (
     CLEAR_MANUAL,
     UNIT_MODES,
@@ -59,6 +69,27 @@ from .thermostat import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _cover_position(state) -> float | None:
+    """A cover's position: 100 open, 0 closed (state only as a fallback)."""
+    if state is None:
+        return None
+    position = state.attributes.get("current_position")
+    if isinstance(position, (int, float)) and not isinstance(position, bool):
+        return float(position)
+    return {"open": 100.0, "closed": 0.0}.get(state.state)
+
+
+def _power(source) -> float | None:
+    """Solar power in W (kW is converted); None when not usable."""
+    if source is None or not source.trustworthy:
+        return None
+    try:
+        value = float(source.state)
+    except TypeError, ValueError:
+        return None
+    return value * 1000 if source.unit == "kW" else value
 
 
 def _setpoint(value) -> str | None:
@@ -137,6 +168,16 @@ class BuildingRuntime:
         self._window_checks: list = []
         self._manual_checks: list = []
         self.vane_applied: dict[str, str] = {}  # zone -> heat / cool position set
+        # 0.11 screens: sunshine memory, decisions, moves and manual overrides.
+        self.sun_memory = SunMemory()
+        self.sunny: bool | None = None
+        self.sun_power: float | None = None
+        self.screen_decisions: dict[str, ScreenDecision] = {}
+        self.screen_moves: dict[str, ScreenMove] = {}
+        self.screen_overrides: dict = {}  # equipment -> until
+        self.screen_last_move: dict = {}
+        self.cover_tracker = CommandTracker(confirmation_seconds=240)
+        self._screen_checks: list = []
         # 0.5 simulated control. In memory only: nothing survives a restart.
         self.overrides = {}
         self.last_transitions = {}
@@ -355,6 +396,7 @@ class BuildingRuntime:
         deadlines.extend(self._setpoint_checks)
         deadlines.extend(self._window_checks)
         deadlines.extend(self._manual_checks)
+        deadlines.extend(self._screen_checks)
         for group_id, control in self.mode_controls.items():
             if control.blocked_until:
                 deadlines.append(control.blocked_until)
@@ -680,6 +722,129 @@ class BuildingRuntime:
             )
             self.hass.async_create_task(self._call(service, data, entry, domain))
 
+    # --- Screens (0.11) ---------------------------------------------------------
+
+    def _screen_transition(self, entity_id, old, new, event, now) -> None:
+        """A screen moved by a person (HA or room controller) is respected."""
+        for item in self.building.equipment:
+            if item.kind != "shading" or item.entity_id != entity_id:
+                continue
+            if new is None or new.state in ("opening", "closing", "unavailable"):
+                return  # Wait for the end position.
+            position = _cover_position(new)
+            pending = next(
+                (p for p in self.cover_tracker.pending if p.entity_id == entity_id),
+                None,
+            )
+            if pending is not None and self.cover_tracker.is_pending(entity_id, now):
+                expected = float(pending.expected_state)
+                if position is not None and abs(position - expected) < MIN_STEP:
+                    self.cover_tracker.confirm(entity_id, pending.expected_state, now)
+                    self.last_transitions[item.id] = ("zonentra_screen", now)
+                return
+            if old is None or (
+                _cover_position(old) == position and old.state == new.state
+            ):
+                return
+            if _origin(event) == "automation":
+                self.last_transitions[item.id] = ("automation_screen", now)
+                return
+            minutes = self.building.settings.screen_override_minutes
+            self.screen_overrides[item.id] = now + timedelta(minutes=minutes)
+            self.last_transitions[item.id] = ("manual_screen", now)
+
+    def _shading(self, sources, now) -> None:
+        """Decide every screen; move it only with the room's screen regulation."""
+        settings = self.building.settings
+        checks = []
+        self.sun_power = _power(sources.get(settings.sun_power_entity))
+        if settings.sun_power_entity:
+            self.sunny, self.sun_memory, check = sunny_state(
+                self.sun_power, settings.sun_power_threshold, self.sun_memory, now
+            )
+            if check:
+                checks.append(check)
+        else:
+            self.sunny = None
+        sun = self.hass.states.get(settings.sun_entity)
+        attributes = sun.attributes if sun else {}
+        azimuth, elevation = attributes.get("azimuth"), attributes.get("elevation")
+        block = sources.get(settings.screen_block_entity)
+        blocked = block is not None and block.state == "on"
+        available = self.hass.services.has_service("cover", "set_cover_position")
+        zones = {zone.id: zone for zone in self.building.zones}
+        decisions, moves = {}, {}
+        for item in self.building.equipment:
+            if item.kind != "shading":
+                continue
+            zone = zones[item.zone_id]
+            snapshot = self.zone_snapshots[zone.id]
+            previous = self.screen_decisions.get(item.id)
+            decision = decide_screen(
+                elevation=elevation,
+                sunny=self.sunny,
+                on_facade=sun_on_facade(azimuth, elevation, zone.facade),
+                demand=self.zone_demands[zone.id].demand,
+                room_temperature=snapshot.temperature.value
+                if snapshot.temperature.quality == "valid"
+                else None,
+                heating_limit=snapshot.heating_limit.value,
+                cooling_limit=snapshot.cooling_limit.value,
+                shade_position=round(settings.screen_shade_position),
+                previous=previous.target if previous else None,
+            )
+            override = self.screen_overrides.get(item.id)
+            if override is not None and now >= override:
+                del self.screen_overrides[item.id]  # Manual time is over.
+                override = None
+            state = self.hass.states.get(item.entity_id)
+            move = plan_screen_move(
+                decision,
+                _cover_position(state) if state else None,
+                self.screen_last_move.get(item.id),
+                now,
+                enabled=self.active_capable
+                and self.thermostat(zone.id).screen_regulation,
+                blocked=blocked,
+                override_until=override,
+                busy=self.cover_tracker.is_pending(item.entity_id, now),
+            )
+            if move.status == "move" and not available:
+                move = ScreenMove("cover_service_unavailable")
+            if move.status == "move":
+                self._move_screen(item, move.position, decision.reason, now)
+            if move.next_check:
+                checks.append(move.next_check)
+            decisions[item.id], moves[item.id] = decision, move
+        self.screen_decisions, self.screen_moves = decisions, moves
+        self._screen_checks = checks
+
+    def _move_screen(self, item, position, reason, now) -> None:
+        self.screen_last_move[item.id] = now
+        self.cover_tracker.register(item.entity_id, str(position), now)
+        entry = self._log(
+            ModeCommand(
+                item.id,
+                item.entity_id,
+                "set_cover_position",
+                None,
+                0,
+                f"screen_{reason}",
+                domain="cover",
+                value=position,
+            ),
+            now,
+            "sending",
+        )
+        self.hass.async_create_task(
+            self._call(
+                "set_cover_position",
+                {"entity_id": item.entity_id, "position": position},
+                entry,
+                "cover",
+            )
+        )
+
     def zone_auto_fan(self, zone_id: str) -> bool:
         """The thermostat runs Zonentra's automatic fan (units have no auto)."""
         return self.thermostat(zone_id).fan_mode == AUTO_FAN and (
@@ -896,6 +1061,7 @@ class BuildingRuntime:
         busy |= {command.equipment_id for _, command, _ in self.pending_offs}
         self._regulate(sources, now, busy, available)
         self._vanes(now)
+        self._shading(sources, now)
 
     def _execute(self, command, now) -> None:
         data = {"entity_id": command.entity_id}
@@ -973,6 +1139,7 @@ class BuildingRuntime:
             return {}  # Setup, timers and same-value reports are no transitions.
         entity_id = event.data.get("entity_id")
         old, new = event.data.get("old_state"), event.data.get("new_state")
+        self._screen_transition(entity_id, old, new, event, now)
         transitions = {}
         for item in self.building.equipment:
             if item.kind != "hvac" or item.entity_id != entity_id:
@@ -1106,6 +1273,8 @@ class BuildingRuntime:
             "outdoor_temperature_c": self.outdoor_temperature.value,
             "outdoor_temperature_quality": self.outdoor_temperature.quality,
             "building_presence": self.presence,
+            "sunny": self.sunny,
+            "sun_power": self.sun_power,
             "regulated_zones": sum(
                 self.regulated(zone.id) for zone in self.building.zones
             ),

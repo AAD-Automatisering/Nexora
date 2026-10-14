@@ -88,6 +88,20 @@ def _zone_entities(hass, entry) -> list:
         ),
     ]
     for record in zone_equipment(options):
+        if record["kind"] == "shading":
+            state = hass.states.get(record["entity_id"])
+            item = Equipment(
+                **{**record, "name": state.name if state else record["name"]}
+            )
+            entities.append(
+                ScreenSensor(
+                    entry,
+                    item,
+                    unique_id=f"{entry.entry_id}_{item.id}_screen",
+                    **shared,
+                )
+            )
+            continue
         if record["kind"] != "hvac":
             continue
         state = hass.states.get(record["entity_id"])
@@ -620,6 +634,53 @@ class AutoFanSensor(ZoneStateSensor):
         if not self.runtime.zone_auto_fan(self._zone.id):
             return None
         return self.runtime.auto_fans.get(self._zone.id)
+
+
+class ScreenSensor(ZonentraDiagnosticSensor):
+    """What Zonentra wants a screen to do (0.11), and why."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["open", "shade", "hold"]
+    _attr_icon = "mdi:roller-shade"
+    _attr_translation_key = "screen"
+    _attr_entity_category = None
+
+    def __init__(self, entry, item, unique_id=None, **shared):
+        super().__init__(entry, **shared)
+        self.item = item
+        self._attr_translation_placeholders = {"screen": item.name}
+        self._attr_unique_id = unique_id
+
+    def _present(self, runtime) -> bool:
+        return self.item.id in runtime.screen_decisions
+
+    @property
+    def native_value(self):
+        return self.runtime.screen_decisions[self.item.id].target
+
+    @property
+    def extra_state_attributes(self):
+        runtime = self.runtime
+        decision = runtime.screen_decisions[self.item.id]
+        move = runtime.screen_moves.get(self.item.id)
+        zone = next(z for z in runtime.building.zones if z.id == self.item.zone_id)
+        active = runtime.thermostat(zone.id).screen_regulation
+        return {
+            "simulation": not active,
+            "screen_regulation": active,
+            "reason": decision.reason,
+            "target_position": decision.position,
+            "status": move.status if move else None,
+            "facade": zone.facade,
+            "sunny": runtime.sunny,
+            "sun_power": runtime.sun_power,
+            "manual_until": _iso(runtime.screen_overrides.get(self.item.id)),
+            "last_commands": [
+                {key: entry[key] for key in ("at", "value", "reason", "result")}
+                for entry in runtime.command_log
+                if entry["equipment_id"] == self.item.id
+            ][-5:],
+        }
 
 
 def _iso(value):

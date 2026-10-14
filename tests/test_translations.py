@@ -208,6 +208,7 @@ def test_every_sensor_state_has_a_label(language, key, states):
         ("switch", "active_mode_control"),
         ("switch", "room_regulation"),
         ("switch", "window_bypass"),
+        ("switch", "screen_regulation"),
         ("number", "comfort_heating_limit"),
         ("number", "comfort_cooling_limit"),
         ("number", "central_heating_limit"),

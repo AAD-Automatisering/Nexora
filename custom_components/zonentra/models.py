@@ -10,6 +10,7 @@ from .const import KINDS
 from .migration import BAND_FIELDS, LIMIT_FIELDS, PARAMETER_FIELDS, migrate_options
 from .observations import STATE_BASED, UPDATE_BASED, VALIDATION_STRATEGIES
 from .presence import PRESENCE_DOMAINS
+from .shading import FACADES
 
 ZONE_ENTITY_FIELDS = (
     "temperature_entity",
@@ -62,6 +63,8 @@ class Zone:
     vane_entity: str | None = None
     vane_cool_value: str | None = None
     vane_heat_value: str | None = None
+    # 0.11: facade of the room's screens (north ... northwest).
+    facade: str | None = None
 
 
 @dataclass(frozen=True)
@@ -118,6 +121,13 @@ class BuildingSettings:
     setpoint_interval_seconds: float = 300.0
     # 0.10 open window: the room stops after this delay (like VTherm).
     window_delay_seconds: float = 30.0
+    # 0.11 screens: solar power says whether the sun shines; sun.sun where.
+    sun_power_entity: str | None = None
+    sun_power_threshold: float = 1000.0  # W
+    sun_entity: str = "sun.sun"
+    screen_block_entity: str | None = None  # e.g. a wind alarm: no commands
+    screen_shade_position: float = 0.0  # % (100 = open)
+    screen_override_minutes: float = 120.0
 
 
 def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
@@ -168,9 +178,17 @@ class Building:
                     "heating_limit_entity",
                     "cooling_limit_entity",
                     "presence_entity",
+                    "sun_power_entity",
+                    "screen_block_entity",
                 )
                 if (entity := getattr(self.settings, key))
             ]
+            # The sun position only matters with screens (0.11).
+            + (
+                [self.settings.sun_entity]
+                if any(item.kind == "shading" for item in self.equipment)
+                else []
+            )
         )
 
 
@@ -238,6 +256,12 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _range(settings.setpoint_max_offset, 0, 5)
     _range(settings.setpoint_interval_seconds, 60, 3600)
     _range(settings.window_delay_seconds, 0, 3600)
+    _entity(settings.sun_power_entity, ("sensor",))
+    _entity(settings.sun_entity, ("sun",))
+    _entity(settings.screen_block_entity, ("binary_sensor", "input_boolean"))
+    _range(settings.sun_power_threshold, 0, 1_000_000)
+    _range(settings.screen_shade_position, 0, 100)
+    _range(settings.screen_override_minutes, 5, 720)
     _validate_sensor_validation(settings)
     _validate_limits(settings)
     zones, groups, equipment = (
@@ -280,6 +304,8 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         _validate_sensor_validation(zone)
         _validate_limits(zone)
         _validate_bands(zone, zone.hysteresis)
+        if zone.facade is not None and zone.facade not in FACADES:
+            raise ValueError("invalid_parameters")
     for group in group_models:
         _entity(group.mode_entity, ("sensor", "select", "climate"))
         _range(group.min_switch_seconds, 0, 86400)

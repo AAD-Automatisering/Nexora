@@ -1,4 +1,4 @@
-# Zonentra 0.10.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.11.0 — uitlegbare klimaatintelligentie
 
 Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
 commando en verandert ook niet de intern bijgehouden actuele modus. De actieve
@@ -536,6 +536,22 @@ stand en hooguit eens per `setpoint_interval_seconds`.
 verwarmstand (`vane_mode`). Via `select.select_option`, `number.set_value` of `switch.turn_on/turn_off`
 (ook `input_*`; een schakelaar voor lamel auto/stop of swing/stop), eenmaal per start of modewissel; alle units uit wist het
 geheugen, zodat de volgende start de stand opnieuw zet.
+
+## Zonwering (0.11)
+
+`shading.py` is puur. **Zon schijnt** (`sunny_state`): vermogen ≥ drempel gedurende
+300 s → aan; < 70 % van de drempel gedurende 900 s → uit; geen vermogen → onbekend.
+**Zon op de gevel** (`sun_on_facade`): hoogte ≥ 5° en hoekverschil tussen
+zonsazimut en gevelrichting ≤ 80°. **Besluit** (`decide_screen`): hoogte < 0 → open
+(nacht); zon onbekend → ongewijzigd; geen zon of niet op de gevel → open;
+verwarmingsvraag → open; koelvraag → zonwering; anders zonwering als de
+ruimtetemperatuur ≥ midden van de actieve band + 0,5 °C (eenmaal omlaag: tot
+midden − 0,5 °C), anders open. **Bewegen** (`plan_screen_move`), alleen met
+Zonweringregeling: niet bij blokkering, niet tijdens handmatige bediening
+(`screen_override_minutes`, standaard 120), niet bij < 10 % verschil, hooguit eens
+per 900 s; `cover.set_cover_position`, bevestigd via een eigen CommandTracker
+(240 s). Een standwijziging die niet van Zonentra komt en geen automation is,
+start de handmatige periode.
 
 ## Events en herbeoordeling
 

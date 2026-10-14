@@ -3,7 +3,9 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.10.0** vult het ruimteapparaat aan met de sensoren en bediening die
+Versie **0.11.0** regelt de **zonwering** (screens): omlaag als de zon op de gevel
+staat en de ruimte warm is of koelt, omhoog voor gratis zonnewarmte, daglicht en
+'s nachts. Per ruimte eerst als simulatie. Versie 0.10.0 vulde het ruimteapparaat aan met de sensoren en bediening die
 Versatile Thermostat ook heeft: aanwezigheid, veiligheid, raam (met bypass),
 geregeld setpoint, gemiddelde temperatuur, temperatuurtrend en een automatische
 ventilatorstand, plus een lamel die omhoog gaat bij koelen en omlaag bij verwarmen.
@@ -70,6 +72,15 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.11.0 — zonwering
+
+Werk bij via HACS, herstart Home Assistant en herlaad de browser volledig. Vul daarna
+in **Centrale configuratie** de sensor met het vermogen van de zonnepanelen en de
+drempel in (en eventueel een windalarm als blokkering), en per ruimte bij
+**Configureren** de **gevel** van de zonwering. De schakelaar **Zonweringregeling** op
+het ruimteapparaat staat standaard uit: kijk eerst een paar dagen naar de sensor
+**Zonwering** voordat je hem aanzet.
 
 ### Bijwerken naar 0.10.0 — ruimtesensoren, raam, ventilator en lamel
 
@@ -310,6 +321,37 @@ Zoals de presettemperaturen bij Versatile Thermostat:
 
 Een band moet geldig blijven: verwarmen + 2 × hysterese < koelen. Grensentiteiten
 (`input_number` e.d.) stel je nog wel in de wizard in.
+
+### Zonwering (0.11)
+
+Per zonwering (een `cover` met positie) beslist Zonentra, in deze volgorde:
+
+| Situatie | Zonwering |
+|---|---|
+| Zon onder de horizon | Omhoog |
+| Zon onbekend (geen zonnepanelen-sensor, stand onbekend) | Ongewijzigd |
+| Geen zon (vermogen onder de drempel) of zon niet op deze gevel | Omhoog (daglicht) |
+| Zon op de gevel en de ruimte vraagt verwarming | Omhoog (gratis zonnewarmte) |
+| Zon op de gevel en de ruimte vraagt koeling | Omlaag |
+| Zon op de gevel, geen vraag | Omlaag als de ruimte in de warme helft van haar band zit, anders omhoog (met 0,5 °C hysterese) |
+
+- **Zon schijnt:** vermogen van de zonnepanelen boven de drempel, 5 minuten lang;
+  pas weer "geen zon" na 15 minuten onder 70 % van de drempel (tegen wolken).
+- **Zon op de gevel:** stand van de zon (`sun.sun`) hoger dan 5° en hooguit 80° naast
+  de richting van de gevel (noord, oost, zuid, west en tussenrichtingen).
+- **Klimaat weegt het zwaarst:** de band die nu geldt (comfort, eco, afwezig) en de
+  klimaatvraag van de ruimte bepalen omhoog of omlaag.
+- **Bewegen:** hooguit eens per 15 minuten per zonwering, alleen bij minstens 10 %
+  verschil, naar de centraal ingestelde zonweringsstand (standaard 0 % = helemaal
+  omlaag) of 100 % (open).
+- **Mensen gaan voor:** wie de zonwering bedient via Home Assistant of de
+  roomcontroller, wordt 2 uur gerespecteerd (centraal instelbaar). Een automation
+  telt niet als bediening.
+- **Wind en regen** regelt KNX zelf. Geef je centraal een blokkeer-entiteit op
+  (bijvoorbeeld het windalarm), dan stuurt Zonentra niets zolang die aan staat.
+- **Ruimteapparaat:** per zonwering een sensor **Zonwering** (open / zonwering /
+  ongewijzigd) met reden, beoogde stand, status, gevel, zon en de laatste commando's;
+  de schakelaar **Zonweringregeling** (standaard uit = simulatie).
 
 ### Ruimtesensoren, raam, ventilator en lamel (0.10)
 
@@ -588,6 +630,7 @@ custom_components/zonentra/
   presence.py                   aanwezigheid (gebouw) en beweging (ruimte) → comfort/eco/afwezig
   thermostat.py                 ruimtethermostaat, band, ruimteregeling en zelfregulerend setpoint
   roomstate.py                  raam, veiligheid, temperatuurtrend, automatische ventilator, lamel
+  shading.py                    zonwering: zon, gevel, klimaat en bewegen
   entity.py                     gedeelde basis voor bedieningsentiteiten op het ruimteapparaat
   climate.py                    Zonentra-thermostaat per ruimte
   number.py                     comfortband als instellingen op het ruimteapparaat
