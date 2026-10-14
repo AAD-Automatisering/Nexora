@@ -40,6 +40,10 @@ IGNORED_DEMAND = {
     "cool": ("heating_demand", "thermostat_cool_only"),
 }
 PRESETS = ("comfort", "eco", "away")
+# A temporary manual deviation from the thermostat (HA's preset "none"). Like
+# a manual override at the room controller it ends after the override
+# duration, and earlier when a preset is chosen or the band changes.
+MANUAL_PRESET = "none"
 BAND_KEYS = (
     "eco_heating_limit",
     "eco_cooling_limit",
@@ -65,6 +69,11 @@ class Thermostat:
     eco_cooling_limit: float | None = None
     away_heating_limit: float | None = None
     away_cooling_limit: float | None = None
+    # 0.10: one-off manual targets set on the thermostat (not configuration).
+    manual_heating_limit: float | None = None
+    manual_cooling_limit: float | None = None
+    manual_band: str | None = None  # the band they were set in
+    manual_until: str | None = None  # ISO time; set by the runtime
 
     @classmethod
     def from_dict(cls, data: Any) -> "Thermostat":
@@ -81,6 +90,17 @@ class Thermostat:
         heat, cool = number("heating_limit"), number("cooling_limit")
         if heat is None or cool is None or heat >= cool:
             heat = cool = None
+        manual = {}
+        low, high = number("manual_heating_limit"), number("manual_cooling_limit")
+        if low is not None and high is not None and low < high:
+            if data.get("manual_band") in BANDS:
+                until = data.get("manual_until")
+                manual = {
+                    "manual_heating_limit": low,
+                    "manual_cooling_limit": high,
+                    "manual_band": data["manual_band"],
+                    "manual_until": until if isinstance(until, str) else None,
+                }
         return cls(
             data.get("hvac_mode")
             if data.get("hvac_mode") in THERMOSTAT_MODES
@@ -92,6 +112,7 @@ class Thermostat:
             data.get("fan_mode") if isinstance(data.get("fan_mode"), str) else None,
             data.get("window_bypass") is True,
             *(number(key) for key in BAND_KEYS),
+            **manual,
         )
 
     def as_dict(self) -> dict:
@@ -107,8 +128,20 @@ class Thermostat:
         }
 
     @property
+    def manual(self) -> bool:
+        return self.manual_band is not None
+
+    @property
     def has_band(self) -> bool:
         return self.heating_limit is not None and self.cooling_limit is not None
+
+
+CLEAR_MANUAL = {
+    "manual_heating_limit": None,
+    "manual_cooling_limit": None,
+    "manual_band": None,
+    "manual_until": None,
+}
 
 
 def update_thermostat(
@@ -132,7 +165,21 @@ def update_thermostat(
             raise ValueError("invalid_limits")
     if "fan_mode" in changes and not isinstance(changes["fan_mode"], str | None):
         raise ValueError("invalid_parameters")
+    if "preset" in changes and "manual_band" not in changes:
+        # Choosing a preset ends a manual deviation.
+        changes = {**changes, **CLEAR_MANUAL}
     new = replace(current, **changes)
+    if new.manual_band is not None:
+        low, high = new.manual_heating_limit, new.manual_cooling_limit
+        if (
+            new.manual_band not in BANDS
+            or low is None
+            or high is None
+            or not 5 <= low <= 35
+            or not 5 <= high <= 35
+            or low + 2 * hysteresis >= high
+        ):
+            raise ValueError("invalid_limits")
     if new.heating_limit is not None or new.cooling_limit is not None:
         if new.heating_limit is None or new.cooling_limit is None:
             raise ValueError("invalid_limits")

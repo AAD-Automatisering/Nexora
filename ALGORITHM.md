@@ -436,7 +436,12 @@ herlaad van de centrale configuratie een net gemaakte wijziging niet verliest.
 **Band.** `active_band(preset, bezetting)`: bij een afwezig gebouw altijd `away`;
 preset `comfort` volgt de bezetting uit 0.8 (zonder beweging eco); `eco` en
 `away` zijn vaste presets. De thermostaat toont de band die nu geldt als preset en
-diens grenzen als doeltemperaturen; de gekozen preset staat in `chosen_preset`. De
+diens grenzen als doeltemperaturen; de gekozen preset staat in `chosen_preset`. Een
+doeltemperatuur op de thermostaat is een eenmalige handmatige afwijking
+(`manual_*`, preset `none`): die vervangt de grenzen van de band waarin hij is gezet,
+tot `manual_override_duration_minutes` is verstreken (`manual_until`, zoals een
+Manual Override), een preset wordt gekozen of de band wisselt; de configuratie
+verandert niet. De
 comfortband is de eigen band van de thermostaat als die is ingesteld, anders de
 geconfigureerde grenzen (`demand.comfort_limits`). Eco en afwezig blijven centraal.
 Een eigen band moet voldoen aan `verwarmen + 2·hysterese < koelen`, beide 5–35 °C.

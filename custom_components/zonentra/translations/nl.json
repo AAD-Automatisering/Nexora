@@ -407,7 +407,8 @@
             "state": {
               "comfort": "Comfort",
               "eco": "Eco",
-              "away": "Afwezig"
+              "away": "Afwezig",
+              "none": "Handmatig"
             }
           },
           "fan_mode": {

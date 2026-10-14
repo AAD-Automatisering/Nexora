@@ -30,7 +30,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
 from .entity import ZoneEntity, zone_context
 from .roomstate import AUTO_FAN
-from .thermostat import PRESETS, UNIT_MODES, single_target
+from .thermostat import MANUAL_PRESET, PRESETS, UNIT_MODES, single_target
 
 BASE_FEATURES = (
     ClimateEntityFeature.TARGET_TEMPERATURE
@@ -50,7 +50,7 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
     _attr_translation_key = "thermostat"
     _attr_icon = "mdi:home-thermometer"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_preset_modes = list(PRESETS)
+    _attr_preset_modes = [*PRESETS, MANUAL_PRESET]
     _attr_min_temp = 5
     _attr_max_temp = 35
     _attr_target_temperature_step = 0.5
@@ -123,7 +123,10 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
     @property
     def preset_mode(self) -> str:
         """The band that applies now: away when the building is absent, eco
-        without motion, else the chosen preset. The choice itself is kept."""
+        without motion, else the chosen preset. The choice itself is kept.
+        "none" while a one-off manual target applies."""
+        if self.thermostat.manual:
+            return MANUAL_PRESET
         return self.runtime.zone_bands[self._zone_id][0]
 
     def _band(self) -> str:
@@ -192,6 +195,8 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
             "active_band": band,
             "active_band_reason": reason,
             "chosen_preset": thermostat.preset,
+            "manual": thermostat.manual,
+            "manual_until": thermostat.manual_until,
             "comfort_heating_limit": runtime.comfort[self._zone_id][0].value,
             "comfort_cooling_limit": runtime.comfort[self._zone_id][1].value,
             "active_heating_limit": snapshot.heating_limit.value,
@@ -228,11 +233,13 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
             )
         low = self.target_temperature_low if low is None else low
         high = self.target_temperature_high if high is None else high
-        # The shown band is the one that changes: comfort, or this room's
-        # own eco / away limits.
-        band = self._band()
-        prefix = "" if band == "comfort" else f"{band}_"
-        changes |= {f"{prefix}heating_limit": low, f"{prefix}cooling_limit": high}
+        # A one-off manual deviation, not configuration (that is on the
+        # device): it holds until a preset is chosen or the band changes.
+        changes |= {
+            "manual_heating_limit": low,
+            "manual_cooling_limit": high,
+            "manual_band": self._band(),
+        }
         self._change(**changes)
 
     @staticmethod
@@ -247,6 +254,8 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
         self._change(fan_mode=fan_mode)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
+        if preset_mode == MANUAL_PRESET:
+            return  # Shown while a manual target applies; set a temperature.
         self._change(preset=preset_mode)
 
     async def async_turn_on(self) -> None:

@@ -43,6 +43,7 @@ from .roomstate import (
     window_state,
 )
 from .thermostat import (
+    CLEAR_MANUAL,
     UNIT_MODES,
     RoomUnitControl,
     SetpointPlan,
@@ -134,6 +135,7 @@ class BuildingRuntime:
         self.auto_fans: dict[str, str | None] = {}
         self.fan_sent_at: dict = {}
         self._window_checks: list = []
+        self._manual_checks: list = []
         self.vane_applied: dict[str, str] = {}  # zone -> heat / cool position set
         # 0.5 simulated control. In memory only: nothing survives a restart.
         self.overrides = {}
@@ -194,15 +196,35 @@ class BuildingRuntime:
             self.building.settings.outdoor_max_age_seconds,
         )
         self._occupancy(sources, now)
-        bands, comfort = {}, {}
+        bands, comfort, manual, manual_checks = {}, {}, {}, []
         for zone in self.building.zones:
             thermostat = self.thermostat(zone.id)
             bands[zone.id] = active_band(
                 thermostat.preset, self.zone_occupancy[zone.id]
             )
+            until = self.manual_until(zone.id)
+            if thermostat.manual and (
+                thermostat.manual_band != bands[zone.id][0]
+                or until is None
+                or now >= until
+            ):
+                # Temporary, like a manual override at the room controller:
+                # it ends after the override time, or when the band changes
+                # (presence, motion).
+                thermostat = replace(thermostat, **CLEAR_MANUAL)
+                self.thermostats[zone.id] = thermostat
+                self._save_thermostats()
+            elif thermostat.manual:
+                manual_checks.append(until)
             band = (thermostat.heating_limit, thermostat.cooling_limit)
             comfort[zone.id] = band if thermostat.has_band else None
+            if thermostat.manual:
+                manual[zone.id] = (
+                    thermostat.manual_heating_limit,
+                    thermostat.manual_cooling_limit,
+                )
         self.zone_bands = bands
+        self._manual_checks = manual_checks
         self.comfort = {
             zone.id: comfort_limits(zone, sources, now, comfort[zone.id])
             for zone in self.building.zones
@@ -214,8 +236,8 @@ class BuildingRuntime:
                 sources,
                 now,
                 self.outdoor_temperature,
-                bands[zone.id][0],
-                comfort[zone.id],
+                "comfort" if zone.id in manual else bands[zone.id][0],
+                manual.get(zone.id, comfort[zone.id]),
                 self.thermostat(zone.id).bands,
             )
             for zone in self.building.zones
@@ -332,6 +354,7 @@ class BuildingRuntime:
         deadlines.extend(self._motion_checks)
         deadlines.extend(self._setpoint_checks)
         deadlines.extend(self._window_checks)
+        deadlines.extend(self._manual_checks)
         for group_id, control in self.mode_controls.items():
             if control.blocked_until:
                 deadlines.append(control.blocked_until)
@@ -424,6 +447,12 @@ class BuildingRuntime:
         zone = next((z for z in self.building.zones if z.id == zone_id), None)
         if zone is None or not self.active_capable:
             raise ValueError("zone_not_loaded")
+        if changes.get("manual_band") is not None:
+            # A manual target is temporary: as long as a manual override.
+            minutes = self.building.settings.manual_override_duration_minutes
+            changes["manual_until"] = (
+                dt_util.utcnow() + timedelta(minutes=minutes)
+            ).isoformat()
         new = update_thermostat(self.thermostat(zone_id), zone.hysteresis, **changes)
         settings = self.building.settings
         for band in ("eco", "away"):
@@ -439,8 +468,18 @@ class BuildingRuntime:
             if heat + 2 * zone.hysteresis >= cool:
                 raise ValueError("invalid_limits")
         self.thermostats[zone_id] = new
+        self._save_thermostats()
+        self.refresh()
+        return new
+
+    def manual_until(self, zone_id: str):
+        value = self.thermostat(zone_id).manual_until
+        return dt_util.parse_datetime(value) if value else None
+
+    def _save_thermostats(self) -> None:
         if self.thermostat_cache is not None:
-            self.thermostat_cache[zone_id] = new.as_dict()
+            for key, value in self.thermostats.items():
+                self.thermostat_cache[key] = value.as_dict()
         if self.thermostat_store is not None:
             self.hass.async_create_task(
                 self.thermostat_store.async_save(
@@ -452,8 +491,6 @@ class BuildingRuntime:
                     }
                 )
             )
-        self.refresh()
-        return new
 
     def regulated(self, zone_id: str | None) -> bool:
         """Room regulation really acts (central layout and switched on)."""

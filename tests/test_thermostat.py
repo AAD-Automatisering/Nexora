@@ -584,3 +584,46 @@ def test_window_sensor_options_match_the_window_states():
         and statement.targets[0].id == "_attr_options"
     )
     assert [item.value for item in options.elts] == list(WINDOW_STATES)
+
+
+# --- One-off manual targets ---------------------------------------------------
+
+
+def test_manual_target_is_stored_and_ended_by_a_preset():
+    manual = update_thermostat(
+        Thermostat(),
+        0.3,
+        manual_heating_limit=20,
+        manual_cooling_limit=25,
+        manual_band="comfort",
+    )
+    assert manual.manual and manual.heating_limit is None
+    assert Thermostat.from_dict(manual.as_dict()) == manual
+    ended = update_thermostat(manual, 0.3, preset="eco")
+    assert not ended.manual and ended.manual_heating_limit is None
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {
+            "manual_heating_limit": 22,
+            "manual_cooling_limit": 22.4,
+            "manual_band": "eco",
+        },
+        {
+            "manual_heating_limit": 20,
+            "manual_cooling_limit": None,
+            "manual_band": "eco",
+        },
+        {"manual_heating_limit": 20, "manual_cooling_limit": 25, "manual_band": "x"},
+    ],
+)
+def test_invalid_manual_target(changes):
+    with pytest.raises(ValueError, match="invalid_limits"):
+        update_thermostat(Thermostat(), 0.3, **changes)
+
+
+def test_restore_drops_an_incomplete_manual_target():
+    stored = {"manual_heating_limit": 20, "manual_cooling_limit": 25}
+    assert not Thermostat.from_dict(stored).manual  # No band: not restored.

@@ -111,7 +111,7 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
     band_id = entity(hass, "sensor", f"{zone.entry_id}_active_band")
     assert hass.states.get(band_id).state == "comfort"
 
-    # The room's own band replaces the configured comfort limits.
+    # Targets set on the thermostat are a one-off manual deviation.
     await hass.services.async_call(
         "climate",
         "set_temperature",
@@ -121,12 +121,28 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
     await hass.async_block_till_done()
     runtime = central.runtime_data
     assert runtime.zone_demands["west"].demand == "neutral"  # 21 °C in 20-25.
-    assert float(hass.states.get(low_id).state) == 20
-    assert hass.states.get(climate_id).attributes["comfort_source"] == "thermostat"
+    thermostat = hass.states.get(climate_id)
+    assert thermostat.attributes["preset_mode"] == "none"
+    assert thermostat.attributes["manual"] is True
+    assert float(hass.states.get(low_id).state) == 22  # Configuration unchanged.
+    assert runtime.thermostat("west").heating_limit is None
+    # Choosing a preset ends it.
+    await hass.services.async_call(
+        "climate",
+        "set_preset_mode",
+        {"entity_id": climate_id, "preset_mode": "comfort"},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    thermostat = hass.states.get(climate_id)
+    assert thermostat.attributes["preset_mode"] == "comfort"
+    assert thermostat.attributes["target_temp_low"] == 22
+    # The room's comfort configuration is set on its device.
     await hass.services.async_call(
         "number", "set_value", {"entity_id": low_id, "value": 21.5}, blocking=True
     )
     assert runtime.thermostat("west").heating_limit == 21.5
+    assert hass.states.get(climate_id).attributes["comfort_source"] == "thermostat"
     with pytest.raises(ServiceValidationError):
         await hass.services.async_call(
             "number", "set_value", {"entity_id": low_id, "value": 24.8}, blocking=True
@@ -147,7 +163,7 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
     assert thermostat.attributes["preset_mode"] == "eco"
     assert thermostat.attributes["target_temp_low"] == 19
     assert thermostat.attributes["comfort_heating_limit"] == 21.5
-    # Changing the targets now changes this room's eco band, not comfort.
+    # A manual target in eco changes no configuration either.
     await hass.services.async_call(
         "climate",
         "set_temperature",
@@ -155,9 +171,10 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
         blocking=True,
     )
     await hass.async_block_till_done()
-    assert runtime.thermostat("west").eco_heating_limit == 18
-    assert runtime.thermostat("west").heating_limit == 21.5
+    assert runtime.thermostat("west").eco_heating_limit is None
+    assert runtime.thermostat("west").manual_band == "eco"
     assert hass.states.get(climate_id).attributes["target_temp_high"] == 27
+    assert runtime.zone_snapshots["west"].heating_limit.value == 18
 
     # Off: the room asks for nothing (and does not steer the outdoor unit).
     await hass.services.async_call(
@@ -313,8 +330,9 @@ async def test_standard_heat_and_cool_modes(hass, freezer):
     thermostat = hass.states.get(climate_id)
     assert thermostat.state == "heat"
     assert thermostat.attributes["temperature"] == 21.5  # Single target.
-    assert runtime.thermostat("west").heating_limit == 21.5
-    assert runtime.thermostat("west").cooling_limit == 24  # Unchanged.
+    assert runtime.thermostat("west").manual_heating_limit == 21.5  # One-off.
+    assert runtime.thermostat("west").manual_cooling_limit == 24  # Unchanged.
+    assert runtime.thermostat("west").heating_limit is None  # Not configuration.
     # A heat-only room never asks for cooling, so it never pulls the group.
     hass.states.async_set("sensor.west_temperature", "26", CELSIUS)
     await hass.async_block_till_done()
@@ -384,3 +402,26 @@ async def test_thermostat_offers_the_units_options(hass, freezer):
     # Someone changes the fan at the room controller: not fought.
     await unit(hass, "fan_only", **(KNX | {"fan_mode": "25%"}))
     assert calls(mocks) == []
+
+
+async def test_manual_target_is_temporary(hass, freezer):
+    """A manual target ends after the manual override time (30 min)."""
+    central, zone = await office(hass, freezer)
+    climate_id = entity(hass, "climate", f"{zone.entry_id}_thermostat")
+    await hass.services.async_call(
+        "climate",
+        "set_temperature",
+        {"entity_id": climate_id, "target_temp_low": 20, "target_temp_high": 25},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+    thermostat = hass.states.get(climate_id)
+    assert thermostat.attributes["preset_mode"] == "none"
+    assert thermostat.attributes["manual_until"]
+    await later(hass, freezer, minutes=29)
+    assert hass.states.get(climate_id).attributes["preset_mode"] == "none"
+    await later(hass, freezer, minutes=2)
+    thermostat = hass.states.get(climate_id)
+    assert thermostat.attributes["preset_mode"] == "comfort"
+    assert thermostat.attributes["target_temp_low"] == 22
+    assert central.runtime_data.zone_demands["west"].demand == "heating_demand"
