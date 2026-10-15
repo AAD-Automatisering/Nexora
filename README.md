@@ -78,6 +78,21 @@ niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
 
+### Bijwerken naar 0.13.5 — ventilator standaard automatisch
+
+Heeft een thermostaat geen ventilatorstand gekozen, dan regelt Zonentra de
+ventilator nu automatisch (met **Ruimteregeling** aan); de thermostaat toont dan
+**Auto**. Een vaste stand die je op de thermostaat kiest, geldt net als een
+handmatige temperatuur voor de duur van de handmatige bediening (standaard 30
+minuten, attribuut `fan_until`); daarna is de ventilator weer automatisch. Een
+stand die iemand op de roomcontroller kiest, wordt niet teruggezet; bij de volgende
+automatische stand neemt Zonentra het weer over.
+
+Wil je dat medewerkers in een ruimte zelf de ventilator kiezen, zet dan op het
+ruimteapparaat de schakelaar **Automatische ventilator** uit (standaard aan, alleen bij
+ruimtes met binnenunits). Zonentra laat de ventilator daar dan helemaal met rust en
+de thermostaat toont geen ventilator meer (in HomeKit: accessoire resetten).
+
 ### Bijwerken naar 0.13.4 — airco's blijven aan bij het wijzigen van instellingen
 
 Een wijziging in de centrale configuratie (of een ruimte toevoegen) herlaadt

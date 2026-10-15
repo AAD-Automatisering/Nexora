@@ -248,6 +248,7 @@ async def test_only_configured_entities(hass):
         ("sensor", "regulated_setpoint"),
         ("sensor", "auto_fan"),
         ("switch", "room_regulation"),
+        ("switch", "fan_control"),
     ):
         assert entity(hass, platform, f"{zone.entry_id}_{key}") is None, key
     assert entity(hass, "sensor", f"{zone.entry_id}_safety") is not None
@@ -302,3 +303,25 @@ async def test_zone_limits_only_without_central_limits(hass):
     runtime = central.runtime_data
     assert float(hass.states.get(entity(hass, "number", low)).state) == 22
     assert runtime.thermostat("west").heating_limit == 22
+
+
+async def test_fan_left_alone_with_the_fan_switch_off(hass, freezer):
+    """0.13.5: "Automatic fan" off: no fan commands, no fan on the thermostat."""
+    mocks = await mock_climate(hass)
+    central, zone = await office(hass, freezer, mocks)
+    runtime = central.runtime_data
+    climate_id = entity(hass, "climate", f"{zone.entry_id}_thermostat")
+    assert hass.states.get(climate_id).attributes["fan_mode"] == "auto"
+    await hass.services.async_call(
+        "switch",
+        "turn_off",
+        {"entity_id": entity(hass, "switch", f"{zone.entry_id}_fan_control")},
+        blocking=True,
+    )
+    runtime.set_thermostat("west", regulation=True)
+    await later(hass, freezer, minutes=4)
+    await unit(hass, "heat", **KNX)
+    await later(hass, freezer, minutes=6)
+    assert not [call for call in calls(mocks) if call[0] == "set_fan_mode"]
+    assert "fan_modes" not in hass.states.get(climate_id).attributes
+    assert state(hass, zone, "auto_fan").attributes["in_use"] is False

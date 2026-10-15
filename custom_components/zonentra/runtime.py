@@ -286,6 +286,14 @@ class BuildingRuntime:
                 self._save_thermostats()
             elif thermostat.manual:
                 manual_checks.append(until)
+            if thermostat.fan_until:
+                fan_until = dt_util.parse_datetime(thermostat.fan_until)
+                if fan_until is None or now >= fan_until:
+                    thermostat = replace(thermostat, fan_mode=None, fan_until=None)
+                    self.thermostats[zone.id] = thermostat
+                    self._save_thermostats()
+                else:
+                    manual_checks.append(fan_until)
             band = (thermostat.heating_limit, thermostat.cooling_limit)
             # "Use central climate limits" (0.13.3): the room's own limits on
             # its device only count when that is off.
@@ -648,6 +656,16 @@ class BuildingRuntime:
         zone = next((z for z in self.building.zones if z.id == zone_id), None)
         if zone is None or not self.active_capable:
             raise ValueError("zone_not_loaded")
+        if "fan_mode" in changes:
+            # 0.13.5: auto (or none) is the automatic fan; a fixed speed holds
+            # for the manual override time, then the fan is automatic again.
+            if changes["fan_mode"] in (None, AUTO_FAN):
+                changes["fan_mode"], changes["fan_until"] = None, None
+            else:
+                minutes = self.building.settings.manual_override_duration_minutes
+                changes["fan_until"] = (
+                    dt_util.utcnow() + timedelta(minutes=minutes)
+                ).isoformat()
         if changes.get("manual_band") is not None:
             # A manual target is temporary: as long as a manual override.
             minutes = self.building.settings.manual_override_duration_minutes
@@ -1057,9 +1075,15 @@ class BuildingRuntime:
             )
         self.auto_fans = previews
 
+    def fan_choice(self, zone_id: str) -> str:
+        """The thermostat's fan mode; none chosen is automatic (0.13.5)."""
+        return self.thermostat(zone_id).fan_mode or AUTO_FAN
+
     def zone_auto_fan(self, zone_id: str) -> bool:
         """The thermostat runs Zonentra's automatic fan (units have no auto)."""
-        return self.thermostat(zone_id).fan_mode == AUTO_FAN and (
+        if not self.thermostat(zone_id).fan_control:
+            return False
+        return self.fan_choice(zone_id) == AUTO_FAN and (
             AUTO_FAN not in self.unit_options(zone_id)[1]
         )
 
@@ -1069,13 +1093,14 @@ class BuildingRuntime:
         With the automatic fan the speed follows the distance to the target,
         changed at most once per setpoint interval.
         """
-        if thermostat.fan_mode is None:
-            self.fan_applied.pop(item.id, None)
-            return None
         state = self.hass.states.get(item.entity_id)
         supported = tuple((state.attributes.get("fan_modes") or ()) if state else ())
+        if not supported or not thermostat.fan_control:
+            # No speeds, or the fan is left to the room (switch off, 0.13.5).
+            self.fan_applied.pop(item.id, None)
+            return None
         # The thermostat's standard name (0.13.2) -> the unit's own speed.
-        desired = unit_fan(thermostat.fan_mode, supported)
+        desired = unit_fan(self.fan_choice(item.zone_id), supported)
         if self.zone_auto_fan(item.zone_id):
             snapshot = self.zone_snapshots[item.zone_id]
             zone = next(z for z in self.building.zones if z.id == item.zone_id)

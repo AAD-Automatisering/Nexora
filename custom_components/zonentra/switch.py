@@ -28,6 +28,8 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
         entities = []
         if entry.options.get("indoor_units"):  # Nothing to regulate otherwise.
             entities.append(RoomRegulationSwitch(entry, **context))
+        if entry.options.get("indoor_units"):
+            entities.append(FanControlSwitch(entry, **context))
         if entry.options.get("contact_entities"):
             entities.append(WindowBypassSwitch(entry, **context))
         if entry.options.get("shading_entities"):
@@ -96,6 +98,30 @@ class RoomRegulationSwitch(ZoneEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         self._change(regulation=False)
+
+
+class FanControlSwitch(ZoneEntity, SwitchEntity):
+    """Zonentra sets the fan speed of this room's units (0.13.5, default on):
+    automatically, or a fixed speed chosen on the thermostat for a while. Off:
+    the fan is left to the room controller and the units."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:fan-auto"
+    _attr_translation_key = "fan_control"
+
+    def __init__(self, entry, provider, signal, device) -> None:
+        super().__init__(entry, provider, signal, device)
+        self._attr_unique_id = f"{entry.entry_id}_fan_control"
+
+    @property
+    def is_on(self) -> bool:
+        return self.thermostat.fan_control
+
+    async def async_turn_on(self, **kwargs) -> None:
+        self._change(fan_control=True)
+
+    async def async_turn_off(self, **kwargs) -> None:
+        self._change(fan_control=False)
 
 
 class WindowBypassSwitch(ZoneEntity, SwitchEntity):

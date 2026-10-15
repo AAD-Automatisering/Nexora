@@ -496,6 +496,19 @@ def test_single_target_sets_one_limit(mode, value, band, expected):
 # --- Unit options: dry, fan_only and fan speed --------------------------------
 
 
+def test_fan_until_is_restored():
+    thermostat = Thermostat(fan_mode="high", fan_until="2026-10-15T10:00:00+00:00")
+    restored = Thermostat.from_dict(thermostat.as_dict())
+    assert (restored.fan_mode, restored.fan_until) == (
+        "high",
+        "2026-10-15T10:00:00+00:00",
+    )
+    assert Thermostat.from_dict({"fan_until": 5}).fan_until is None
+    # 0.13.5: the automatic fan switch is on unless stored off.
+    assert Thermostat.from_dict({}).fan_control is True
+    assert Thermostat.from_dict({"fan_control": False}).fan_control is False
+
+
 def test_fan_mode_is_stored_and_validated():
     thermostat = update_thermostat(Thermostat(), 0.3, fan_mode="75%")
     assert Thermostat.from_dict(thermostat.as_dict()).fan_mode == "75%"

@@ -62,7 +62,8 @@ class Thermostat:
     heating_limit: float | None = None
     cooling_limit: float | None = None
     regulation: bool = False
-    fan_mode: str | None = None  # None: leave the units' fan speed alone
+    # None: the automatic fan (0.13.5; before: leave the units' fan alone).
+    fan_mode: str | None = None
     window_bypass: bool = False  # 0.10: an open window is ignored
     screen_regulation: bool = False  # 0.11: Zonentra really moves the screens
     # 0.10: the room's own eco / away limits (None: the central value).
@@ -75,6 +76,10 @@ class Thermostat:
     manual_cooling_limit: float | None = None
     manual_band: str | None = None  # the band they were set in
     manual_until: str | None = None  # ISO time; set by the runtime
+    # 0.13.5: a fixed fan speed chosen on the thermostat is temporary too.
+    fan_until: str | None = None  # ISO time; set by the runtime
+    # 0.13.5: off = Zonentra leaves the units' fan alone in this room.
+    fan_control: bool = True
 
     @classmethod
     def from_dict(cls, data: Any) -> "Thermostat":
@@ -115,6 +120,10 @@ class Thermostat:
             data.get("screen_regulation") is True,
             *(number(key) for key in BAND_KEYS),
             **manual,
+            fan_until=data.get("fan_until")
+            if isinstance(data.get("fan_until"), str)
+            else None,
+            fan_control=data.get("fan_control") is not False,
         )
 
     def as_dict(self) -> dict:
@@ -154,7 +163,7 @@ def update_thermostat(
         raise ValueError("invalid_hvac_mode")
     if "preset" in changes and changes["preset"] not in PRESETS:
         raise ValueError("invalid_preset")
-    for key in ("regulation", "window_bypass", "screen_regulation"):
+    for key in ("regulation", "window_bypass", "screen_regulation", "fan_control"):
         if key in changes and not isinstance(changes[key], bool):
             raise ValueError("invalid_parameters")
     for key in BAND_KEYS:

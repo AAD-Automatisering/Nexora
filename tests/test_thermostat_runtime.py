@@ -385,7 +385,8 @@ async def test_thermostat_offers_the_units_options(hass, freezer):
         "medium",
         "high",
     ]
-    assert thermostat.attributes["fan_mode"] == "middle"  # The unit's 50 %.
+    # 0.13.5: no fan mode chosen is Zonentra's automatic fan.
+    assert thermostat.attributes["fan_mode"] == "auto"
     assert runtime.thermostat("west").hvac_mode == "heat_cool"  # Stored as such.
 
     # Fan only with room regulation: after restart protection the unit runs
@@ -410,6 +411,11 @@ async def test_thermostat_offers_the_units_options(hass, freezer):
     # Someone changes the fan at the room controller: not fought.
     await unit(hass, "fan_only", **(KNX | {"fan_mode": "25%"}))
     assert calls(mocks) == []
+    # 0.13.5: the fixed speed is temporary, like a manual temperature.
+    assert runtime.thermostat("west").fan_until is not None
+    await later(hass, freezer, minutes=31)
+    assert runtime.thermostat("west").fan_mode is None  # Automatic again.
+    assert hass.states.get(climate_id).attributes["fan_mode"] == "auto"
 
 
 async def test_manual_target_is_temporary(hass, freezer):

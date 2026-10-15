@@ -469,6 +469,9 @@
       },
       "screen_regulation": {
         "name": "Zonweringregeling"
+      },
+      "fan_control": {
+        "name": "Automatische ventilator"
       }
     },
     "climate": {

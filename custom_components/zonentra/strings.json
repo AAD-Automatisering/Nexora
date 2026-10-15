@@ -469,6 +469,9 @@
       },
       "screen_regulation": {
         "name": "Screen regulation"
+      },
+      "fan_control": {
+        "name": "Automatic fan"
       }
     },
     "climate": {

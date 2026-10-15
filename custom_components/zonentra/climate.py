@@ -91,6 +91,11 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
 
     @property
     def fan_modes(self) -> list[str] | None:
+        if not self.thermostat.fan_control:
+            return None  # 0.13.5: the fan is left to the room controller.
+        return self._fan_modes()
+
+    def _fan_modes(self) -> list[str] | None:
         """``auto`` plus the units' speeds under Home Assistant's standard
         names (low, middle, medium, high), so HomeKit shows a fan with a speed
         slider. ``auto`` is the units' own or Zonentra's automatic fan."""
@@ -101,19 +106,10 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
     def fan_mode(self) -> str | None:
         if not self.fan_modes:
             return None
-        speeds = self._options()[1]
-        if self.thermostat.fan_mode is not None:
-            return thermostat_fan(self.thermostat.fan_mode, speeds)
-        runtime = self.runtime
-        fans = [
-            unit.fan_mode
-            for item in runtime.building.equipment
-            if item.zone_id == self._zone_id
-            and item.kind == "hvac"
-            and (unit := runtime.indoor_units.get(item.id))
-            and unit.fan_mode
-        ]
-        return thermostat_fan(fans[0], speeds) if fans else None
+        # 0.13.5: none chosen is the automatic fan.
+        return thermostat_fan(
+            self.runtime.fan_choice(self._zone_id), self._options()[1]
+        )
 
     @property
     def supported_features(self) -> ClimateEntityFeature:
@@ -198,6 +194,7 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
             "chosen_preset": thermostat.preset,
             "manual": thermostat.manual,
             "manual_until": thermostat.manual_until,
+            "fan_until": thermostat.fan_until,
             "comfort_heating_limit": runtime.comfort[self._zone_id][0].value,
             "comfort_cooling_limit": runtime.comfort[self._zone_id][1].value,
             "active_heating_limit": snapshot.heating_limit.value,
