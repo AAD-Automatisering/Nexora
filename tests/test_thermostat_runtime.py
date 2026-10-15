@@ -123,7 +123,7 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
     runtime = central.runtime_data
     assert runtime.zone_demands["west"].demand == "neutral"  # 21 °C in 20-25.
     thermostat = hass.states.get(climate_id)
-    assert thermostat.attributes["preset_mode"] == "none"
+    assert thermostat.attributes["preset_mode"] == "comfort"
     assert thermostat.attributes["manual"] is True
     assert float(hass.states.get(low_id).state) == 22  # Configuration unchanged.
     assert runtime.thermostat("west").heating_limit == 22  # Central, copied once.
@@ -430,12 +430,16 @@ async def test_manual_target_is_temporary(hass, freezer):
     )
     await hass.async_block_till_done()
     thermostat = hass.states.get(climate_id)
-    assert thermostat.attributes["preset_mode"] == "none"
+    assert thermostat.attributes["preset_mode"] == "comfort"
+    assert thermostat.attributes["preset_modes"] == ["comfort", "eco", "away"]
+    assert thermostat.attributes["manual"] is True
     assert thermostat.attributes["manual_until"]
     await later(hass, freezer, minutes=29)
-    assert hass.states.get(climate_id).attributes["preset_mode"] == "none"
+    assert hass.states.get(climate_id).attributes["manual"] is True
+    assert hass.states.get(climate_id).attributes["target_temp_low"] == 20
     await later(hass, freezer, minutes=2)
     thermostat = hass.states.get(climate_id)
+    assert thermostat.attributes["manual"] is False
     assert thermostat.attributes["preset_mode"] == "comfort"
     assert thermostat.attributes["target_temp_low"] == 22
     assert central.runtime_data.zone_demands["west"].demand == "heating_demand"

@@ -40,10 +40,6 @@ IGNORED_DEMAND = {
     "cool": ("heating_demand", "thermostat_cool_only"),
 }
 PRESETS = ("comfort", "eco", "away")
-# A temporary manual deviation from the thermostat (HA's preset "none"). Like
-# a manual override at the room controller it ends after the override
-# duration, and earlier when a preset is chosen or the band changes.
-MANUAL_PRESET = "none"
 BAND_KEYS = (
     "eco_heating_limit",
     "eco_cooling_limit",

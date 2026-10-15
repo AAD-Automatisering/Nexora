@@ -30,7 +30,7 @@ from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
 from .entity import ZoneEntity, zone_context
 from .roomstate import AUTO_FAN, fan_names, thermostat_fan
-from .thermostat import MANUAL_PRESET, PRESETS, UNIT_MODES, single_target
+from .thermostat import PRESETS, UNIT_MODES, single_target
 
 BASE_FEATURES = (
     ClimateEntityFeature.TARGET_TEMPERATURE
@@ -50,7 +50,7 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
     _attr_translation_key = "thermostat"
     _attr_icon = "mdi:home-thermometer"
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_preset_modes = [*PRESETS, MANUAL_PRESET]
+    _attr_preset_modes = list(PRESETS)
     _attr_min_temp = 5
     _attr_max_temp = 35
     _attr_target_temperature_step = 0.5
@@ -119,11 +119,7 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
 
     @property
     def preset_mode(self) -> str:
-        """The band that applies now: away when the building is absent, eco
-        without motion, else the chosen preset. The choice itself is kept.
-        "none" while a one-off manual target applies."""
-        if self.thermostat.manual:
-            return MANUAL_PRESET
+        """The active band, also while a temporary manual target applies."""
         return self.runtime.zone_bands[self._zone_id][0]
 
     def _band(self) -> str:
@@ -252,8 +248,6 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
         self._change(fan_mode=fan_mode)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
-        if preset_mode == MANUAL_PRESET:
-            return  # Shown while a manual target applies; set a temperature.
         self._change(preset=preset_mode)
 
     async def async_turn_on(self) -> None:

@@ -447,7 +447,7 @@ preset `comfort` volgt de bezetting uit 0.8 (zonder beweging eco); `eco` en
 `away` zijn vaste presets. De thermostaat toont de band die nu geldt als preset en
 diens grenzen als doeltemperaturen; de gekozen preset staat in `chosen_preset`. Een
 doeltemperatuur op de thermostaat is een eenmalige handmatige afwijking
-(`manual_*`, preset `none`): die vervangt de grenzen van de band waarin hij is gezet,
+(`manual_*`, de actieve preset blijft zichtbaar): die vervangt de grenzen van de band waarin hij is gezet,
 tot `manual_override_duration_minutes` is verstreken (`manual_until`, zoals een
 Manual Override), een preset wordt gekozen of de band wisselt; de configuratie
 verandert niet. De

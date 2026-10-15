@@ -481,8 +481,7 @@
             "state": {
               "comfort": "Comfort",
               "eco": "Eco",
-              "away": "Afwezig",
-              "none": "Handmatig"
+              "away": "Afwezig"
             }
           },
           "fan_mode": {

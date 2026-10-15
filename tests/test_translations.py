@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from custom_components.zonentra.thermostat import MANUAL_PRESET, PRESETS
+from custom_components.zonentra.thermostat import PRESETS
 
 ROOT = Path(__file__).parents[1] / "custom_components" / "zonentra"
 FILES = {
@@ -229,7 +229,7 @@ def test_control_entities_have_a_name(language, platform, key):
 
 
 @pytest.mark.parametrize("language", list(FILES))
-@pytest.mark.parametrize("preset", [*PRESETS, MANUAL_PRESET])
+@pytest.mark.parametrize("preset", PRESETS)
 def test_thermostat_presets_are_translated(language, preset):
     path = ("entity", "climate", "thermostat", "state_attributes", "preset_mode")
     assert label(language, *path, "state", preset)
