@@ -155,6 +155,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
         store, cache = await _thermostat_state(hass, entry)
         runtime.thermostat_store, runtime.thermostat_cache = store, cache
         runtime.load_thermostats({"zones": cache})
+        # A reload (options, zones) continues where the old runtime was.
+        previous = hass.data.setdefault(DOMAIN, {}).setdefault("runtimes", {})
+        if old := previous.pop(entry.entry_id, None):
+            runtime.adopt(old)
     tracked_entity_ids = building.entity_ids
     if tracked_entity_ids:
         entry.async_on_unload(
@@ -255,7 +259,13 @@ async def _async_zone_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> bool:
     """Unload diagnostic entities; HA removes entry callbacks on success."""
-    return await hass.config_entries.async_unload_platforms(entry, platforms(entry))
+    unloaded = await hass.config_entries.async_unload_platforms(entry, platforms(entry))
+    if unloaded and entry_type(entry) == CENTRAL:
+        # Kept for a reload in this session (0.13.4); a restart starts fresh.
+        hass.data.setdefault(DOMAIN, {}).setdefault("runtimes", {})[entry.entry_id] = (
+            entry.runtime_data
+        )
+    return unloaded
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
@@ -268,6 +278,7 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     elif kind == CENTRAL:
         data = hass.data.get(DOMAIN, {})
         data.get("thermostats", {}).pop(entry.entry_id, None)
+        data.get("runtimes", {}).pop(entry.entry_id, None)
         if store := data.get("thermostat_stores", {}).pop(entry.entry_id, None):
             await store.async_remove()
     elif kind == "legacy":

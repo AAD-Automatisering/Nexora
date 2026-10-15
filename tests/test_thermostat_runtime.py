@@ -433,3 +433,27 @@ async def test_manual_target_is_temporary(hass, freezer):
     assert thermostat.attributes["preset_mode"] == "comfort"
     assert thermostat.attributes["target_temp_low"] == 22
     assert central.runtime_data.zone_demands["west"].demand == "heating_demand"
+
+
+async def test_reload_keeps_memory_and_running_units(hass, freezer):
+    """0.13.4: changing the central configuration reloads it; the new runtime
+    continues with the old memory (manual overrides, hysteresis, commands)."""
+    mocks = await mock_climate(hass)
+    central, zone = await office(hass, freezer, mocks)
+    runtime = central.runtime_data
+    runtime.set_thermostat("west", regulation=True)
+    await later(hass, freezer, minutes=4)
+    await unit(hass, "heat")  # Ours.
+    clear(mocks)
+    # A person switches the unit off: respected for the override time.
+    await unit(hass, "off")
+    assert runtime.overrides[EQUIPMENT].mode_at_start == "off"
+
+    assert await hass.config_entries.async_reload(central.entry_id)
+    await hass.async_block_till_done()
+    reloaded = central.runtime_data
+    assert reloaded is not runtime
+    assert EQUIPMENT in reloaded.overrides  # Still respected.
+    assert reloaded.command_log  # The command history continues too.
+    await later(hass, freezer, minutes=1)
+    assert ("set_hvac_mode", "heat") not in calls(mocks)

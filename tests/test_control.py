@@ -27,7 +27,7 @@ from custom_components.zonentra.override import (
 NOW = datetime(2026, 10, 12, 14, tzinfo=UTC)
 LONG_AGO = NOW - timedelta(hours=2)
 ROOMS = ("west", "meeting", "director")
-TEMPERATURE = {"heat": "21", "neutral": "23", "cool": "25"}
+TEMPERATURE = {"heat": "21", "neutral": "23", "cool": "25", "slight_heat": "21.6"}
 
 
 def building(**settings):
@@ -173,6 +173,26 @@ def test_no_demand_means_off():
     assert coordinations["outdoor_1"].group_mode == "neutral"
     assert intents["west"].action == "hold" and intents["west"].desired_mode == "off"
     assert intents["meeting"].action == intents["director"].action == "turn_off"
+
+
+def test_running_unit_stays_on_while_its_room_still_asks():
+    """0.13.4: 0.4 °C below the limit is too little for the group to choose a
+    mode, but a running unit of that room is not switched off."""
+    demand = {"west": "slight_heat", "meeting": "neutral", "director": "neutral"}
+    coordinations, intents, _ = simulate(
+        demand, {"west": "heat", "meeting": "off", "director": "off"}
+    )
+    assert coordinations["outdoor_1"].group_mode == "neutral"
+    assert (intents["west"].action, intents["west"].reason) == (
+        "hold",
+        "room_still_asks",
+    )
+    # A unit that is off is not started for so little demand.
+    _, intents, _ = simulate(
+        demand, {"west": "off", "meeting": "off", "director": "off"}
+    )
+    assert intents["west"].action == "hold"
+    assert intents["west"].desired_mode == "off"
 
 
 def test_wrong_mode_is_corrected_to_group_mode():

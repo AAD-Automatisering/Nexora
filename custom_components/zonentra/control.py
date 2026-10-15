@@ -399,6 +399,11 @@ def unit_intent(
         if mode == "off":
             return intend_on(target, "zone_demand")
         return correct(target, "mode_differs_from_group_mode")
+    if target is None and wanted is not None and mode == wanted:
+        # 0.13.4: the group's total demand is too small to choose a mode, but
+        # this room still asks (within its hysteresis): keep its running unit
+        # on instead of switching it off and on again.
+        return result(mode, "hold", "room_still_asks")
     reason = (
         "override_expired"
         if override_event == "override_expired"

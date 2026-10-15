@@ -77,6 +77,10 @@ class CommandTracker:
             key: item for key, item in self._pending.items() if now <= item.deadline
         }
 
+    def cancel(self, entity_id: str) -> None:
+        """Forget a pending command (someone else took over the device)."""
+        self._pending.pop(entity_id, None)
+
     def confirm(self, entity_id: str, new_state: str | None, now: datetime) -> bool:
         """Consume a matching pending command; True means Zonentra caused it."""
         self.expire(now)

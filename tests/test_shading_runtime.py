@@ -91,3 +91,27 @@ async def test_night_and_heating_open_the_screen(hass, freezer):
         "night",
         100,
     )
+
+
+async def test_person_taking_over_right_after_our_move(hass, freezer):
+    """0.13.4: a person closing the screen at the room controller right after
+    Zonentra opened it (command not yet confirmed) is respected too."""
+    moves = async_mock_service(hass, "cover", "set_cover_position")
+    central, zone = await office(hass)
+    runtime = central.runtime_data
+    hass.states.async_set(SCREEN, "closed", {"current_position": 0})
+    hass.states.async_set("sensor.west_temperature", "22.5", CELSIUS)  # Cool half.
+    await later(hass, freezer, minutes=6)
+    runtime.set_thermostat("west", screen_regulation=True)
+    await hass.async_block_till_done()
+    assert [call.data["position"] for call in moves] == [100]  # Up: room cool.
+    # Within the confirmation time the room controller sends it down again.
+    hass.states.async_set(SCREEN, "opening", {"current_position": 0})
+    hass.states.async_set(SCREEN, "closing", {"current_position": 20})
+    hass.states.async_set(SCREEN, "closed", {"current_position": 0})
+    await hass.async_block_till_done()
+    assert runtime.last_transitions[EQUIPMENT][0] == "manual_screen"
+    assert EQUIPMENT in runtime.screen_overrides
+    await later(hass, freezer, minutes=60)
+    assert len(moves) == 1  # Not opened again during the manual time.
+    assert runtime.screen_moves[EQUIPMENT].status == "manual_override"

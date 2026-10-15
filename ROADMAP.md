@@ -136,6 +136,7 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] 0.13.1: graden per ventilatorstand van de automatische ventilator instelbaar.
 - [x] 0.13.2: ventilatorstanden onder de standaardnamen van Home Assistant, zodat HomeKit een ventilator toont.
 - [x] 0.13.3: alleen entiteiten voor wat is ingesteld: Raam/Raambypass met raamcontacten, Aanwezigheid met aanwezigheid of beweging, Ruimteregeling/Geregeld setpoint/ventilator met binnenunits, eigen grenzen alleen zonder centrale klimaatgrenzen.
+- [x] 0.13.4: herladen van de centrale configuratie behoudt het geheugen (overrides, hysterese, commando's); een draaiende unit blijft aan zolang zijn ruimte nog vraagt, ook als de groep neutraal is; handmatige zonwering vlak na een Zonentra-beweging wordt herkend.
 - [ ] Ruimte-instellingen op dezelfde manier uitsplitsen.
 
 ### Versie 0.14.0 — warmtebron kiezen (gepland)

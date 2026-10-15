@@ -78,6 +78,18 @@ niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
 
+### Bijwerken naar 0.13.4 — airco's blijven aan bij het wijzigen van instellingen
+
+Een wijziging in de centrale configuratie (of een ruimte toevoegen) herlaadt
+Zonentra. Tot 0.13.3 begon het daarna zonder geheugen: handmatige bediening,
+hysterese en lopende commando's waren vergeten, waardoor geregelde ruimtes hun
+airco konden uitzetten. Nu neemt de nieuwe regeling het geheugen over (binnen
+dezelfde Home Assistant-sessie). Daarnaast blijft een draaiende airco aan zolang zijn
+ruimte nog om warmte of koeling vraagt, ook als de totale vraag van de buitenunit te
+klein is om een stand te kiezen. En zet een medewerker de zonwering vlak nadat
+Zonentra hem bewoog weer anders (binnen de bevestigingstijd van 4 minuten), dan geldt
+dat nu ook als handmatige bediening.
+
 ### Bijwerken naar 0.13.0 — centrale configuratie per onderwerp
 
 Werk bij via HACS, herstart Home Assistant en herlaad de browser volledig.

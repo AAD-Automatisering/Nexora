@@ -558,6 +558,49 @@ class BuildingRuntime:
     def forecast_interval(self) -> timedelta:
         return timedelta(minutes=REFRESH_MINUTES)
 
+    # Memory that must survive a reload of the central configuration (0.13.4):
+    # without it a reload forgot hysteresis, manual overrides, anti-cycling
+    # and pending commands, and running units could be switched off.
+    CARRIED = (
+        "zone_demands",
+        "coordination_memories",
+        "overrides",
+        "last_transitions",
+        "command_tracker",
+        "setpoint_tracker",
+        "cover_tracker",
+        "pending_offs",
+        "setpoint_sent",
+        "mode_applied",
+        "fan_applied",
+        "fan_sent_at",
+        "vane_applied",
+        "motion_memories",
+        "trends",
+        "sun_memory",
+        "sunny",
+        "screen_overrides",
+        "screen_last_move",
+        "screen_decisions",
+        "forecast",
+        "forecast_error",
+        "command_log",
+        "preset_memories",
+        "mode_active",
+    )
+
+    def adopt(self, previous: "BuildingRuntime") -> None:
+        """Take over the in-memory state of the runtime this one replaces."""
+        for name in self.CARRIED:
+            setattr(self, name, getattr(previous, name))
+        self.memories.update(
+            {
+                group_id: memory
+                for group_id, memory in previous.memories.items()
+                if group_id in self.memories
+            }
+        )
+
     @callback
     def apply_building(self, building: Building) -> None:
         """New limits set on the central device: same inputs, no reload."""
@@ -857,8 +900,17 @@ class BuildingRuntime:
                 if position is not None and abs(position - expected) < MIN_STEP:
                     self.cover_tracker.confirm(entity_id, pending.expected_state, now)
                     self.last_transitions[item.id] = ("zonentra_screen", now)
-                return
-            if old is None or (
+                    return
+                if position is None or (
+                    old is not None
+                    and _cover_position(old) == position
+                    and old.state == new.state
+                ):
+                    return
+                # 0.13.4: it came to rest away from our position (stopped or
+                # sent elsewhere): a person took over, room controller or HA.
+                self.cover_tracker.cancel(entity_id)
+            elif old is None or (
                 _cover_position(old) == position and old.state == new.state
             ):
                 return

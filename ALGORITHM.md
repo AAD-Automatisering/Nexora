@@ -1,4 +1,4 @@
-# Zonentra 0.13.3 — uitlegbare klimaatintelligentie
+# Zonentra 0.13.4 — uitlegbare klimaatintelligentie
 
 Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
 commando en verandert ook niet de intern bijgehouden actuele modus. De actieve
@@ -311,7 +311,10 @@ Volgorde (de eerste regel die geldt beslist):
 5. Zonevraag unknown (sensorfout) → `blocked` (`zone_demand_unknown`).
 6. Zonevraag gelijk aan groepsmodus → `turn_on_heat` / `turn_on_cool`, `hold`
    (`following_group_mode`) of `correct_mode`.
-7. Anders gewenst `off`: `no_zone_demand`, `group_mode_neutral`,
+7. Groep neutraal (te weinig totale vraag) maar de ruimte vraagt nog en haar unit
+   draait al in die modus → `hold` (`room_still_asks`, 0.13.4); een unit die uit
+   staat start dan niet.
+8. Anders gewenst `off`: `no_zone_demand`, `group_mode_neutral`,
    `zone_demand_conflicts_group_mode` of `override_expired` → `turn_off` of `hold`.
 
 Compatibele modi: bij heat → heat, fan_only; bij cool → cool, dry, fan_only.
