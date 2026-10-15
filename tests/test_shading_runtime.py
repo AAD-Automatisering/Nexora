@@ -99,8 +99,11 @@ async def test_person_taking_over_right_after_our_move(hass, freezer):
     moves = async_mock_service(hass, "cover", "set_cover_position")
     central, zone = await office(hass)
     runtime = central.runtime_data
-    hass.states.async_set(SCREEN, "closed", {"current_position": 0})
-    hass.states.async_set("sensor.west_temperature", "22.5", CELSIUS)  # Cool half.
+    # Closed by an automation (no manual override), the room in its cool half.
+    hass.states.async_set(
+        SCREEN, "closed", {"current_position": 0}, context=Context(parent_id="a")
+    )
+    hass.states.async_set("sensor.west_temperature", "22.5", CELSIUS)
     await later(hass, freezer, minutes=6)
     runtime.set_thermostat("west", screen_regulation=True)
     await hass.async_block_till_done()

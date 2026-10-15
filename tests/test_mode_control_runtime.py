@@ -64,7 +64,13 @@ async def test_preset_pulse_without_override_and_restart_memory(hass):
     runtime = central.runtime_data
     assert hass.states.get(switch_id(hass, central)).state == "on"  # Active by default.
     assert calls(set_mode) == [(UNIT, "heat")]
-    assert runtime.mode_controls["outdoor_1"].status == "group_mode_applied"
+    # 0.13.4: the reload after adding the zone keeps the switch state, so the
+    # pulse is sent at once; later refreshes then report the stand in sync.
+    assert runtime.mode_controls["outdoor_1"].status in (
+        "group_mode_applied",
+        "in_sync",
+    )
+    assert runtime.preset_memories["outdoor_1"].mode == "heat"
     # The integration applies the mode: Zonentra recognises its own command.
     hass.states.async_set(UNIT, "heat", {"hvac_action": "heating"})
     await hass.async_block_till_done()
