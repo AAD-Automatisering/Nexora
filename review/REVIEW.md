@@ -10,6 +10,8 @@ Onderzocht: alle 25 Python-modules van de integratie, configuratie en migratie, 
 
 **Vervolg: punt 4 hersteld.** Het lokale parameterformulier vervangt nu de zichtbare velden in plaats van nieuwe waarden over oude koppelingen heen te leggen. Leegmaken verwijdert daardoor de lokale grensentiteiten uit de configuratie en uit de bronnen van de runtime. Verborgen lokale grensinstellingen en parameters blijven bewaard. Dezelfde afhandeling geldt bij aanmaken, aanpassen en opnieuw indienen na een validatiefout. Vier volledige flow-regressietests toegevoegd; de volledige suite slaagt met 1.074 tests.
 
+**Vervolg: punten 5, 6 en 7 hersteld.** Weersverwachtingen worden met de eenheid van de weerentiteit naar Celsius omgerekend; zonder expliciete eenheid geldt de HA-systeemeenheid. Ongeldige eenheden en niet-eindige waarden worden niet gebruikt voor het dagtype. De setpointplanner rekent in Celsius en zet native stapgroottes als temperatuurverschil om, met behoud van het native afrondingsraster. Uitgaande climate-services volgen de HA-systeemeenheid en worden in de native apparaateenheid afgerond en begrensd. De bevestiging van eigen commando’s houdt rekening met de precisie van HA-states. Alle bronvelden uit BuildingSettings worden nu systematisch geredigeerd; de ruimte-export gebruikt een lijst met geredigeerde equipment_id-velden in plaats van apparaat-ID’s als woordenboeksleutel. Er zijn 22 regressietests toegevoegd, waaronder tien routes via echte HA-climate-services voor gemengde eenheden en grenzen. De volledige suite slaagt met 1.096 tests. Alle zeven genummerde reviewbevindingen zijn hiermee hersteld; de oorspronkelijke bevindingen hieronder blijven als geschiedenis staan.
+
 **Bevestigde bevindingen, in volgorde van belang**
 
 1. **[P1] Een uitgeschakelde zone blijft fysieke apparatuur aansturen.**
@@ -103,7 +105,7 @@ Een extra probe bevestigt dat ook bij een cover-state `unavailable` een verplaat
 
 - Bestaande testset: **1.051 passed in 9,97 s**.
 - Ruff lint: geslaagd. Ruff format: alle 59 oorspronkelijke Python-bestanden correct geformatteerd.
-- [review_probes.py](/Users/pauldeelen/Documents/GitHub/Zonentra/tests/review_probes.py): negen gerichte probes. Na herstel van punten 1 tot en met 4 controleren de betreffende probes het juiste gedrag; de andere probes bevestigen drie resterende bevindingen, het cover-robuustheidspunt en één negatieve controle: lokale entiteitgrenzen werken bij nieuwe configuratie wel correct.
+- [review_probes.py](/Users/pauldeelen/Documents/GitHub/Zonentra/tests/review_probes.py): negen gerichte probes. Na herstel van alle zeven punten controleren de betreffende probes het juiste gedrag; daarnaast blijven het cover-robuustheidspunt en één negatieve controle aanwezig: lokale entiteitgrenzen werken bij nieuwe configuratie wel correct.
 - De probes toetsen bewust de waargenomen huidige werking, ook waar die fout is. Dat ze slagen betekent dat de reviewbevinding is gereproduceerd; dit zijn geen regressietests die goed gedrag afdwingen. Bij reparatie moeten de relevante verwachtingen worden omgedraaid.
 - Uitvoeren met een werkende projectomgeving: `python -m pytest -q tests/review_probes.py`. De bestaande suite blijft `python -m pytest -q`.
 - De oorspronkelijke `.venv/bin/python` verwijst naar een verdwenen `/private/tmp/nexora-python`-installatie. Voor deze review is Python 3.14.8 tijdelijk onder `/private/tmp/zonentra-review-python` geïnstalleerd en zijn de bestaande site-packages via `PYTHONPATH` gebruikt. De projectomgeving is niet aangepast.

@@ -13,10 +13,13 @@ makes the day warm, neutral or cold; that saves energy in two ways:
 Without a usable forecast everything works as before (day type unknown).
 """
 
+import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from homeassistant.util import dt as dt_util
+
+from .temperature import convert_temperature
 
 FORECAST_HOURS = 12  # Look this far ahead.
 REFRESH_MINUTES = 30  # Ask the weather entity this often.
@@ -41,8 +44,10 @@ def _when(value) -> datetime | None:
     return None
 
 
-def summarize_forecast(entries, now: datetime, hours: int = FORECAST_HOURS) -> Forecast:
-    """Highest and lowest temperature of the hourly entries in the coming hours.
+def summarize_forecast(
+    entries, now: datetime, hours: int = FORECAST_HOURS, *, temperature_unit="°C"
+) -> Forecast:
+    """Highest and lowest hourly temperatures in Celsius for the coming hours.
 
     The hour that is running now counts too (its entry starts before now).
     """
@@ -52,12 +57,8 @@ def summarize_forecast(entries, now: datetime, hours: int = FORECAST_HOURS) -> F
         if not isinstance(entry, dict):
             continue
         when = _when(entry.get("datetime"))
-        value = entry.get("temperature")
-        if (
-            when is None
-            or isinstance(value, bool)
-            or not isinstance(value, (int, float))
-        ):
+        value = convert_temperature(entry.get("temperature"), temperature_unit)
+        if when is None or value is None:
             continue
         if when.tzinfo is None:
             continue
@@ -72,6 +73,7 @@ def forecast_usable(forecast: Forecast | None, now: datetime) -> bool:
     return (
         forecast is not None
         and forecast.maximum is not None
+        and math.isfinite(forecast.maximum)
         and forecast.fetched_at is not None
         and now - forecast.fetched_at <= timedelta(hours=MAX_AGE_HOURS)
     )

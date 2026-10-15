@@ -204,3 +204,29 @@ def test_forecast_settings():
 def test_invalid_forecast_settings(settings):
     with pytest.raises(ValueError):
         building(**settings)
+
+
+@pytest.mark.parametrize(
+    ("unit", "values"),
+    [
+        ("°C", (5, 10)),
+        ("°F", (41, 50)),
+        ("K", (278.15, 283.15)),
+    ],
+)
+def test_forecast_normalizes_temperature_units(unit, values):
+    forecast = summarize_forecast(hourly(*values), NOW, temperature_unit=unit)
+    assert forecast.minimum == pytest.approx(5)
+    assert forecast.maximum == pytest.approx(10)
+    assert day_type(forecast, NOW, 22, 12) == "cold"
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), True])
+def test_forecast_rejects_nonfinite_or_boolean_temperature(value):
+    forecast = summarize_forecast(hourly(value, 50), NOW, temperature_unit="°F")
+    assert (forecast.minimum, forecast.maximum, forecast.hours) == (10, 10, 1)
+
+
+def test_unknown_forecast_unit_produces_unknown_day():
+    forecast = summarize_forecast(hourly(50), NOW, temperature_unit="unsupported")
+    assert day_type(forecast, NOW, 22, 12) == "unknown"

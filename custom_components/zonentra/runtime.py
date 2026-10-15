@@ -4,14 +4,16 @@ import logging
 from dataclasses import asdict, replace
 from datetime import timedelta
 
-from homeassistant.const import EVENT_STATE_CHANGED
+from homeassistant.const import EVENT_STATE_CHANGED, UnitOfTemperature
 from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
+from homeassistant.helpers.entity_component import DATA_INSTANCES
 from homeassistant.helpers.event import (
     async_call_later,
     async_track_point_in_utc_time,
 )
+from homeassistant.helpers.temperature import display_temp
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
@@ -71,6 +73,7 @@ from .shading import (
     sun_on_facade,
     sunny_state,
 )
+from .temperature import convert_temperature
 from .thermostat import (
     CLEAR_MANUAL,
     UNIT_MODES,
@@ -563,8 +566,17 @@ class BuildingRuntime:
                 )
         else:
             entries = ((response or {}).get(entity) or {}).get("forecast") or []
-            self.forecast = summarize_forecast(entries, now)
-            self.forecast_error = None if entries else "empty_forecast"
+            state = self.hass.states.get(entity)
+            unit = state.attributes.get("temperature_unit") if state else None
+            unit = unit or self.hass.config.units.temperature_unit
+            self.forecast = summarize_forecast(entries, now, temperature_unit=unit)
+            self.forecast_error = (
+                None
+                if self.forecast.maximum is not None
+                else "empty_forecast"
+                if not entries
+                else "invalid_forecast"
+            )
         self.refresh()
 
     async def _retry_forecast(self, _now=None) -> None:
@@ -1246,6 +1258,10 @@ class BuildingRuntime:
         if changed:
             self._save_thermostats()
 
+    def _climate_entity(self, entity_id):
+        component = self.hass.data.get(DATA_INSTANCES, {}).get("climate")
+        return component.get_entity(entity_id) if component else None
+
     def _setpoint_plan(self, item, zone, settings, now) -> SetpointPlan:
         unit = self.indoor_units.get(item.id)
         override = self.overrides.get(item.id)
@@ -1256,7 +1272,15 @@ class BuildingRuntime:
         snapshot = self.zone_snapshots[item.zone_id]
         state = self.hass.states.get(item.entity_id)
         attributes = state.attributes if state else {}
-        return plan_setpoint(
+        source_unit = self.hass.config.units.temperature_unit
+        # HA displays absolute temperatures in system units, but publishes the
+        # step in the climate entity's native units without conversion.
+        entity = self._climate_entity(item.entity_id)
+        step_unit = entity.temperature_unit if entity else source_unit
+        step = convert_temperature(
+            attributes.get("target_temp_step"), step_unit, interval=True
+        )
+        plan = plan_setpoint(
             unit.selected_mode,
             snapshot.heating_limit.value,
             snapshot.cooling_limit.value,
@@ -1264,15 +1288,30 @@ class BuildingRuntime:
             snapshot.temperature.value
             if snapshot.temperature.quality == "valid"
             else None,
-            unit.target_temperature,
+            convert_temperature(unit.target_temperature, source_unit),
             self.setpoint_sent.get(item.id),
             now,
             max_offset=settings.setpoint_max_offset,
             interval_seconds=settings.setpoint_interval_seconds,
-            step=attributes.get("target_temp_step"),
-            min_temp=attributes.get("min_temp"),
-            max_temp=attributes.get("max_temp"),
+            step=step,
+            step_origin=(convert_temperature(0, step_unit) or 0)
+            if step is not None and step > 0
+            else 0,
+            min_temp=convert_temperature(entity.min_temp, step_unit)
+            if entity is not None
+            else convert_temperature(attributes.get("min_temp"), source_unit),
+            max_temp=convert_temperature(entity.max_temp, step_unit)
+            if entity is not None
+            else convert_temperature(attributes.get("max_temp"), source_unit),
         )
+        if entity is not None and plan.setpoint is not None:
+            # State attributes can be rounded more coarsely than the device step.
+            shown = display_temp(
+                self.hass, plan.setpoint, UnitOfTemperature.CELSIUS, entity.precision
+            )
+            if _setpoint(shown) == _setpoint(unit.target_temperature):
+                plan = replace(plan, status="in_sync", send=False, next_check=None)
+        return plan
 
     # --- Active outdoor-stand control (0.7) -----------------------------------
 
@@ -1584,9 +1623,57 @@ class BuildingRuntime:
         if command.service == "set_fan_mode":
             data["fan_mode"] = command.fan_mode  # An attribute: nothing to track.
         elif command.service == "set_temperature":
-            expected = _setpoint(command.temperature)
+            # HA interprets service temperatures in the configured system unit.
+            temperature = convert_temperature(
+                command.temperature,
+                UnitOfTemperature.CELSIUS,
+                self.hass.config.units.temperature_unit,
+            )
+            if temperature is None:
+                self._log(command, now, "blocked: invalid_temperature")
+                if on_result is not None:
+                    self.hass.loop.call_soon(on_result, False)
+                return
+            entity = self._climate_entity(command.entity_id)
+            if entity is not None:
+                # Quantize and clamp in native units before the service's own
+                # conversion. Rounding a converted boundary can fall just outside
+                # the device's strict min/max checks.
+                native = convert_temperature(
+                    command.temperature,
+                    UnitOfTemperature.CELSIUS,
+                    entity.temperature_unit,
+                )
+                if native is not None:
+                    step = convert_temperature(
+                        entity.target_temperature_step,
+                        entity.temperature_unit,
+                        entity.temperature_unit,
+                        interval=True,
+                    )
+                    if step is not None and step > 0:
+                        native = round(native / step) * step
+                    native = min(entity.max_temp, max(entity.min_temp, native))
+                    temperature = convert_temperature(
+                        native,
+                        entity.temperature_unit,
+                        self.hass.config.units.temperature_unit,
+                    )
+            data["temperature"] = (
+                temperature if entity is not None else round(temperature, 6)
+            )
+            shown = (
+                display_temp(
+                    self.hass,
+                    data["temperature"],
+                    self.hass.config.units.temperature_unit,
+                    entity.precision,
+                )
+                if entity is not None
+                else data["temperature"]
+            )
+            expected = _setpoint(shown)
             self.setpoint_tracker.register(command.entity_id, expected, now)
-            data["temperature"] = command.temperature
         else:
             expected = (
                 command.hvac_mode if command.service == "set_hvac_mode" else "off"

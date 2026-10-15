@@ -1,12 +1,12 @@
 """Privacy-conscious diagnostics, with no raw source states."""
 
-from dataclasses import asdict
+from dataclasses import asdict, fields
 
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntryState
 
 from . import ZonentraConfigEntry, central_entry, entry_type
-from .models import ZONE_ENTITY_FIELDS
+from .models import ZONE_ENTITY_FIELDS, BuildingSettings
 from .observations import describe
 from .topology import EQUIPMENT_FIELDS, ZONE
 
@@ -26,9 +26,15 @@ REDACT = {
     "contact_entities",
     "member_zone_ids",
     *ZONE_ENTITY_FIELDS,
+    *(
+        field.name
+        for field in fields(BuildingSettings)
+        if field.name.endswith(("_entity", "_entities", "_candidates"))
+    ),
     *(field for field, _ in EQUIPMENT_FIELDS),
 }
-# Interpretation only: no temperatures, fan modes or entity IDs leave the instance.
+# Indoor observations export interpretation only; raw temperatures and fan modes
+# are omitted, and the equipment_id is redacted by the enclosing export.
 UNIT_FIELDS = (
     "equipment_id",
     "availability",
@@ -199,8 +205,9 @@ def _zone_diagnostics(hass, entry) -> dict:
         # 0.9 room thermostat and what room regulation does per unit.
         data["thermostat"] = runtime.thermostat(zone_id).as_dict()
         data["active_band"] = list(runtime.zone_bands.get(zone_id, ()))
-        data["room_regulation"] = {
-            item.id: {
+        data["room_regulation"] = [
+            {
+                "equipment_id": item.id,
                 "status": control.status,
                 "setpoint": {
                     **asdict(plan),
@@ -212,5 +219,5 @@ def _zone_diagnostics(hass, entry) -> dict:
             for item in runtime.building.equipment
             if item.zone_id == zone_id
             and (control := runtime.room_controls.get(item.id))
-        }
+        ]
     return async_redact_data(data, REDACT)

@@ -153,3 +153,29 @@ async def test_no_weather_entity_no_forecast_entities(hass):
     assert entity(hass, "sensor", f"{central.entry_id}_day_type") is None
     assert entity(hass, "number", f"{central.entry_id}_forecast_margin") is None
     assert central.runtime_data.day_type == "unknown"
+
+
+async def test_weather_entity_unit_overrides_system_unit(hass):
+    weather(hass, 41, 50)
+    hass.states.async_set(WEATHER, "cloudy", {"temperature_unit": "°F"})
+    central, _ = await office(hass)
+    assert central.runtime_data.forecast.maximum == 10
+    assert central.runtime_data.day_type == "cold"
+
+
+async def test_forecast_without_entity_unit_uses_system_unit(hass):
+    from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
+
+    hass.config.units = US_CUSTOMARY_SYSTEM
+    weather(hass, 41, 50)
+    central, _ = await office(hass)
+    assert central.runtime_data.forecast.maximum == 10
+    assert central.runtime_data.day_type == "cold"
+
+
+async def test_invalid_weather_unit_disables_forecast_policy(hass):
+    weather(hass, 41, 50)
+    hass.states.async_set(WEATHER, "cloudy", {"temperature_unit": "unsupported"})
+    central, _ = await office(hass)
+    assert central.runtime_data.day_type == "unknown"
+    assert central.runtime_data.forecast_error == "invalid_forecast"

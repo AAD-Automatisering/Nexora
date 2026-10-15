@@ -127,18 +127,18 @@ async def test_review_unavailable_cover_is_still_commanded(hass):
     assert len(moves) == 1
 
 
-async def test_review_fahrenheit_forecast_compared_as_celsius(hass):
+async def test_review_fahrenheit_forecast_is_converted_to_celsius(hass):
     from tests.test_forecast_runtime import WEATHER, weather
     from tests.test_forecast_runtime import office as forecast_office
 
     weather(hass, 41, 50)
     hass.states.async_set(WEATHER, "cloudy", {"temperature_unit": "°F"})
     central, _ = await forecast_office(hass)
-    assert central.runtime_data.day_type == "warm"
-    assert central.runtime_data.forecast.maximum == 50  # Actual forecast: 10 °C, cold.
+    assert central.runtime_data.day_type == "cold"
+    assert central.runtime_data.forecast.maximum == 10
 
 
-async def test_review_fahrenheit_limits_passed_to_celsius_setpoint_planner(hass):
+async def test_review_fahrenheit_limits_are_converted_for_setpoint_planner(hass):
     from homeassistant.util.unit_system import US_CUSTOMARY_SYSTEM
 
     hass.config.units = US_CUSTOMARY_SYSTEM
@@ -175,11 +175,11 @@ async def test_review_fahrenheit_limits_passed_to_celsius_setpoint_planner(hass)
     runtime.refresh()
     item, zone = model.equipment[0], model.zones[0]
     plan = runtime._setpoint_plan(item, zone, model.settings, dt_util.utcnow())
-    assert plan.setpoint == 60  # 22.3 °C base gets clamped to Fahrenheit minimum.
+    assert round(plan.setpoint, 3) == 24.444  # 76 °F on the native one-degree grid.
     runtime.close()
 
 
-async def test_review_diagnostics_leave_new_source_entity_ids_unredacted(hass):
+async def test_review_diagnostics_redact_new_source_entity_ids(hass):
     from custom_components.zonentra.diagnostics import (
         async_get_config_entry_diagnostics,
     )
@@ -200,9 +200,9 @@ async def test_review_diagnostics_leave_new_source_entity_ids_unredacted(hass):
     result = await async_get_config_entry_diagnostics(hass, central)
     assert (
         result["configuration"]["options"]["building"]["presence_entity"]
-        == "alarm_control_panel.private_office"
+        == "**REDACTED**"
     )
     assert (
         result["configuration"]["options"]["building"]["weather_entity"]
-        == "weather.private_address"
+        == "**REDACTED**"
     )

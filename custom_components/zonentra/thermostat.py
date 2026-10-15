@@ -429,6 +429,7 @@ def plan_setpoint(
     max_offset: float,
     interval_seconds: float,
     step: float | None = None,
+    step_origin: float = 0,
     min_temp: float | None = None,
     max_temp: float | None = None,
 ) -> SetpointPlan:
@@ -440,6 +441,9 @@ def plan_setpoint(
     bounded by ``max_offset``: a cold room asks the unit for more, a room that
     is already warm enough for less. Changes are rounded to the unit's step
     and sent at most once per ``interval_seconds``.
+
+    Values and step intervals are in Celsius. ``step_origin`` aligns the grid
+    with the device's native zero after conversion (for example 0 °F).
     """
     if mode not in ("heat", "cool"):
         return SetpointPlan("unit_not_running")
@@ -460,7 +464,10 @@ def plan_setpoint(
         raw = base - offset
     low = min_temp if min_temp is not None else DEFAULT_MIN_SETPOINT
     high = max_temp if max_temp is not None else DEFAULT_MAX_SETPOINT
-    setpoint = round(min(high, max(low, round(raw / step) * step)), 2)
+    # Keep conversion precision until service dispatch (for example whole °F
+    # steps represented in °C). step_origin preserves the native unit's grid.
+    rounded = step_origin + round((raw - step_origin) / step) * step
+    setpoint = round(min(high, max(low, rounded)), 8)
     plan = SetpointPlan("in_sync", setpoint, round(base, 2), round(setpoint - base, 2))
     if abs(setpoint - current_setpoint) < step / 2:
         return plan
