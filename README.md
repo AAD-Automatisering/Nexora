@@ -3,48 +3,22 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.12.0** gebruikt de **weersverwachting** om zuinig te zijn met gas en
-elektra: op een warme dag gaat de zonwering al vroeg omlaag en wacht verwarmen
-langer, op een koude dag mag de zon binnen en wacht koelen langer; lege ruimtes
-houden de zonwering op energie. Versie 0.11.0 regelt de **zonwering** (screens): omlaag als de zon op de gevel
-staat en de ruimte warm is of koelt, omhoog voor gratis zonnewarmte, daglicht en
-'s nachts. Per ruimte eerst als simulatie. Versie 0.10.0 vulde het ruimteapparaat aan met de sensoren en bediening die
-Versatile Thermostat ook heeft: aanwezigheid, veiligheid, raam (met bypass),
-geregeld setpoint, gemiddelde temperatuur, temperatuurtrend en een automatische
-ventilatorstand, plus een lamel die omhoog gaat bij koelen en omlaag bij verwarmen.
-Versie 0.9.0 gaf iedere ruimte een eigen **Zonentra-thermostaat** zoals
-Versatile Thermostat: een climate-entiteit met de comfortband van de ruimte,
-presets (comfort, eco, afwezig) en instellingen op het apparaat. Met de
-schakelaar **Ruimteregeling** (standaard uit) regelt Zonentra de ruimte echt: de
-binnenunits aan en uit op de klimaatvraag, en een zelfregulerend setpoint op basis
-van de ruimtesensor. Versie 0.8.0 voegde **aanwezigheid en beweging** toe:
-een aanwezigheidssensor voor het hele gebouw en optioneel een bewegingssensor per
-ruimte kiezen tussen een comfort-, eco- en afwezig-band. Versie 0.7.0 is de eerste
-versie die iets **echt aanstuurt**: Zonentra zet per
-buitenunitgroep de **stand** (verwarmen/koelen) van alle binnenunits, op basis van
-de gewogen klimaatvraag. Vloerverwarming, ventilatie en zonwering blijven
-simulatie, net als ruimtes waarvan de ruimteregeling uit staat. Per groep is er een
-noodstop-schakelaar.
-Versie 0.6.0 maakt Zonentra aan zoals Versatile Thermostat: eenmalig een
-**centrale configuratie** (gebouw, buitenunitgroepen, gedeelde instellingen) en
-daarna **per ruimte een eigen item** met een eigen apparaat in Home Assistant.
-Versie 0.5.0 simuleert de volledige regelstrategie: per buitenunitgroep een
-leidende modus met een veilige omschakelprocedure, per binnenunit de actie die
-Zonentra zou nemen (verwarmen, koelen, uit, modus corrigeren, ongewijzigd of
-geblokkeerd), handmatige bediening via de KNX-roomcontroller (Manual Override,
-standaard 30 minuten) en anti-pendelbeveiliging. **Er wordt niets aangestuurd:**
-alle acties zijn zichtbaar als simulatie. Versie 0.4.0 observeert de bestaande binnenunits (climate-entiteiten): per
-binnenunit de ingestelde modus en `hvac_action`, en per buitenunitgroep een
-**afgeleide** groepsmodus met conflictdetectie, naast de gewenste modus uit de
-klimaatvraag. Een afgeleide modus is nooit fysieke buitenunitfeedback. Versie
-0.3.1 herstelde de sensorvalidatie: een geldige temperatuur die lang niet
-verandert (zoals bij KNX) wordt niet langer onterecht `stale`. Versie 0.3.0
-voegde centrale gebouwinstellingen met optionele ruimteafwijkingen toe aan de
-uitlegbare klimaatvraag en gewogen buitenunitvoorstellen. Behalve de
-actieve standregeling (0.7) en de ruimteregeling (0.9, per ruimte aan te zetten)
-blijft alles simulatie: Zonentra bedient geen vloerverwarming, zonwering of
-ventilatie. De 16 °C-vloerverwarmingsgrens blijft intact.
-Bestaande regelingen en automations blijven zelfstandig werken.
+Zonentra observeert bestaande Home Assistant-entiteiten, berekent de klimaatvraag
+per ruimte en coördineert gedeelde buitenunitgroepen. De huidige versie ondersteunt
+actieve standregeling, ruimteregeling, setpoints, ventilatorstanden, lamellen en
+zonwering. Aanwezigheid, beweging en de weersverwachting beïnvloeden de regeling.
+
+**Actieve standregeling** staat per buitenunitgroep standaard aan. De schakelaar
+blokkeert bij uitschakelen alle HVAC- en lamelcommando's voor die groep.
+**Ruimteregeling** en **Zonweringregeling** staan per ruimte standaard uit; hun
+plannen blijven zichtbaar voordat de betreffende aansturing wordt ingeschakeld.
+Lamellen volgen de modus van draaiende binnenunits zolang de groep is vrijgegeven.
+
+Vloerverwarming en gebouwventilatie worden alleen als gekoppelde apparatuur
+geobserveerd. De 16 °C-vloerverwarmingsgrens blijft intact. De oudere configuratie
+met één item berekent alleen plannen; actieve aansturing gebruikt de centrale
+configuratie met aparte ruimte-items. De versiegeschiedenis staat in
+[ROADMAP.md](ROADMAP.md).
 
 ## Installatie
 
@@ -605,7 +579,8 @@ gecorrigeerd naar `heat`. Uitzetten beëindigt de override; daarna geldt de
 normale regeling weer. Attribuutwijzigingen, herstarts en overgangen vanuit
 `unknown`/`unavailable` starten nooit een override. Een override overleeft een
 herstart niet. **Let op:** Home Assistant kan niet zien wie een state wijzigt;
-ook een eigen automatisering die een airco aanzet, start een override.
+een herkenbare automation/script met `parent_id` start bij inschakelen geen
+override. Een kale context kan van een roomcontroller komen en telt als handmatig.
 
 **Anti-pendel en omschakeling.** Minimale aan-tijd (comfort, 600 s), minimale
 uit-tijd (veiligheid, 180 s) en wachttijd bij heat↔cool (veiligheid, 300 s) zijn
@@ -641,9 +616,11 @@ Voorbeeld: ruimte met warmtevraag, airco uit → desired `heat`, afgeleid
 `inactive`, physical `unknown`, `observation_reason: heat_requested_units_inactive`.
 De afleidingsregels en alle reason codes staan in [ALGORITHM.md](ALGORITHM.md#binnenunits-en-afgeleide-groepsmodus-04).
 
-`read_only` bevestigt observatie/simulatie, ook bij een leeg gebouw; de
-standregeling uit 0.7 staat daar los van en is per groep zichtbaar (`read_only: false`
-op de coördinatiesensor zolang de schakelaar aan staat). `degraded`
+De historische status `read_only` en het gelijknamige attribuut op de
+gebouwstatus beschrijven de observatie- en analysegegevens. Ze geven niet aan
+of de hele integratie apparaten aanstuurt. Bekijk daarvoor de groepsschakelaar,
+**Ruimteregeling**, **Zonweringregeling** en het commandolog. De coördinatiesensor
+meldt `read_only: false` zolang de groepsschakelaar aan staat. `degraded`
 betekent een ontbrekende/unknown/unavailable gekoppelde bron of een ongeldige
 klimaatvraag voor een ruimte met ingestelde grenzen. Optionele bronproblemen zijn
 zichtbaar, maar blokkeren de vraagberekening niet. `conflict` meldt tegengestelde
@@ -679,7 +656,10 @@ behalve de weersverwachting (elke 30 minuten, alleen met een weerentiteit).
 
 ## Veilig testen naast de bestaande regeling
 
-Laat de bestaande regeling en automations gewoon draaien. Vergelijk per ruimte
+Voor een vergelijking zonder aansturing zet je **Actieve standregeling** voor
+alle groepen uit, en **Ruimteregeling** en **Zonweringregeling** voor alle ruimtes
+uit. De groepsschakelaar staat standaard aan: zet die uit voordat je binnenunits
+koppelt als je eerst alleen wilt observeren. Vergelijk per ruimte
 de KNX-temperatuur, ingestelde analysegrenzen en weergegeven klimaatscores.
 Controleer per buitenunit current/desired/proposed en de blokkeerreden. Test een
 onbeschikbare bron en het herstel daarvan; Zonentra moet unknown melden in plaats
@@ -688,9 +668,11 @@ actuator-automations** als je deze versie read-only wilt testen. Dat geldt ook
 voor de gesimuleerde acties uit 0.5: ze zijn bedoeld om te vergelijken met wat de
 installatie werkelijk doet.
 
-Aanwezigheid, ramen, vloerverwarming, zonwering en ventilatie worden niet bediend.
-De gasvloergrens van 16 °C blijft intact. Een HA-herstart moet bij een bekend
-modusverschil weer een omschakelwachttijd laten zien.
+Aanwezigheid en raamcontacten zijn invoer voor de regeling; met Ruimteregeling
+aan kan een open raam binnenunits uitschakelen. Zonwering beweegt wanneer
+Zonweringregeling aan staat. Vloerverwarming en gebouwventilatie worden niet
+aangestuurd; de gasvloergrens van 16 °C blijft intact. Wijs bij actieve aansturing
+per apparaat aan welke regeling de modi en instellingen beheert.
 
 ## Ontwikkelen en testen
 

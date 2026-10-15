@@ -1,8 +1,9 @@
 """Pure group mode coordination and per-unit control intents.
 
-SIMULATION ONLY. Nothing here calls Home Assistant or produces a command: the
-output describes what Zonentra *would* do. Steps are never reported as
-executed; the switch state machine only advances on what is observed.
+This module calculates plans without calling Home Assistant. The runtime uses
+unit intents for enabled room regulation and shows coordination phases as
+diagnostics. A planned step does not prove execution; the switch state machine
+only advances on what is observed.
 
 Two levels:
 
@@ -77,7 +78,7 @@ class GroupCoordination:
     switch_from: str | None
     switch_to: str | None
     switch_allowed_in_simulation: bool
-    active_switch_permitted: bool  # Always False in 0.5.
+    active_switch_permitted: bool  # Diagnostic plan; runtime authorizes commands.
     phase: str
     phase_reason: str
     waiting_until: datetime | None
@@ -271,7 +272,7 @@ def unit_intent(
     now: datetime,
     override_event: str | None = None,
 ) -> UnitIntent:
-    """Unit level: desired end state and the next (simulated) step."""
+    """Unit level: desired end state and the next planned step."""
     mode = unit.selected_mode
     demand = zone_demand.demand if zone_demand else "unknown"
     active_override = override if override and override.active(now) else None
@@ -460,7 +461,7 @@ def plan(
 ) -> tuple[
     dict[str, GroupCoordination], dict[str, UnitIntent], dict[str, CoordinationMemory]
 ]:
-    """Whole-building simulation: coordinations, unit intents and new memories."""
+    """Whole-building plans: coordinations, unit intents and new memories."""
     settings = building.settings
     hvac = [item for item in building.equipment if item.kind == "hvac"]
     needs = {

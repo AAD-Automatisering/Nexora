@@ -8,6 +8,8 @@ Onderzocht: alle 25 Python-modules van de integratie, configuratie en migratie, 
 
 **Vervolg: punt 3 hersteld.** De groepsschakelaar blokkeert nu alle HVAC- en lamelcommando’s voor de groep, inclusief ruimteregeling, setpoints en ventilatorstanden. Een controle direct voor de serviceaanroep blokkeert ook eerder geplande commando’s. Openstaande presetaanvragen en pulsen worden bij uitschakelen verwijderd; late serviceresponsen starten geen nieuwe puls of herpoging. De ruimte-instellingen blijven bewaard voor opnieuw inschakelen. Zelfstandige ruimtes zonder groep en zonwering met een eigen schakelaar blijven onafhankelijk. Tien regressietests toegevoegd; de volledige suite slaagt met 1.073 tests. Reeds verzonden apparaatcommando’s kunnen hiermee niet worden teruggedraaid.
 
+**Vervolg: punt 4 hersteld.** Het lokale parameterformulier vervangt nu de zichtbare velden in plaats van nieuwe waarden over oude koppelingen heen te leggen. Leegmaken verwijdert daardoor de lokale grensentiteiten uit de configuratie en uit de bronnen van de runtime. Verborgen lokale grensinstellingen en parameters blijven bewaard. Dezelfde afhandeling geldt bij aanmaken, aanpassen en opnieuw indienen na een validatiefout. Vier volledige flow-regressietests toegevoegd; de volledige suite slaagt met 1.074 tests.
+
 **Bevestigde bevindingen, in volgorde van belang**
 
 1. **[P1] Een uitgeschakelde zone blijft fysieke apparatuur aansturen.**
@@ -86,7 +88,7 @@ Onderzocht: alle 25 Python-modules van de integratie, configuratie en migratie, 
 - `control.PHASES` en `roomstate.WINDOW_STATES` worden alleen door tests gebruikt om de sensoropties te vergelijken. Dat zijn dus geen volledig ongebruikte symbolen. Eventueel kan de productcode deze lijsten ook direct gebruiken.
 - De legacy-configuratie, `decision.py`, `control.py` en de override-tracker worden nog aangeroepen. Verwijderen op basis van oude versienummers of het woord 'simulation' zou functionaliteit of compatibiliteit breken.
 - Er zijn geen ongebruikte imports of ongedefinieerde namen gevonden door Ruff.
-- Veel module-/classdocstrings beschrijven de integratie nog als read-only en zonder serviceaanroepen, ook in `__init__.py`, `runtime.py` en `executor.py`. Dat beschrijft de huidige integratie niet goed. De README bevat bovendien nog de oude uitspraak dat een automation een manual override start, terwijl het huidige pad automatiseringen juist onderscheidt.
+- Opgeschoond: module-/classdocstrings, projectbeschrijving, README, architectuur, algoritme, roadmap en configuratiehulp beschrijven nu de actieve aansturing en de rol van pure plannen. Legacy-configuratie en historische fases zijn expliciet afgebakend. De bestaande `read_only`-statusvelden blijven compatibel en worden als aanduidingen van de observatielaag toegelicht. De oude algemene uitspraak over automations die een override starten is vervangen door de contextafhankelijke herkenning.
 - De centrale uitvoer-, lifecycle-, opslag- en waarnemingslogica zit grotendeels in één runtime-module van 1.578 regels. Opsplitsen per regeling is een onderhoudsverbetering; begin met de bevestigde fouten en gedeelde commandobevestiging, zodat de opsplitsing geen bestaande divergentie vastlegt.
 - `_cover_position()` en `_screen_position()` dupliceren vrijwel dezelfde interpretatie van coverposities.
 - `ModeCommand.domain` wordt gevuld maar stuurt `_execute()` niet aan; cover- en lamelcommando's lopen via aparte `_call()`-paden. Dat veld is momenteel beschrijvend/inert, geen betrouwbare generieke uitvoerinterface.
@@ -101,7 +103,7 @@ Een extra probe bevestigt dat ook bij een cover-state `unavailable` een verplaat
 
 - Bestaande testset: **1.051 passed in 9,97 s**.
 - Ruff lint: geslaagd. Ruff format: alle 59 oorspronkelijke Python-bestanden correct geformatteerd.
-- [review_probes.py](/Users/pauldeelen/Documents/GitHub/Zonentra/tests/review_probes.py): negen gerichte probes. Na herstel van punten 1, 2 en 3 controleren de betreffende probes het juiste gedrag; de andere probes bevestigen vier resterende bevindingen, het cover-robuustheidspunt en één negatieve controle: lokale entiteitgrenzen werken bij nieuwe configuratie wel correct.
+- [review_probes.py](/Users/pauldeelen/Documents/GitHub/Zonentra/tests/review_probes.py): negen gerichte probes. Na herstel van punten 1 tot en met 4 controleren de betreffende probes het juiste gedrag; de andere probes bevestigen drie resterende bevindingen, het cover-robuustheidspunt en één negatieve controle: lokale entiteitgrenzen werken bij nieuwe configuratie wel correct.
 - De probes toetsen bewust de waargenomen huidige werking, ook waar die fout is. Dat ze slagen betekent dat de reviewbevinding is gereproduceerd; dit zijn geen regressietests die goed gedrag afdwingen. Bij reparatie moeten de relevante verwachtingen worden omgedraaid.
 - Uitvoeren met een werkende projectomgeving: `python -m pytest -q tests/review_probes.py`. De bestaande suite blijft `python -m pytest -q`.
 - De oorspronkelijke `.venv/bin/python` verwijst naar een verdwenen `/private/tmp/nexora-python`-installatie. Voor deze review is Python 3.14.8 tijdelijk onder `/private/tmp/zonentra-review-python` geïnstalleerd en zijn de bestaande site-packages via `PYTHONPATH` gebruikt. De projectomgeving is niet aangepast.

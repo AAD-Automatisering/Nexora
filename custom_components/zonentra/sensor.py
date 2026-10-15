@@ -789,7 +789,7 @@ def _iso(value):
 
 
 class UnitControlSensor(ZonentraDiagnosticSensor):
-    """Simulated next action for one indoor unit — never executed in 0.5."""
+    """Planned unit action, with the runtime's room-control status and commands."""
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [
@@ -876,7 +876,7 @@ class UnitControlSensor(ZonentraDiagnosticSensor):
 
 
 class GroupCoordinationSensor(ZonentraDiagnosticSensor):
-    """Simulated group coordination and switch phase — never executed in 0.5."""
+    """Observed coordination phase alongside active group-control results."""
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = [

@@ -2,10 +2,9 @@
 
 Policy for this installation: an external switch-on of a linked indoor unit
 (state ``off`` -> an active mode) is treated as a manual override. Home Assistant
-state events do not prove *who* changed a state, so an external automation that
-switches a unit on is indistinguishable and also starts an override. Changes
-Zonentra initiated itself are excluded through the CommandTracker. In 0.5
-Zonentra issues no commands, so the tracker is always empty at runtime.
+state events do not prove who changed a state. The runtime uses HA contexts
+to distinguish recognizable automations from users and room controllers.
+Zonentra-initiated changes are excluded through the CommandTracker.
 
 Overrides live in memory only and do not survive a Home Assistant restart: an
 expired override can never come back, and a restart is never a transition.
@@ -43,7 +42,7 @@ class PendingCommand:
 
 
 class CommandTracker:
-    """Bounded record of Zonentra-initiated changes (for future active control).
+    """Bounded record of Zonentra-initiated changes awaiting state confirmation.
 
     A state transition only counts as Zonentra-initiated when it matches the
     expected state of a pending command before that command's deadline. There

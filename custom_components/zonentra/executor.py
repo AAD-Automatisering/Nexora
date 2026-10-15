@@ -1,4 +1,4 @@
-"""Pure planning of the outdoor unit "stand" (mode) — the first ACTIVE control.
+"""Group preset and correction plans for active outdoor-unit mode control.
 
 Installation fact (Mitsubishi via Intesis/KNX): the first indoor unit that
 switches on decides the outdoor unit mode; a unit in the opposite mode then
@@ -14,8 +14,9 @@ mode, replacing a manual "airco stand" automation:
 * a running unit in a mode that does not fit the group mode is corrected
   after a short delay (people may still be adjusting it).
 
-Nothing else is controlled: no setpoints, no on/off for zone demand, no floor
-heating, ventilation or shading. Pure module: it only returns commands.
+This module describes commands and pending preset applications. The runtime
+sends the commands and also handles room regulation, setpoints, fans, vanes
+and shading through their own planners.
 """
 
 from dataclasses import dataclass, replace

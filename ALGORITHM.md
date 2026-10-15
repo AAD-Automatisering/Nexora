@@ -1,8 +1,10 @@
 # Zonentra 0.13.6 — uitlegbare klimaatintelligentie
 
-Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
-commando en verandert ook niet de intern bijgehouden actuele modus. De actieve
-functies staan apart beschreven: de standregeling (0.7) en de ruimteregeling (0.9).
+Dit document beschrijft de berekeningen en actieve aansturing. De pure kern
+levert waarnemingen, vraag, voorstellen en plannen; de runtime verstuurt de
+commando's voor ingeschakelde regelingen. Een voorstel bewijst geen uitvoering en
+verandert de waargenomen actuele modus niet. Actieve functies zijn standregeling,
+ruimteregeling, setpoints, ventilatorstanden, lamellen en zonwering.
 
 Sinds 0.6 worden de centrale configuratie en de losse ruimte-items vóór elke
 berekening samengevoegd tot één gebouwmodel (`topology.assemble`). De algoritmes
@@ -169,7 +171,9 @@ feedback-entiteit. Geldige waarden: heat, cool, off. Auto, heat_cool en ontbreke
 verouderde of onbetrouwbare bronnen betekenen current_mode=unknown. Individuele
 climate-setpoints of gewenste VTherm-modi bewijzen de fysieke buitenunitmodus niet.
 Wanneer binnenunits binnen een beperkte groep expliciet zowel heat als cool
-melden, blokkeert observed_group_conflict het plan; Zonentra corrigeert niets.
+melden, blokkeert `observed_group_conflict` het voorstel van de analyse-engine.
+De actieve standregeling kan via de coördinator alsnog een leidende modus uit
+de volledige klimaatvraag kiezen en conflicterende units corrigeren.
 
 Bereken `S_heat=sum(heating_score)`, `S_cool=sum(cooling_score)` en `Δ=S_heat−S_cool`.
 Standaard minimale score M=0,5; score-deadband D=0,5:
@@ -374,15 +378,17 @@ Bron: de state-events van de gekoppelde climate-entiteit. Classificatie van éé
 | overeenkomend met een Zonentra-commando | zonentra_initiated | nooit |
 
 Same-value-rapporten (`state_reported`) en timers zijn geen overgangen.
-**Beperking:** HA-events bewijzen de herkomst niet. Een externe automatisering
-die een unit aanzet is niet te onderscheiden van de roomcontroller en start dus
-ook een override.
+**Beperking:** HA-events bewijzen de herkomst niet. De runtime herkent een
+HA-gebruiker aan `user_id` en een automation/script aan `parent_id`. Een herkende
+automation die een unit aanzet start geen override; een overgang met kale context
+kan van een roomcontroller komen en telt als handmatige bediening.
 
-`CommandTracker` (voor toekomstige aansturing) registreert per entiteit de
+`CommandTracker` registreert voor de actieve aansturing per entiteit de
 verwachte state met een begrensde bevestigingsperiode (60 s). Alleen een
 overgang naar precies die state binnen die periode telt als Zonentra-initiatief;
 daarna is elke overgang weer extern. Er is geen open tijdsvenster dat echte
-gebruikersacties onderdrukt. In 0.5 blijft de tracker leeg.
+gebruikersacties onderdrukt. De runtime gebruikt deze tracker voor HVAC-modi,
+setpoints en coverposities, met een eigen bevestigingstermijn per toepassing.
 
 Timer: `expires_at = start + manual_override_duration_minutes` (standaard 30,
 5–120). Alleen een nieuwe off→aan-overgang start een nieuwe override; updates,
@@ -468,9 +474,10 @@ de andere grens blijft staan, of schuift mee als de band anders ongeldig wordt
 binnenunit uit (0.5): `turn_on_heat`/`turn_on_cool` → `set_hvac_mode`,
 `turn_off` → `climate.turn_off`. `correct_mode` blijft aan de standregeling,
 `hold`/`blocked` sturen niets. Inschakelen gebeurt alleen in een *veilige* modus:
-met actieve standregeling de klaargezette stand van de groep; zonder standregeling
-de stand van de units die al draaien (heat, of cool/dry), allebei = conflict = niets,
-geen enkele = vrij. Zolang een eigen commando nog niet is bevestigd
+voor een gekoppelde groep is dat de klaargezette stand, en de groepsschakelaar
+moet aan staan. Met de groepsschakelaar uit of nog niet hersteld worden ook
+ruimteregeling, setpoints, ventilator en lamellen geblokkeerd. Een binnenunit
+zonder groep volgt de eigen ruimtevraag. Zolang een eigen commando nog niet is bevestigd
 (CommandTracker), of de standregeling in dezelfde ronde of met een openstaande
 uit-puls met de unit bezig is, wacht de ruimteregeling.
 

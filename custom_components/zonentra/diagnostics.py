@@ -168,7 +168,7 @@ async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -
 
 
 def _zone_diagnostics(hass, entry) -> dict:
-    """A zone entry explains its own part of the central simulation."""
+    """A zone entry explains its observations, plans and enabled room control."""
     central = central_entry(hass)
     runtime = (
         central.runtime_data

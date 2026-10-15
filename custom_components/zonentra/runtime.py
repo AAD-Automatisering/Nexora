@@ -1,4 +1,4 @@
-"""Event-driven read-only bridge from HA states to pure building models."""
+"""Event-driven observations, planning and enabled Home Assistant control."""
 
 import logging
 from dataclasses import asdict, replace
@@ -142,7 +142,7 @@ def _origin(event) -> str:
 
 
 class BuildingRuntime:
-    """Own one building's observations; no service or hardware access."""
+    """Observe one building, evaluate its plans and dispatch enabled controls."""
 
     def __init__(
         self, hass: HomeAssistant, building: Building, *, active: bool = False
@@ -212,13 +212,13 @@ class BuildingRuntime:
         self.forecast_error: str | None = None
         self.day_type = "unknown"
         self._cancel_forecast_retry = None
-        # 0.5 simulated control. In memory only: nothing survives a restart.
+        # Coordination and manual overrides survive reloads, not HA restarts.
         self.overrides = {}
         self.last_transitions = {}
         self.coordination_memories = {}
         self.coordinations = {}
         self.unit_intents = {}
-        # Records Zonentra-initiated changes; stays empty while read-only.
+        # Distinguish our commands from external device changes.
         self.command_tracker = CommandTracker()
         self.memories = {
             group.id: GroupMemory("unknown", dt_util.utcnow())
@@ -1745,7 +1745,7 @@ class BuildingRuntime:
         return "manual_setpoint"
 
     def _plan(self, transitions, sources, now) -> None:
-        """Update manual overrides and simulate group coordination and intents."""
+        """Update overrides and calculate group coordination and unit intents."""
         settings = self.building.settings
         overrides, events = {}, {}
         for item in self.building.equipment:
@@ -1813,6 +1813,7 @@ class BuildingRuntime:
 
     @property
     def status(self) -> str:
+        """Observation health; historical read_only does not disable control."""
         if any(d.reason == "observed_group_conflict" for d in self.decisions):
             return "conflict"
         if any(o.quality != "observed" for o in self.observations.values()):

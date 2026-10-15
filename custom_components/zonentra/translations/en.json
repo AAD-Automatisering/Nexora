@@ -159,7 +159,7 @@
       },
       "zone_details": {
         "title": "Zone",
-        "description": "Zones use the central configuration by default. Disable a building choice and press Next to enter local values. Existing local values remain available when switching back. Zonentra does not control equipment.",
+        "description": "Zones use the central configuration by default. Disable a building choice and press Next to enter local values. Existing local values remain available when switching back. This legacy configuration calculates plans; active control uses central configuration and zone entries.",
         "data": {
           "name": "Name",
           "delete": "Delete this record",
@@ -189,7 +189,7 @@
       },
       "group_details": {
         "title": "Outdoor unit group",
-        "description": "The feedback source must report heat, cool or off. Use reliable feedback, not a requested mode. Without feedback the actual mode stays unknown. Every proposal is read-only.",
+        "description": "The feedback source must report heat, cool or off. Use reliable feedback, not a requested mode. Without feedback the actual mode stays unknown. This source supplies mode feedback; the group switch enables active control.",
         "data": {
           "name": "Name",
           "delete": "Delete this record",
@@ -208,7 +208,7 @@
       },
       "equipment_details": {
         "title": "Equipment",
-        "description": "Register each indoor unit (an existing climate entity) as HVAC equipment in its zone; several units per zone and per outdoor unit group are supported. Zonentra only reads mode, hvac_action, temperatures and fan mode. Optional links can be cleared. No equipment is controlled.",
+        "description": "Register each indoor unit (an existing climate entity) as HVAC equipment in its zone; several units per zone and per outdoor unit group are supported. Optional links can be cleared. This legacy configuration observes equipment and calculates plans; active control uses central configuration and zone entries.",
         "data": {
           "name": "Name",
           "delete": "Delete this record",
@@ -220,7 +220,7 @@
       },
       "building": {
         "title": "Central configuration",
-        "description": "These analysis limits and parameters apply to zones that select building settings. Outdoor temperature always belongs to the whole building. Older outdoor sources still awaiting a choice: {outdoor_candidates}. No equipment is controlled. Manual override and anti-cycling settings only affect the simulated control plan; Zonentra 0.5 sends no commands.",
+        "description": "These limits and parameters apply to zones that select building settings. Outdoor temperature always belongs to the whole building. Older outdoor sources still awaiting a choice: {outdoor_candidates}. This legacy configuration calculates plans; active control uses central configuration and zone entries.",
         "data": {
           "outdoor_temperature_entity": "Outdoor temperature sensor (whole building)",
           "outdoor_max_age_seconds": "Maximum outdoor temperature age (seconds; 0 = disabled)",

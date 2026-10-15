@@ -1,8 +1,10 @@
 # Zonentra — roadmap
 
 Scope: één Home Assistant-installatie, één Zonentra, één gebouw. Alle fases moeten
-kleine, onafhankelijk toetsbare stappen blijven. Deze basis doet geen automatische
-hardware-aansturing.
+kleine, onafhankelijk toetsbare stappen blijven. Standregeling, ruimteregeling,
+ventilator, lamellen en zonwering zijn inmiddels geïmplementeerd. De beschrijvingen
+van versies 0.1–0.6 hieronder betreffen de oorspronkelijke observatie- en
+simulatiefases; ze beschrijven niet de huidige mogelijkheden voor aansturing.
 
 ## Fase 1 — fundament (0.1)
 
@@ -36,8 +38,8 @@ verificatie: unit/integratietests vervangen geen echte KNX/Mitsubishi-omgeving.
 - [x] 79 tests, linting, formatting en controles op nul hardwarecommando's.
 - [x] Gebruiker heeft 0.2 via HACS bijgewerkt op de kantoorinstallatie.
 
-Zie [ALGORITHM.md](ALGORITHM.md) voor de concrete formules en beperkingen. In deze
-versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
+Zie [ALGORITHM.md](ALGORITHM.md) voor de concrete formules en beperkingen. Versie
+0.2 verstuurde geen commando's; actieve standregeling is toegevoegd in 0.7.
 
 ### Versie 0.3 — centrale configuratie (geïmplementeerd)
 
@@ -165,26 +167,27 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] Preset `comfort` volgt aanwezigheid en beweging (vervangt `activity`).
 - [ ] Energie en overbelasting: alleen met vermogensmeting per airco.
 
-### Vervolg vóór actieve regeling
+### Vervolg voor uitbreiding van actieve regeling
 
 Inventariseer de fysieke topologie, betrouwbare gatewayfeedback en huidige
 schrijvers. Kies expliciet de eigenaar van elke installatie. Verifieer Mitsubishi-
 minimumlooptijden, break-before-make, veilige omschakeling en bevestiging/timeouts.
-Voeg handmatige override toe. Een eigen room controller volgt alleen bij
-aangetoonde behoefte; VTherm-koppeling is uit het plan verwijderd.
+Handmatige overrides, commandotracking, herpogingen en groepsblokkades zijn
+geïmplementeerd. Een eigen roomcontroller volgt alleen bij aangetoonde behoefte;
+VTherm-koppeling is uit het plan verwijderd.
 
-Pas na expliciete keuze voor actieve regeling komt één executor met deduplicatie,
-rate limits, lifecyclebeleid, overrides en feedback. De 16 °C-vloerverwarmingsgrens
-blijft beschermd. De huidige minimumtijd is een read-only analyseguard, geen
-gevalideerd actief HVAC-schakelprotocol.
+Breid de bestaande uitvoerlaag uit waar nieuwe installaties extra serialisatie,
+feedback of timing vereisen. De 16 °C-vloerverwarmingsgrens blijft beschermd.
+De diagnostische omschakelprocedure en minimumtijden zijn geen bewijs dat het
+fysieke HVAC-schakelprotocol voor iedere installatie is gevalideerd.
 
 ## Fase 3 — gebouwoptimalisatie
 
-Planning, occupied/unoccupied/unknown op gebouw- en ruimteniveau, debounce en
-mmWave-uitbreiding. Alarmmapping expliciet configureren. Voeg weercontext en
-zonwering toe nadat geveloriëntatie en lokale KNX-veiligheid zijn geverifieerd.
-Ventilatie combineert CO₂ en comfort met beperking van warmteverlies. Verwerk
-passieve zonweringsvoorstellen in dezelfde arbitrage als HVAC.
+Aanwezigheid, bewegingsvertragingen, weersverwachting en actieve zonwering zijn
+inmiddels geïmplementeerd. Verdere planning en mmWave-uitbreiding blijven gepland.
+Verdere gebouwventilatie kan CO₂ en comfort combineren met beperking van
+warmteverlies. Werk toekomstige zonwerings- en HVAC-optimalisatie vanuit dezelfde
+ruimtewaarnemingen uit.
 
 Exit: aantoonbaar minder heen-en-weer schakelen; onbekende bezetting krijgt een
 conservatieve behandeling; lokale KNX-veiligheid blijft onafhankelijk functioneren.

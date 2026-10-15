@@ -101,8 +101,7 @@ class BuildingSettings:
     max_age_seconds: float = 1800.0
     sensor_validation: str = STATE_BASED
     outdoor_temperature_candidates: tuple[str, ...] = ()
-    # 0.5 simulated control. Building-wide now; per-zone overrides could later
-    # be resolved like effective_zone() without changing these names.
+    # Building-wide manual override and HVAC timing settings.
     manual_override_enabled: bool = True
     manual_override_duration_minutes: float = 30.0
     min_on_seconds: float = 600.0  # comfort: avoid short runs

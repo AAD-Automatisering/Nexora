@@ -1,6 +1,6 @@
 # Zonentra — architectuur
 
-Status: versie 0.7.0, eerste actieve functie (standregeling buitenunitgroep), VTherm-achtige opbouw (centrale configuratie + ruimte-items), gesimuleerde regelstrategie en Manual Override, binnenunitobservatie, sensorvalidatie, centrale configuratie en Building Intelligence in read-only simulatie, 12 oktober 2026.
+Status: versie 0.13.6, 15 oktober 2026. Centrale configuratie en aparte ruimte-items delen één runtime voor observatie, klimaatvraag en actieve standregeling, ruimteregeling, ventilator, lamellen en zonwering. Pure plannen en diagnostische omschakelfases blijven afzonderlijk zichtbaar.
 
 ## Projectnaam en integratie-identiteit
 
@@ -32,8 +32,8 @@ Lokale KNX-veiligheid en bestaande VTherm/KNX/Shelly-automations blijven functio
 
 `models.py`, `observations.py`, `demand.py`, `engine.py` en de bestaande hold-
 simulator `decision.py` importeren geen Home Assistant. `runtime.py`
-leest state en publiceert updates, `config_flow.py` beheert de UI, `sensor.py` toont
-status. Runtime staat in de getypeerde `ConfigEntry.runtime_data`.
+leest states, evalueert plannen en verstuurt toegestane commando's via HA-services.
+`config_flow.py` beheert de UI; `sensor.py` toont waarnemingen, plannen en resultaten. Runtime staat in de getypeerde `ConfigEntry.runtime_data`.
 
 Alternatief: tien managers met eigen eventbussen en onderlinge afhankelijkheden.
 Dat levert voor het fundament veel levenscyclus- en synchronisatiewerk op. Daarom
@@ -42,10 +42,11 @@ als ze eigen gedrag nodig hebben. Geen lege implementaties voor toekomstige modu
 
 ### Besluit B — voorstellen centraal arbitreren
 
-Een toekomstige module mag alleen een voorstel indienen. Eén Decision Engine
-beoordeelt alle voorstellen uit dezelfde snapshot en maakt één plan. Eén toekomstige
-uitvoerlaag bezit de bevoegdheid om HA-services aan te roepen. Ook versie 0.3 bevat die laag
-niet. Meerdere apparaten met hetzelfde fysieke entity-ID worden afgewezen.
+De pure modules berekenen vraag, groepsvoorstellen en regelplannen uit dezelfde
+snapshot. `runtime.py` koppelt deze aan de ingeschakelde regelingen en bezit de
+bevoegdheid om HA-services aan te roepen. De groepsschakelaar blokkeert alle HVAC-
+en lamelcommando's voor de groep; ruimteregeling en zonwering hebben daarnaast
+hun eigen schakelaars. Meerdere apparaten met hetzelfde fysieke entity-ID worden afgewezen.
 De fysieke Mitsubishi-climate wordt als apparatuur aan een ruimte gekoppeld.
 Er is geen aparte ruimteregelaarkoppeling of VTherm-adapter. Klimaatvraag gebruikt
 de externe ruimtetemperatuur en effectieve analysegrenzen.
@@ -125,7 +126,8 @@ Grenzen van de ruimteregeling:
   (commando of openstaande uit-puls) worden overgeslagen;
 - elk commando via de bestaande CommandTracker (modus) of een aparte
   setpoint-tracker, met commandolog; mensen gaan voor via Manual Override;
-- vloerverwarming, ventilatie en zonwering blijven simulatie.
+- vloerverwarming en gebouwventilatie worden geobserveerd; zonwering heeft een
+  eigen planner en schakelaar voor actieve bediening.
 
 ## Ruimtetoestand (0.10)
 
@@ -213,29 +215,33 @@ Status-sensor met fysieke hold-beslissingen. De nieuwe, pure analysemodellen zij
 | IndoorUnitObservation | Beschikbaarheid, selected mode, reported action, kwaliteit en mismatch per binnenunit |
 | GroupModeObservation | Consensus, activiteit, afgeleide modus, conflicten, volledigheid, kwaliteit en reden per groep |
 | ManualOverride | Start, absolute eindtijd en startmodus per binnenunit (alleen in geheugen) |
-| PendingCommand / CommandTracker | Verwachte state van een Zonentra-commando met begrensde bevestigingsperiode (ontwerp voor actieve aansturing; leeg in 0.5) |
+| PendingCommand / CommandTracker | Verwachte state van een verstuurd commando, met begrensde bevestigingsperiode voor het herkennen van eigen wijzigingen |
 | CoordinationMemory | Gecoördineerde groepsmodus, sinds wanneer, en voortgang van een omschakeling |
 | GroupCoordination | Leidende groepsmodus, omschakelfase, blockers, geplande acties; `simulation=True`, `active_switch_permitted=False` |
 | UnitIntent | Waargenomen en gewenste modus, eerstvolgende actie, stappen, reden, blokkade, override en resterende tijd |
 
 `control.plan()` is de Control Intent Engine: een pure functie van klimaatvraag,
-groepsbesluit, binnenunitobservaties, overrides, tijdsparameters en `now`. Er is
-geen uitvoeradapter; een toekomstige adapter zou intents vertalen naar services en
-elk commando eerst in de CommandTracker registreren.
+groepsbesluit, binnenunitobservaties, overrides, tijdsparameters en `now`.
+De runtime vertaalt unit-intents naar commando's voor vrijgegeven ruimteregeling.
+Eigen modus- en setpointwijzigingen worden vóór verzending geregistreerd, zodat
+ze bij de terugmelding herkenbaar zijn.
 
 De runtime verzamelt één snapshot op één UTC-tijdstip. `collect_zone` bouwt pure
 snapshots, `calculate_demand` berekent behoeften, `evaluate`/`decide_group`
 arbitreren per installatiegroep. Reden-codes zitten direct in de resultaten;
 sensor.py vertaalt presentatie, diagnostics.py maakt een geredigeerde export.
-Er is geen uitvoeradapter. Extra context is al configureerbaar en gekoppelde
-vloerverwarming/zonwering zit in de snapshot, maar krijgt geen regelgedrag.
+Dezelfde runtime voert groepspresets, ruimteregeling en zonweringsplannen uit.
+Aanwezigheid, ramen en weersverwachting beïnvloeden de regeling. Gekoppelde
+vloerverwarming en gebouwventilatie krijgen nog geen actieve aansturing.
 
 Zie [ALGORITHM.md](ALGORITHM.md) voor het volledige geïmplementeerde algoritme.
 Harde randvoorwaarden gaan vóór scoreafwegingen: alle kritieke groepsdata moeten
 betrouwbaar zijn, actuele modus mag niet geraden worden en omschakelwachttijden
 worden nooit door een voorstel zelf gereset. Optionele context blokkeert niet.
-Herstart/reload begint met een conservatieve wachttijd; er wordt geen uitvoerplan
-of hypothetische modus opgeslagen/hersteld.
+Een centrale reload neemt hysterese, overrides, pending commando's en timers over.
+Na een volledige HA-herstart worden thermostaatinstellingen en geslaagde
+groepspresets uit opslag hersteld; overrides en gedeeltelijke presetaanvragen
+blijven alleen in het geheugen van de lopende HA-sessie.
 
 ### Centrale configuratie en compatibiliteit
 
@@ -295,7 +301,7 @@ resource, intent, prioriteit, reden, geldig-tot); geen `hass` of uitvoeradapter.
 `evaluate(snapshot, now) -> proposals` wordt de pure testbare grens. De Engine levert
 `DecisionPlan` met gekozen én afgewezen voorstellen en reason codes. Dependencies blijven één richting op: HA-adapter → kern.
 
-## Prioriteiten en conflictpreventie voor toekomstige actieve regeling
+## Prioriteiten en verdere conflictpreventie bij actieve regeling
 
 1. Harde veiligheids- en installatiebeperkingen worden altijd toegepast. Lokale
    KNX-windveiligheid blijft leidend; Zonentra mag die niet uitschakelen. De 16 °C-
@@ -316,16 +322,18 @@ met feedback en timeouts; het vermogen tot veilige omschakeling is nog niet bewe
 
 Een plan krijgt een snapshot-revisie, vervalt bij relevante bronwijzigingen en wordt
 vóór uitvoering opnieuw op beschikbaarheid, overrides en grenzen gecontroleerd.
-Een toekomstige executor serialiseert per installatie, dedupliceert gewenste waarden
-en beperkt schrijffrequentie. Hij behandelt servicefouten en bevestiging van de
-werkelijke toestand afzonderlijk; een succesvolle servicecall bewijst geen uitvoering.
+De runtime begrenst de schrijffrequentie, volgt eigen commando's en behandelt
+servicefouten bij groepspresets met herpogingen per mislukte unit. Verdere
+serialisatie en fysieke terugmelding blijven uitbreidingspunten. Een succesvolle
+servicecall bewijst geen fysieke uitvoering.
 Op herstart worden timer-/overridegegevens hersteld of conservatieve wachttijden
 gebruikt. Er worden geen oude plannen blind opnieuw uitgevoerd.
 
 VTherm en bestaande automations mogen in fase 2 niet tegelijkertijd met Zonentra de
 bedrijfsmodus van dezelfde fysieke unit schrijven. Eigenaarsoverdracht is een
 expliciete installatiekeuze; op basis van HA-context alleen kan Zonentra niet alle
-handmatige bediening betrouwbaar herkennen. Zonentra 0.3 claimt geen eigenaarschap van apparaatbesturing.
+handmatige bediening betrouwbaar herkennen. Leg bij actieve aansturing vast welke
+regeling de betreffende apparaatinstellingen beheert.
 
 ## VTherm-analyse en hergebruik
 
@@ -362,14 +370,16 @@ recorder/http als after_dependencies en numpy, scipy en vtherm_api>=0.5.0 als Py
 requirements. Zonentra importeert deze niet. Private VTherm-klassen zijn geen stabiel
 contract. Gebruik eerst de standaard climate-entiteit voor observatie; eventuele
 vtherm_api-integratie vereist een afzonderlijke compatibiliteits- en licentieaudit.
-De huidige fanautomation blijft buiten Zonentra. VTherm-koppeling maakt geen deel
-uit van het verdere implementatieplan.
+De ventilatorstand van binnenunits kan inmiddels door Zonentra worden geregeld;
+de ruimte heeft hiervoor een eigen schakelaar. Gebouwventilatie en een
+VTherm-koppeling maken geen deel uit van die ventilatorregeling.
 
 ## Diagnostiek en grenzen
 
 De bestaande gebouwstatus blijft een overzicht van connectiviteit en fysieke
-hold-simulatie. Per ruimte en per groep is er één extra diagnostische enum-sensor;
-scores, temperaturen en verklaringen staan in begrensde attributen. De gebouwsensor
+hold-simulatie. Ruimte- en groepsentiteiten tonen vraag, afgeleide modi,
+coördinatie en regelstatus; scores, temperaturen en verklaringen staan in
+begrensde attributen. De gebouwstatus bepaalt niet of actieve aansturing aan staat. De gebouwsensor
 bevat maximaal 20 equipment-beslissingen en een totaalcount. Sensorleeftijd,
 bronkwaliteit en de actuele/gewilde/toegestane modus zijn afzonderlijk zichtbaar.
 De export redigeert alle entityvelden, contactlijsten, namen, IDs en member_zone_ids;
@@ -378,11 +388,12 @@ relevante waarden en apparatuur-IDs voor uitleg.
 
 Geen afzonderlijke buitenunitmeters: later zijn energie-inschattingen altijd als
 estimated gemarkeerd, zonder HA measurement-statistieken te claimen. Zonentra 0.3 bevat
-geen energiegetallen; gewogen klimaatscores zijn geen energiemetingen. Alarm → gebouwbezetting, mmWave-debounce, CO₂-regeling,
-weerstation en planning worden pas in latere fases gebouwd. Meetvalidatie en
-stale-detectie zijn nu wel geïmplementeerd; optionele context heeft nog geen beleidswerking.
+geen energiegetallen; gewogen klimaatscores zijn geen energiemetingen. Verdere
+luchtkwaliteitsregeling en planning blijven uitbreidingspunten. Aanwezigheid, beweging,
+raamcontacten en weersverwachting hebben inmiddels wel invloed op de regeling;
+CO₂ en vochtigheid worden als context geobserveerd.
 
-## Nog te bepalen vóór actieve regeling
+## Nog te verifiëren per installatie
 
 - Welke fysieke binnenunits horen bij buitenunit 1 en 2? Welke entities zijn VTherm,
   welke Mitsubishi/Intesis/KNX, en welke bestaande automations schrijven modi?
@@ -396,10 +407,11 @@ stale-detectie zijn nu wel geïmplementeerd; optionele context heeft nog geen be
 - Voor de 0.5-simulatie: welke minimale aan-/uittijden en heat↔cool-wachttijd
   schrijft Mitsubishi voor (de standaarden 600/180/300 s zijn aannames)? Rapporteren
   de Intesis/KNX-entities een betrouwbare modus na een commando, en hoe snel?
-  Welke automations zetten airco's aan (die starten nu ook een override)?
+  Welke automations zetten airco's aan en welke HA-context geven ze mee?
 
-Deze vragen blokkeren read-only analyse niet, maar moeten vóór actieve regeling worden beantwoord. Er worden geen fysieke aannames automatisch als
-configuratie ingevuld.
+Deze installatievragen staan los van de observatie en vraagberekening. Controleer
+voor de gebruikte actieve functies welke standaardwaarden en beschikbare
+terugmeldingen bij de fysieke installatie passen.
 
 ## Geverifieerde Home Assistant-bronnen
 

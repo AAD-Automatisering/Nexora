@@ -159,7 +159,7 @@
       },
       "zone_details": {
         "title": "Ruimte",
-        "description": "Standaard gebruiken ruimtes de centrale configuratie. Schakel een gebouwkeuze uit en klik Verder om eigen waarden in te vullen. Bestaande eigen waarden blijven beschikbaar bij terugschakelen. Zonentra stuurt niets aan.",
+        "description": "Ruimtes gebruiken standaard de centrale configuratie. Zet een gebouwkeuze uit en druk op Volgende om lokale waarden in te voeren. Eerdere lokale waarden blijven bewaard bij terugschakelen. Deze oude configuratie berekent regelplannen; actieve aansturing gebruikt de centrale configuratie met aparte ruimte-items.",
         "data": {
           "name": "Naam",
           "delete": "Dit item verwijderen",
@@ -189,7 +189,7 @@
       },
       "group_details": {
         "title": "Buitenunitgroep",
-        "description": "De feedbackbron moet heat, cool of off melden. Gebruik alleen betrouwbare terugmelding, geen gewenste modus. Zonder feedback blijft de actuele modus unknown. Alle voorstellen zijn read-only.",
+        "description": "De feedbackbron moet heat, cool of off melden. Gebruik alleen betrouwbare terugmelding, geen gewenste modus. Zonder feedback blijft de actuele modus unknown. Deze bron levert terugmelding; de groepsschakelaar bepaalt de actieve aansturing.",
         "data": {
           "name": "Naam",
           "delete": "Dit item verwijderen",
@@ -208,7 +208,7 @@
       },
       "equipment_details": {
         "title": "Apparatuur",
-        "description": "Registreer iedere binnenunit (een bestaande climate-entiteit) als HVAC-apparatuur in zijn ruimte; meerdere units per ruimte en per buitenunitgroep zijn mogelijk. Zonentra leest alleen modus, hvac_action, temperaturen en ventilatorstand. Optionele koppelingen kunnen worden gewist. Er wordt niets aangestuurd.",
+        "description": "Koppel iedere binnenunit (een bestaande climate-entiteit) als HVAC-apparaat aan haar ruimte; meerdere units per ruimte en buitenunitgroep worden ondersteund. Optionele koppelingen kunnen worden gewist. Deze oude configuratie observeert apparatuur en berekent regelplannen; actieve aansturing gebruikt de centrale configuratie met aparte ruimte-items.",
         "data": {
           "name": "Naam",
           "delete": "Dit item verwijderen",
@@ -220,7 +220,7 @@
       },
       "building": {
         "title": "Centrale configuratie",
-        "description": "Deze analysegrenzen en regelparameters worden gebruikt door ruimtes die gebouwinstellingen kiezen. Buitentemperatuur geldt altijd voor het hele gebouw. Oudere buitensensoren die nog om een keuze vragen: {outdoor_candidates}. Er worden geen apparaten aangestuurd. Instellingen voor handmatige bediening en anti-pendel beïnvloeden alleen het gesimuleerde regelplan; Zonentra 0.5 verstuurt geen commando's.",
+        "description": "Deze grenzen en regelparameters worden gebruikt door ruimtes die gebouwinstellingen kiezen. Buitentemperatuur geldt altijd voor het hele gebouw. Oudere buitensensoren die nog om een keuze vragen: {outdoor_candidates}. Deze oude configuratie berekent regelplannen; actieve aansturing gebruikt de centrale configuratie met aparte ruimte-items.",
         "data": {
           "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
           "outdoor_max_age_seconds": "Maximale buitentemperatuurleeftijd (seconden; 0 = uit)",

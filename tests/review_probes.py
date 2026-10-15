@@ -5,7 +5,7 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_mock_service
 
-from custom_components.zonentra.config_flow import clean, merge_zone
+from custom_components.zonentra.config_flow import merge_zone, merge_zone_parameters
 from custom_components.zonentra.models import build_model
 from custom_components.zonentra.runtime import BuildingRuntime
 from tests.test_entry_layout import (
@@ -78,7 +78,7 @@ async def test_review_failed_preset_is_not_applied_and_is_retried_for_off_unit(
     assert hass.states.get(UNIT).state == "off"
 
 
-def test_review_cleared_limit_entities_survive_zone_parameters():
+def test_review_cleared_limit_entities_are_removed_from_zone_parameters():
     previous = {
         "id": "west",
         "name": "West",
@@ -87,12 +87,11 @@ def test_review_cleared_limit_entities_survive_zone_parameters():
         "cooling_limit_entity": "input_number.cool",
     }
     first = merge_zone(previous, {"name": "West", "use_building_limits": False})
-    second = {
-        **first,
-        **clean({"heating_limit_entity": "", "cooling_limit_entity": ""}),
-    }
-    assert second["heating_limit_entity"] == "input_number.heat"
-    assert second["cooling_limit_entity"] == "input_number.cool"
+    second = merge_zone_parameters(
+        first, {"heating_limit_entity": "", "cooling_limit_entity": ""}
+    )
+    assert "heating_limit_entity" not in second
+    assert "cooling_limit_entity" not in second
 
 
 async def test_review_control_local_limit_entities_work(hass):

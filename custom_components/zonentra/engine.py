@@ -1,4 +1,4 @@
-"""Pure central climate arbitration. Outputs describe simulations, never commands."""
+"""Pure weighted climate arbitration producing diagnostic group proposals."""
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta

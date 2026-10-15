@@ -84,7 +84,7 @@ def building_fields(limits: bool = True) -> dict:
         vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
         vol.Optional("sensor_validation"): choice(list(VALIDATION_STRATEGIES)),
         vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
-        # Simulated control (0.5): building-wide, no device is controlled.
+        # Building-wide manual overrides and timing for planning and control.
         vol.Optional("manual_override_enabled"): selector.BooleanSelector(),
         vol.Optional("manual_override_duration_minutes"): numeric(5, 120, 1, "min"),
         vol.Optional("min_on_seconds"): numeric(0, 3600, 1, "s"),
@@ -296,6 +296,15 @@ def merge_zone(previous: dict, submitted: dict) -> dict:
     return record
 
 
+def merge_zone_parameters(previous: dict, submitted: dict) -> dict:
+    """Replace the visible parameter fields; retain hidden local settings."""
+    visible = {marker.schema for marker in zone_parameter_fields(previous)}
+    return {
+        **{key: value for key, value in previous.items() if key not in visible},
+        **clean(submitted),
+    }
+
+
 def zone_entities(record: dict) -> set[str]:
     values = [record.get(field) for field in ZONE_ENTITY_FIELDS]
     values += list(record.get("contact_entities", ()))
@@ -439,7 +448,7 @@ class ZonentraConfigFlow(ZoneFormMixin, ConfigFlow, domain=DOMAIN):
     async def async_step_zone_parameters(self, user_input=None) -> ConfigFlowResult:
         errors = {}
         if user_input is not None:
-            self.zone = {**self.zone, **clean(user_input)}
+            self.zone = merge_zone_parameters(self.zone, user_input)
             errors = check_zone(self.hass, self.zone)
             if not errors:
                 return await self._create_zone()
@@ -491,7 +500,7 @@ class ZoneOptionsFlow(ZoneFormMixin, OptionsFlow):
     async def async_step_zone_parameters(self, user_input=None):
         errors = {}
         if user_input is not None:
-            self.zone = {**self.zone, **clean(user_input)}
+            self.zone = merge_zone_parameters(self.zone, user_input)
             errors = check_zone(self.hass, self.zone, self.config_entry.entry_id)
             if not errors:
                 return self._save()

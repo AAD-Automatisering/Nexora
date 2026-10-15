@@ -1,4 +1,4 @@
-"""Zonentra — read-only intelligent building management foundation.
+"""Zonentra — building observations, climate coordination and active control.
 
 Entry layout (0.6, like Versatile Thermostat): one central configuration entry
 owns the building runtime; each zone entry adds a room. Zone entries never
@@ -258,7 +258,7 @@ async def _async_zone_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> bool:
-    """Unload diagnostic entities; HA removes entry callbacks on success."""
+    """Unload entry platforms; HA removes entry callbacks on success."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, platforms(entry))
     if unloaded and entry_type(entry) == CENTRAL:
         # Kept for a reload in this session (0.13.4); a restart starts fresh.
