@@ -90,8 +90,10 @@ def auto_fan(
     heating_limit: float | None,
     cooling_limit: float | None,
     hysteresis: float,
+    step_size: float = AUTO_FAN_STEP,
 ) -> str | None:
-    """Fan speed for the automatic fan: one step per 0.5 °C from the target.
+    """Fan speed for the automatic fan: one step per ``step_size`` °C (default
+    0.5, a central setting) from the target.
 
     ``speeds`` are the unit's fan speeds from low to high, without off/auto.
     Without heating or cooling (dry, fan only, unknown) the lowest speed runs.
@@ -104,7 +106,7 @@ def auto_fan(
             distance = heating_limit + hysteresis - room_temperature
         elif mode == "cool" and cooling_limit is not None:
             distance = room_temperature - (cooling_limit - hysteresis)
-    step = int(max(0.0, distance) / AUTO_FAN_STEP)
+    step = int(max(0.0, distance) / step_size)
     return speeds[min(len(speeds) - 1, step)]
 
 

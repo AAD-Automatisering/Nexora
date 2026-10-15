@@ -420,7 +420,8 @@ Per zonwering (een `cover` met positie) beslist Zonentra, in deze volgorde:
 - **Automatische ventilator:** de thermostaat biedt `auto` als de units zelf geen
   automatische stand hebben. Met Ruimteregeling kiest Zonentra dan per 0,5 °C afstand
   tot het doel één stand hoger (bij jullie unit 25 → 50 → 75 → 100%), hooguit eens per
-  setpoint-wachttijd. In `dry` en `fan_only` draait de laagste stand.
+  setpoint-wachttijd. De graden per stand stel je in bij Configureren →
+  **Ruimteregeling** (0,2–2 °C, standaard 0,5; sinds 0.13.1). In `dry` en `fan_only` draait de laagste stand.
 - **Lamel:** stel per ruimte een select-, number- of schakelaar-entiteit in met een
   stand voor koelen (omhoog) en verwarmen (omlaag); bij een schakelaar (bijvoorbeeld
   KNX "vane auto/stop", DPT 1.001) zijn de standen `on` of `off`. Zodra een unit van de ruimte gaat koelen

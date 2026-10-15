@@ -133,6 +133,7 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] Menu: algemeen, aanwezigheid, ruimteregeling, zonwering, weersverwachting, buitenunitgroepen.
 - [x] Een onderwerp wijzigt alleen zijn eigen velden; bestaande instellingen blijven staan.
 - [x] Nieuwe centrale configuratie: alleen naam en buitentemperatuursensor.
+- [x] 0.13.1: graden per ventilatorstand van de automatische ventilator instelbaar.
 - [ ] Ruimte-instellingen op dezelfde manier uitsplitsen.
 
 ### Versie 0.14.0 — warmtebron kiezen (gepland)

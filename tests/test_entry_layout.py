@@ -245,7 +245,15 @@ async def test_referenced_group_cannot_be_deleted(hass):
     central = await setup_central(hass)
     await add_zone(hass, zone_options("west", "climate.west_ac"))
     result = await hass.config_entries.options.async_init(central.entry_id)
-    assert result["menu_options"] == ["building", "group", "finish"]
+    assert result["menu_options"] == [
+        "general",
+        "presence",
+        "regulation",
+        "screens",
+        "forecast",
+        "group",
+        "finish",
+    ]
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "group"}
     )

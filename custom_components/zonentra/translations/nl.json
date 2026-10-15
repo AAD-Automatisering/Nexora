@@ -129,7 +129,8 @@
           "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)",
           "setpoint_max_offset": "Maximale setpointcorrectie van een binnenunit (°C)",
           "setpoint_interval_seconds": "Minimale tijd tussen setpointwijzigingen (seconden)",
-          "window_delay_seconds": "Raam open: vertraging voordat de ruimte stopt (seconden)"
+          "window_delay_seconds": "Raam open: vertraging voordat de ruimte stopt (seconden)",
+          "auto_fan_step": "Automatische ventilator: graden van het doel per ventilatorstand"
         }
       },
       "screens": {
@@ -250,7 +251,8 @@
           "screen_block_entity": "Zonwering: blokkeer-entiteit, bijv. windalarm (optioneel; aan = geen commando's)",
           "screen_shade_position": "Zonwering: stand bij zonwering (%; 100 = open)",
           "screen_override_minutes": "Zonwering: handmatige bediening respecteren (minuten)",
-          "weather_entity": "Weersverwachting (optioneel; warme/koude dagen voor zonwering en minder omschakelen tussen verwarmen en koelen)"
+          "weather_entity": "Weersverwachting (optioneel; warme/koude dagen voor zonwering en minder omschakelen tussen verwarmen en koelen)",
+          "auto_fan_step": "Automatische ventilator: graden van het doel per ventilatorstand"
         }
       },
       "zone_settings": {

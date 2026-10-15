@@ -129,7 +129,8 @@
           "changeover_wait_seconds": "Wait between stopping and the opposite mode on a group switch (seconds; safety)",
           "setpoint_max_offset": "Maximum setpoint correction of an indoor unit (°C)",
           "setpoint_interval_seconds": "Minimum time between setpoint changes (seconds)",
-          "window_delay_seconds": "Open window: delay before the room stops (seconds)"
+          "window_delay_seconds": "Open window: delay before the room stops (seconds)",
+          "auto_fan_step": "Automatic fan: °C from the target per fan speed step"
         }
       },
       "screens": {
@@ -250,7 +251,8 @@
           "screen_block_entity": "Screens: block entity, e.g. wind alarm (optional; on = no commands)",
           "screen_shade_position": "Screens: position when shading (%; 100 = open)",
           "screen_override_minutes": "Screens: respect manual operation for (minutes)",
-          "weather_entity": "Weather forecast (optional; warm/cold days for screens and fewer heat/cool changeovers)"
+          "weather_entity": "Weather forecast (optional; warm/cold days for screens and fewer heat/cool changeovers)",
+          "auto_fan_step": "Automatic fan: °C from the target per fan speed step"
         }
       },
       "zone_settings": {

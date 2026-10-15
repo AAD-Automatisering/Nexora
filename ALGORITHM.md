@@ -1,4 +1,4 @@
-# Zonentra 0.13.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.13.1 — uitlegbare klimaatintelligentie
 
 Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
 commando en verandert ook niet de intern bijgehouden actuele modus. De actieve
@@ -528,7 +528,8 @@ naar nul. Alleen in het geheugen.
 
 **Automatische ventilator.** Alleen als de units zelf geen `auto` hebben. Afstand =
 verwarmen: grens + hysterese − T; koelen: T − (grens − hysterese). Stand = de
-`int(afstand / 0,5)`-de van de units (zonder `off`), begrensd op de hoogste; zonder
+`int(afstand / auto_fan_step)`-de van de units (`auto_fan_step` centraal, standaard
+0,5 °C) (zonder `off`), begrensd op de hoogste; zonder
 verwarmen of koelen de laagste. Gestuurd via `set_fan_mode`, eenmaal per gekozen
 stand en hooguit eens per `setpoint_interval_seconds`.
 

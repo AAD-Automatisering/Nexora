@@ -142,6 +142,31 @@ def test_auto_fan(mode, room, expected):
     assert auto_fan(SPEEDS, mode, room, 21.0, 24.0, 0.3) == expected
 
 
+@pytest.mark.parametrize(
+    ("step", "room", "expected"),
+    [
+        (1.0, 20.7, "25%"),  # 0.6 below: within the first degree.
+        (1.0, 19.9, "50%"),  # 1.4 below.
+        (0.25, 20.7, "75%"),  # 0.6 below: two steps of 0.25.
+        (0.25, 20.2, "100%"),
+    ],
+)
+def test_auto_fan_step_size(step, room, expected):
+    """0.13.1: the °C per fan speed step is a central setting."""
+    assert auto_fan(SPEEDS, "heat", room, 21.0, 24.0, 0.3, step) == expected
+
+
+def test_auto_fan_step_setting():
+    from custom_components.zonentra.models import build_model
+
+    assert build_model("b", "B", {}).settings.auto_fan_step == 0.5
+    settings = {"building": {"auto_fan_step": 1.0}}
+    assert build_model("b", "B", settings).settings.auto_fan_step == 1.0
+    for wrong in (0.1, 3):
+        with pytest.raises(ValueError):
+            build_model("b", "B", {"building": {"auto_fan_step": wrong}})
+
+
 def test_auto_fan_without_speeds():
     assert auto_fan((), "heat", 18, 21, 24, 0.3) is None
 

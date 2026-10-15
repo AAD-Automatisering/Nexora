@@ -950,6 +950,7 @@ class BuildingRuntime:
                 snapshot.heating_limit.value,
                 snapshot.cooling_limit.value,
                 zone.hysteresis,
+                self.building.settings.auto_fan_step,
             )
             self.auto_fans[item.zone_id] = desired
             last = self.fan_sent_at.get(item.id)
