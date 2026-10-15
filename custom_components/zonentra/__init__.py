@@ -179,8 +179,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
         known = hass.data.setdefault(DOMAIN, {}).setdefault("presence", {})
         presence = building.settings.presence_entity
         if entry.entry_id in known and known[entry.entry_id] != presence:
-            for zone in zone_entries(hass):
-                hass.config_entries.async_schedule_reload(zone.entry_id)
+            # Only once the central entry is loaded: a zone waits for it.
+            listener = {}
+
+            @callback
+            def stop() -> None:
+                if remove := listener.pop("remove", None):
+                    remove()
+
+            @callback
+            def reload_zones() -> None:
+                if entry.state is not ConfigEntryState.LOADED:
+                    return
+                stop()
+                for zone in zone_entries(hass):
+                    hass.config_entries.async_schedule_reload(zone.entry_id)
+
+            listener["remove"] = entry.async_on_state_change(reload_zones)
+            entry.async_on_unload(stop)
         known[entry.entry_id] = presence
     if kind == CENTRAL and building.settings.weather_entity:
         # 0.12: the hourly forecast is asked for, it is not a state change.
