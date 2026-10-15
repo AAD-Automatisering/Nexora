@@ -8,8 +8,11 @@ from custom_components.zonentra.observations import Reading
 from custom_components.zonentra.roomstate import (
     Trend,
     auto_fan,
+    fan_names,
     fan_speeds,
     safety_state,
+    thermostat_fan,
+    unit_fan,
     update_trend,
     vane_command,
     vane_mode,
@@ -165,6 +168,32 @@ def test_auto_fan_step_setting():
     for wrong in (0.1, 3):
         with pytest.raises(ValueError):
             build_model("b", "B", {"building": {"auto_fan_step": wrong}})
+
+
+@pytest.mark.parametrize(
+    ("unit_fans", "expected"),
+    [
+        (("off", "25%", "50%", "75%", "100%"), ["low", "middle", "medium", "high"]),
+        (("auto", "quiet", "normal", "max"), ["low", "middle", "high"]),
+        (("slow", "fast"), ["low", "high"]),
+        (("1", "2", "3", "4", "5"), ["1", "2", "3", "4", "5"]),  # Kept as is.
+        (("off", "auto"), []),
+    ],
+)
+def test_standard_fan_names(unit_fans, expected):
+    """0.13.2: HomeKit only understands Home Assistant's standard names."""
+    assert list(fan_names(unit_fans)) == expected
+
+
+def test_fan_names_both_ways():
+    fans = ("off", "25%", "50%", "75%", "100%")
+    assert unit_fan("medium", fans) == "75%"
+    assert unit_fan("75%", fans) == "75%"  # A stored unit speed still works.
+    assert unit_fan("turbo", fans) is None
+    assert unit_fan(None, fans) is None
+    assert thermostat_fan("25%", fans) == "low"
+    assert thermostat_fan("off", fans) == "off"
+    assert thermostat_fan(None, fans) is None
 
 
 def test_auto_fan_without_speeds():

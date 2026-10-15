@@ -481,6 +481,13 @@ Met **Ruimteregeling** aan:
   weer wijzigt. Gaat de groep naar verwarmen, dan gaat een drogende unit uit.
 - De ventilatorstand van de thermostaat gaat eenmaal per wijziging naar draaiende
   units; een andere stand op de roomcontroller wordt niet teruggezet.
+- **Ventilator in HomeKit (0.13.2):** de thermostaat noemt de standen van de units
+  zoals Home Assistant ze kent: `auto`, `low`, `middle`, `medium`, `high` (bij vier
+  standen 25/50/75/100%; bij drie low/middle/high, bij twee low/high). Daardoor toont
+  HomeKit (via HomeKit Bridge) bij de thermostaat een ventilator met een
+  snelheidsschuif en een automaatstand. Units met meer dan vier standen houden hun
+  eigen namen. Zie je de ventilator in HomeKit nog niet, reset dan het accessoire:
+  actie `homekit.reset_accessory` met de Zonentra-thermostaat.
 
 De thermostaat wordt bewaard en overleeft herstarts. De sensor **Regelactie** van de
 binnenunit toont `room_regulation`, `room_regulation_status`, `setpoint_status`,

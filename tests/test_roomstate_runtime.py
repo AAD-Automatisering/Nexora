@@ -109,7 +109,7 @@ async def test_automatic_fan(hass, freezer):
     runtime = central.runtime_data
     thermostat = hass.states.get(entity(hass, "climate", f"{zone.entry_id}_thermostat"))
     # The units have no auto fan of their own: Zonentra adds one.
-    assert thermostat.attributes["fan_modes"] == ["auto", *KNX["fan_modes"]]
+    assert thermostat.attributes["fan_modes"][0] == "auto"
     runtime.set_thermostat("west", regulation=True, fan_mode="auto")
     await later(hass, freezer, minutes=4)
     await unit(hass, "heat", **KNX)

@@ -134,6 +134,7 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] Een onderwerp wijzigt alleen zijn eigen velden; bestaande instellingen blijven staan.
 - [x] Nieuwe centrale configuratie: alleen naam en buitentemperatuursensor.
 - [x] 0.13.1: graden per ventilatorstand van de automatische ventilator instelbaar.
+- [x] 0.13.2: ventilatorstanden onder de standaardnamen van Home Assistant, zodat HomeKit een ventilator toont.
 - [ ] Ruimte-instellingen op dezelfde manier uitsplitsen.
 
 ### Versie 0.14.0 — warmtebron kiezen (gepland)

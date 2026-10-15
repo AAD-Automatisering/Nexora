@@ -484,7 +484,11 @@
           },
           "fan_mode": {
             "state": {
-              "auto": "Auto"
+              "auto": "Auto",
+              "low": "Laag",
+              "middle": "Middel",
+              "medium": "Middelhoog",
+              "high": "Hoog"
             }
           }
         }

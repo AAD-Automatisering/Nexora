@@ -49,6 +49,7 @@ from .roomstate import (
     auto_fan,
     fan_speeds,
     safety_state,
+    unit_fan,
     update_trend,
     vane_command,
     vane_mode,
@@ -937,7 +938,8 @@ class BuildingRuntime:
             return None
         state = self.hass.states.get(item.entity_id)
         supported = tuple((state.attributes.get("fan_modes") or ()) if state else ())
-        desired = thermostat.fan_mode
+        # The thermostat's standard name (0.13.2) -> the unit's own speed.
+        desired = unit_fan(thermostat.fan_mode, supported)
         if self.zone_auto_fan(item.zone_id):
             snapshot = self.zone_snapshots[item.zone_id]
             zone = next(z for z in self.building.zones if z.id == item.zone_id)

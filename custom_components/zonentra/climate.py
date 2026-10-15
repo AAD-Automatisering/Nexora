@@ -29,7 +29,7 @@ from homeassistant.components.climate import (
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
 from .entity import ZoneEntity, zone_context
-from .roomstate import AUTO_FAN
+from .roomstate import AUTO_FAN, fan_names, thermostat_fan
 from .thermostat import MANUAL_PRESET, PRESETS, UNIT_MODES, single_target
 
 BASE_FEATURES = (
@@ -91,18 +91,19 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
 
     @property
     def fan_modes(self) -> list[str] | None:
-        """The units' fan speeds; plus Zonentra's ``auto`` if they have none."""
-        fans = list(self._options()[1])
-        if fans and AUTO_FAN not in fans:
-            fans.insert(0, AUTO_FAN)
-        return fans or None
+        """``auto`` plus the units' speeds under Home Assistant's standard
+        names (low, middle, medium, high), so HomeKit shows a fan with a speed
+        slider. ``auto`` is the units' own or Zonentra's automatic fan."""
+        names = list(fan_names(self._options()[1]))
+        return [AUTO_FAN, *names] if names else None
 
     @property
     def fan_mode(self) -> str | None:
         if not self.fan_modes:
             return None
+        speeds = self._options()[1]
         if self.thermostat.fan_mode is not None:
-            return self.thermostat.fan_mode
+            return thermostat_fan(self.thermostat.fan_mode, speeds)
         runtime = self.runtime
         fans = [
             unit.fan_mode
@@ -112,7 +113,7 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
             and (unit := runtime.indoor_units.get(item.id))
             and unit.fan_mode
         ]
-        return fans[0] if fans else None
+        return thermostat_fan(fans[0], speeds) if fans else None
 
     @property
     def supported_features(self) -> ClimateEntityFeature:

@@ -1,4 +1,4 @@
-# Zonentra 0.13.1 — uitlegbare klimaatintelligentie
+# Zonentra 0.13.2 — uitlegbare klimaatintelligentie
 
 Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
 commando en verandert ook niet de intern bijgehouden actuele modus. De actieve
@@ -532,6 +532,11 @@ verwarmen: grens + hysterese − T; koelen: T − (grens − hysterese). Stand =
 0,5 °C) (zonder `off`), begrensd op de hoogste; zonder
 verwarmen of koelen de laagste. Gestuurd via `set_fan_mode`, eenmaal per gekozen
 stand en hooguit eens per `setpoint_interval_seconds`.
+**Ventilatornamen (0.13.2).** `fan_names`: de 1–4 echte standen van de units (zonder
+`off`/`auto`) heten op de thermostaat `low`, (`middle`), (`medium`), `high`, zodat
+HomeKit Bridge er een ventilator met snelheid van maakt; meer standen houden hun
+naam. `unit_fan` vertaalt terug naar de stand van de unit (een opgeslagen oude
+unitnaam werkt nog), `thermostat_fan` omgekeerd.
 
 **Lamel.** Draaiende units van de ruimte in `cool`/`dry` → koelstand, in `heat` →
 verwarmstand (`vane_mode`). Via `select.select_option`, `number.set_value` of `switch.turn_on/turn_off`

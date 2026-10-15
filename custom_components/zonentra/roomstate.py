@@ -147,3 +147,40 @@ def vane_mode(modes: set[str]) -> str | None:
 def fan_speeds(fan_modes: tuple[str, ...]) -> tuple[str, ...]:
     """The real speeds of a unit, low to high (its own off/auto excluded)."""
     return tuple(mode for mode in fan_modes if mode not in ("off", AUTO_FAN))
+
+
+# 0.13.2: Home Assistant's standard fan names, which HomeKit turns into a fan
+# speed slider (low < middle < medium < high), for one to four unit speeds.
+STANDARD_FAN_NAMES = {
+    1: ("low",),
+    2: ("low", "high"),
+    3: ("low", "middle", "high"),
+    4: ("low", "middle", "medium", "high"),
+}
+
+
+def fan_names(fan_modes: tuple[str, ...]) -> dict[str, str]:
+    """Thermostat fan name -> the unit's own speed, low to high.
+
+    One to four speeds get the standard names; more keep the unit's names.
+    """
+    speeds = fan_speeds(fan_modes)
+    names = STANDARD_FAN_NAMES.get(len(speeds))
+    if names is None:
+        return {speed: speed for speed in speeds}
+    return dict(zip(names, speeds, strict=True))
+
+
+def unit_fan(mode: str | None, fan_modes: tuple[str, ...]) -> str | None:
+    """The unit's speed for a thermostat fan name (an own unit name passes)."""
+    if mode is None or mode in fan_modes:
+        return mode
+    return fan_names(fan_modes).get(mode)
+
+
+def thermostat_fan(mode: str | None, fan_modes: tuple[str, ...]) -> str | None:
+    """The thermostat fan name for a unit speed (or a stored old unit name)."""
+    if mode is None:
+        return None
+    names = {speed: name for name, speed in fan_names(fan_modes).items()}
+    return names.get(mode, mode)

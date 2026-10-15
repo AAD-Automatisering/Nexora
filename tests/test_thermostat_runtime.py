@@ -375,15 +375,22 @@ async def test_thermostat_offers_the_units_options(hass, freezer):
         "fan_only",
         "off",
     ]
-    # Plus Zonentra's automatic fan (0.10), as the units have none of their own.
-    assert thermostat.attributes["fan_modes"] == ["auto", *KNX["fan_modes"]]
-    assert thermostat.attributes["fan_mode"] == "50%"
+    # Plus Zonentra's automatic fan (0.10), as the units have none of their own;
+    # the speeds under HA's standard names for HomeKit (0.13.2).
+    assert thermostat.attributes["fan_modes"] == [
+        "auto",
+        "low",
+        "middle",
+        "medium",
+        "high",
+    ]
+    assert thermostat.attributes["fan_mode"] == "middle"  # The unit's 50 %.
     assert runtime.thermostat("west").hvac_mode == "heat_cool"  # Stored as such.
 
     # Fan only with room regulation: after restart protection the unit runs
     # fan_only, then gets the thermostat's fan speed.
     runtime.set_thermostat(
-        "west", hvac_mode="fan_only", fan_mode="75%", regulation=True
+        "west", hvac_mode="fan_only", fan_mode="medium", regulation=True
     )
     await hass.async_block_till_done()
     assert runtime.zone_demands["west"].reason == "thermostat_fan_only"
