@@ -265,6 +265,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) ->
         hass.data.setdefault(DOMAIN, {}).setdefault("runtimes", {})[entry.entry_id] = (
             entry.runtime_data
         )
+    elif unloaded and entry_type(entry) == ZONE and entry.disabled_by is not None:
+        # A disabled zone must also leave the central controller. A normal
+        # zone reload keeps participating and must not reload the central entry.
+        central = central_entry(hass)
+        if central and central.state is ConfigEntryState.LOADED:
+            await hass.config_entries.async_reload(central.entry_id)
     return unloaded
 
 

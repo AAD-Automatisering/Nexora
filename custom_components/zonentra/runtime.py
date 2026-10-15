@@ -14,12 +14,18 @@ from homeassistant.helpers.event import (
 )
 from homeassistant.util import dt as dt_util
 
+from .const import DOMAIN
 from .control import plan
 from .decision import Observation, simulate
 from .demand import ZoneDemand, calculate_demand, collect_zone, comfort_limits
 from .engine import GroupMemory, evaluate, observe_mode
 from .executor import (
+    COMPATIBLE,
+    PRESET_RETRY_SECONDS,
+    PULSE_SECONDS,
     ModeCommand,
+    ModeControl,
+    PresetApplication,
     PresetMemory,
     next_correction_check,
     plan_mode_commands,
@@ -146,6 +152,7 @@ class BuildingRuntime:
         self.active_capable = active
         self.mode_active: dict[str, bool | None] = {}  # None until switch restored
         self.preset_memories: dict[str, PresetMemory] = {}
+        self.preset_applications: dict[str, PresetApplication] = {}
         self.mode_controls = {}
         self.pending_offs = []  # (due, ModeCommand, target mode)
         self.command_log: list[dict] = []
@@ -218,6 +225,7 @@ class BuildingRuntime:
             for group in building.groups
         }
         self._cancel_deadline = None
+        self._closed = False
 
     @callback
     def refresh(self, event=None) -> None:
@@ -595,6 +603,7 @@ class BuildingRuntime:
         "forecast_error",
         "command_log",
         "preset_memories",
+        "preset_applications",
         "mode_active",
     )
 
@@ -602,6 +611,31 @@ class BuildingRuntime:
         """Take over the in-memory state of the runtime this one replaces."""
         for name in self.CARRIED:
             setattr(self, name, getattr(previous, name))
+        # Removed/disabled equipment must not retain delayed hardware commands.
+        equipment = {(item.id, item.entity_id) for item in self.building.equipment}
+        self.pending_offs = [
+            pending
+            for pending in self.pending_offs
+            if (pending[1].equipment_id, pending[1].entity_id) in equipment
+        ]
+        groups = {group.id for group in self.building.groups}
+        self.preset_applications = {
+            group_id: application
+            for group_id, application in self.preset_applications.items()
+            if group_id in groups
+        }
+        for group_id, application in self.preset_applications.items():
+            members = {
+                (item.id, item.entity_id)
+                for item in self.building.equipment
+                if item.group_id == group_id
+            }
+            application.commands = {
+                key: command
+                for key, command in application.commands.items()
+                if (command.equipment_id, command.entity_id) in members
+            }
+            application.in_flight.intersection_update(application.commands)
         self.memories.update(
             {
                 group_id: memory
@@ -609,6 +643,8 @@ class BuildingRuntime:
                 if group_id in self.memories
             }
         )
+        # A service can finish while setup is still loading the new runtime.
+        self._save_presets()
 
     @callback
     def apply_building(self, building: Building) -> None:
@@ -716,22 +752,23 @@ class BuildingRuntime:
         """Room regulation really acts (central layout and switched on)."""
         return self.active_capable and self.thermostat(zone_id).regulation
 
+    def _group_block(self, group_id: str | None) -> str | None:
+        """The group's stop switch also gates room and vane commands."""
+        if group_id is None or self.mode_active.get(group_id) is True:
+            return None
+        return (
+            "group_disabled"
+            if self.mode_active.get(group_id) is False
+            else "waiting_for_switch_state"
+        )
+
     def _safe_modes(self, item) -> frozenset[str]:
         if item.group_id is None:
             return frozenset({"heat", "cool"})
-        if self.mode_active.get(item.group_id):
-            memory = self.preset_memories.get(item.group_id, PresetMemory())
-            return safe_modes((), memory.mode)
-        running = tuple(
-            self.indoor_units[other.id].selected_mode
-            for other in self.building.equipment
-            if other.kind == "hvac"
-            and other.id != item.id
-            and other.group_id == item.group_id
-            and other.id in self.indoor_units
-            and self.indoor_units[other.id].available
-        )
-        return safe_modes(running, None)
+        if self._group_block(item.group_id):
+            return frozenset()
+        memory = self.preset_memories.get(item.group_id, PresetMemory())
+        return safe_modes((), memory.mode)
 
     def _regulate(self, sources, now, busy: set[str], available: bool) -> None:
         """Switch regulated rooms' units on/off and steer their setpoints."""
@@ -740,6 +777,10 @@ class BuildingRuntime:
         controls, plans, checks = {}, {}, []
         for item in self.building.equipment:
             if item.kind != "hvac" or item.id not in self.unit_intents:
+                continue
+            if blocked := self._group_block(item.group_id):
+                controls[item.id] = RoomUnitControl(item.id, blocked)
+                plans[item.id] = SetpointPlan(blocked)
                 continue
             intent = self.unit_intents[item.id]
             enabled = self.regulated(item.zone_id)
@@ -864,6 +905,9 @@ class BuildingRuntime:
                 for item in self.building.equipment
                 if item.kind == "hvac" and item.zone_id == zone.id
             ]
+            if any(self._group_block(item.group_id) for item in units):
+                self.vane_applied.pop(zone.id, None)
+                continue
             modes = {
                 unit.selected_mode
                 for item in units
@@ -1251,6 +1295,16 @@ class BuildingRuntime:
                 for item in self.pending_offs
                 if item[1].equipment_id not in group_units
             ]
+            # Late responses from an earlier preset must not schedule a pulse.
+            self.preset_applications.pop(group_id, None)
+            for item in self.building.equipment:
+                if item.id not in group_units:
+                    continue
+                self.mode_applied.pop(item.id, None)
+                self.fan_applied.pop(item.id, None)
+                self.fan_sent_at.pop(item.id, None)
+                self.setpoint_sent.pop(item.id, None)
+                self.setpoint_tracker.cancel(item.entity_id)
         self.refresh()
 
     def _group_units(self, group):
@@ -1277,38 +1331,102 @@ class BuildingRuntime:
         controls = {}
         for group in self.building.groups:
             previous = self.preset_memories.get(group.id, PresetMemory())
+            application = self.preset_applications.get(group.id)
+            target = self.coordinations[group.id].group_mode
+            enabled = self.mode_active.get(group.id)
+            if (
+                application
+                and not application.in_flight
+                and (not enabled or application.memory.mode != target)
+            ):
+                del self.preset_applications[group.id]
+                application = None
+            if application:
+                commands = ()
+                until = application.retry_at
+                if enabled and (until is None or now >= until):
+                    units = {
+                        unit.equipment_id: unit for unit in self._group_units(group)
+                    }
+                    for key, command in tuple(application.commands.items()):
+                        unit = units.get(key)
+                        if (
+                            key in application.in_flight
+                            or unit is None
+                            or not unit.available
+                        ):
+                            continue
+                        if unit.selected_mode in COMPATIBLE[application.memory.mode]:
+                            del application.commands[key]
+                        else:
+                            application.commands[key] = replace(
+                                command,
+                                reason="preset_pulse"
+                                if unit.selected_mode == "off"
+                                else "switch_running_unit",
+                            )
+                    commands = tuple(
+                        command
+                        for key, command in application.commands.items()
+                        if key not in application.in_flight
+                        and key in units
+                        and units[key].available
+                    )
+                    if (
+                        not commands
+                        and application.commands
+                        and not application.in_flight
+                    ):
+                        application.retry_at = now + timedelta(
+                            seconds=PRESET_RETRY_SECONDS
+                        )
+                controls[group.id] = self._apply_preset(
+                    group.id, application, commands, previous, now, available
+                )
+                continue
             control, memory = plan_mode_commands(
                 group.id,
-                self.coordinations[group.id].group_mode,
+                target,
                 self._group_units(group),
                 entity_ids,
                 changed_at,
                 previous,
                 group.min_switch_seconds,
                 now,
-                enabled=self.mode_active.get(group.id),
+                enabled=enabled,
             )
             if control.commands and not available:
                 control = replace(
                     control, status="climate_service_unavailable", commands=()
                 )
                 memory = previous
+            if control.status == "group_mode_applied" and control.commands:
+                application = PresetApplication(
+                    memory,
+                    {
+                        command.equipment_id: command
+                        for command in control.commands
+                        if not command.delay_seconds
+                    },
+                    set(),
+                )
+                self.preset_applications[group.id] = application
+                controls[group.id] = self._apply_preset(
+                    group.id,
+                    application,
+                    tuple(application.commands.values()),
+                    previous,
+                    now,
+                    available,
+                )
+                continue
             controls[group.id] = control
             if memory != previous:
                 self.preset_memories[group.id] = memory
                 if memory.mode != previous.mode:
                     self._save_presets()
             for command in control.commands:
-                if command.delay_seconds:
-                    self.pending_offs.append(
-                        (
-                            now + timedelta(seconds=command.delay_seconds),
-                            command,
-                            control.target_mode,
-                        )
-                    )
-                else:
-                    self._execute(command, now)
+                self._execute(command, now)
         self.mode_controls = controls
         due = [item for item in self.pending_offs if item[0] <= now]
         self.pending_offs = [item for item in self.pending_offs if item[0] > now]
@@ -1330,13 +1448,138 @@ class BuildingRuntime:
                 self._log(command, now, "skipped_room_demand")
                 continue
             busy.add(command.equipment_id)
-            self._execute(command, now)
+            self._execute(
+                command,
+                now,
+                on_result=lambda success, command=command, target=target: (
+                    self._pulse_result(command, target, success)
+                ),
+            )
         busy |= {command.equipment_id for _, command, _ in self.pending_offs}
+        busy |= {
+            key
+            for application in self.preset_applications.values()
+            for key in application.commands
+        }
         self._regulate(sources, now, busy, available)
         self._vanes(now)
         self._shading(sources, now)
 
-    def _execute(self, command, now) -> None:
+    def _current_runtime(self):
+        """A service response may arrive after a central reload."""
+        previous = self.hass.data.get(DOMAIN, {}).get("runtimes", {})
+        if previous.get(self.building.id) is self:
+            return self  # Setup has not adopted this runtime's state yet.
+        entry = self.hass.config_entries.async_get_entry(self.building.id)
+        runtime = getattr(entry, "runtime_data", self) if entry else self
+        return runtime
+
+    def _apply_preset(self, group_id, application, commands, previous, now, available):
+        if not application.commands:
+            self.preset_memories[group_id] = application.memory
+            del self.preset_applications[group_id]
+            self._save_presets()
+            return ModeControl(
+                group_id,
+                application.memory.mode,
+                application.memory.mode,
+                "group_mode_applied",
+                None,
+                (),
+            )
+        if not available:
+            commands = ()
+            application.retry_at = now + timedelta(seconds=PRESET_RETRY_SECONDS)
+        application.in_flight.update(command.equipment_id for command in commands)
+        for command in commands:
+            self._execute(
+                command,
+                now,
+                on_result=lambda success, command=command: self._preset_result(
+                    group_id, application, command, success
+                ),
+            )
+        return ModeControl(
+            group_id,
+            application.memory.mode,
+            previous.mode,
+            "applying_preset" if application.in_flight else "preset_retry",
+            application.retry_at,
+            tuple(commands),
+        )
+
+    def _preset_result(self, group_id, application, command, success) -> None:
+        runtime = self._current_runtime()
+        if (
+            runtime is None
+            or runtime.preset_applications.get(group_id) is not application
+        ):
+            return
+        application.in_flight.discard(command.equipment_id)
+        if command.equipment_id not in application.commands:
+            return
+        now = dt_util.utcnow()
+        if success:
+            del application.commands[command.equipment_id]
+            if command.reason == "switch_running_unit":
+                corrected = dict(application.memory.corrected)
+                corrected[command.equipment_id] = now
+                application.memory = replace(
+                    application.memory, corrected=tuple(sorted(corrected.items()))
+                )
+            if command.reason == "preset_pulse" and runtime.mode_active.get(group_id):
+                runtime.pending_offs.append(
+                    (
+                        now + timedelta(seconds=PULSE_SECONDS),
+                        replace(
+                            command,
+                            service="turn_off",
+                            hvac_mode=None,
+                            delay_seconds=PULSE_SECONDS,
+                        ),
+                        application.memory.mode,
+                    )
+                )
+        else:
+            runtime.command_tracker.cancel(command.entity_id)
+            application.retry_at = now + timedelta(seconds=PRESET_RETRY_SECONDS)
+        if not application.commands:
+            runtime.preset_memories[group_id] = application.memory
+            del runtime.preset_applications[group_id]
+            if not runtime._closed:
+                runtime._save_presets()
+        if not runtime._closed:
+            runtime.refresh()
+
+    def _pulse_result(self, command, target, success) -> None:
+        if success:
+            return
+        runtime = self._current_runtime()
+        if runtime is None:
+            return
+        item = next(
+            (
+                item
+                for item in runtime.building.equipment
+                if item.id == command.equipment_id
+                and item.entity_id == command.entity_id
+            ),
+            None,
+        )
+        if item is None or not runtime.mode_active.get(item.group_id):
+            return
+        runtime.command_tracker.cancel(command.entity_id)
+        runtime.pending_offs.append(
+            (
+                dt_util.utcnow() + timedelta(seconds=PRESET_RETRY_SECONDS),
+                command,
+                target,
+            )
+        )
+        if not runtime._closed:
+            runtime.refresh()
+
+    def _execute(self, command, now, *, on_result=None) -> None:
         data = {"entity_id": command.entity_id}
         if command.service == "set_fan_mode":
             data["fan_mode"] = command.fan_mode  # An attribute: nothing to track.
@@ -1352,9 +1595,46 @@ class BuildingRuntime:
         if command.hvac_mode:
             data["hvac_mode"] = command.hvac_mode
         entry = self._log(command, now, "sending")
-        self.hass.async_create_task(self._call(command.service, data, entry))
 
-    async def _call(self, service, data, entry, domain="climate") -> None:
+        async def send():
+            success = await self._call(command.service, data, entry)
+            if on_result is not None:
+                self.hass.loop.call_soon(on_result, success)
+
+        self.hass.async_create_task(send())
+
+    async def _call(self, service, data, entry, domain="climate") -> bool:
+        runtime = self._current_runtime()
+        group_ids = {entry.get("group_id")}
+        item = next(
+            (
+                item
+                for item in runtime.building.equipment
+                if item.id == entry.get("equipment_id")
+            ),
+            None,
+        )
+        if item is None:
+            entry["result"] = "blocked: equipment_removed"
+            return False
+        group_ids.add(item.group_id)
+        if entry.get("reason", "").startswith("vane_"):
+            group_ids.update(
+                unit.group_id
+                for unit in runtime.building.equipment
+                if unit.kind == "hvac" and unit.zone_id == item.zone_id
+            )
+        blocked = next(
+            (
+                reason
+                for group_id in group_ids
+                if (reason := runtime._group_block(group_id))
+            ),
+            None,
+        )
+        if blocked or runtime._closed:
+            entry["result"] = f"blocked: {blocked or 'runtime_unloaded'}"
+            return False
         try:
             await self.hass.services.async_call(
                 domain, service, data, blocking=True, context=Context()
@@ -1362,8 +1642,10 @@ class BuildingRuntime:
         except Exception as err:  # noqa: BLE001 - report, never crash the runtime
             entry["result"] = f"failed: {type(err).__name__}"
             _LOGGER.warning("Zonentra %s on %s failed: %s", service, data, err)
+            return False
         else:
             entry["result"] = "sent"
+            return True
 
     def _log(self, command, now, result) -> dict:
         entry = {
@@ -1521,6 +1803,7 @@ class BuildingRuntime:
     @callback
     def close(self):
         """Cancel the single next-deadline timer on unload."""
+        self._closed = True
         if self._cancel_deadline:
             self._cancel_deadline()
             self._cancel_deadline = None

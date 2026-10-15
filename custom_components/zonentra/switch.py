@@ -2,7 +2,8 @@
 
 * Central device, per outdoor unit group: active outdoor-stand (mode) control
   (0.7). On by default (as decided for this installation). Turning it off
-  stops every command for that group immediately; the plan stays visible as
+  stops every command for that group immediately, including room regulation,
+  setpoints, fan speeds and vanes; the plan stays visible as
   simulation. The state is restored after a restart; until then no command is
   sent.
 * Zone device: room regulation (0.9). Off by default: the room is only

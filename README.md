@@ -569,7 +569,7 @@ binnenunits van een groep klaargezet in de gewenste groepsmodus:
 | Groepsmodus wisselt (na hysterese en minimale wisseltijd) | Lopende units krijgen direct de nieuwe stand; units die uit staan krijgen een korte puls (`set_hvac_mode` → 3 s → `turn_off`), zodat ze bij de volgende inschakeling in de juiste stand starten |
 | Iemand zet een unit aan in de verkeerde stand | Na 30 s zet Zonentra de stand terug naar de groepsmodus (niet vaker dan eens per 2 min per unit) |
 | Groepsmodus neutraal of onbekend (bijv. sensorfout) | Niets; de laatst gezette stand blijft |
-| Schakelaar **Actieve standregeling** uit | Geen enkel commando meer, ook geen openstaande puls; het plan blijft zichtbaar als simulatie |
+| Schakelaar **Actieve standregeling** uit | Geen HVAC- of lamelcommando's meer voor deze groep: ook ruimteregeling, setpoints, ventilatorstanden en openstaande pulsen stoppen; het plan blijft zichtbaar als simulatie |
 
 `fan_only` (en bij koelen `dry`) blijven ongemoeid. De laatst gezette stand wordt
 bewaard, zodat een herstart niet opnieuw alle airco's laat pulsen. Na een herstart
@@ -582,6 +582,13 @@ De sensor **Gesimuleerde coördinatie** van de groep toont `active_mode_control`
 met resultaat. Statussen: `in_sync`, `group_mode_applied`, `corrected`,
 `minimum_switch_interval`, `neutral`, `no_group_mode`, `disabled`,
 `waiting_for_switch_state`, `climate_service_unavailable`.
+
+Een groepspreset wordt pas als toegepast opgeslagen nadat de moduscommando's
+voor alle betreffende units zijn geslaagd. Tijdens het versturen is de status
+`applying_preset`; bij een fout volgt `preset_retry`. Alleen de mislukte units
+krijgen na twee minuten een herpoging, ook zonder nieuwe sensorupdates. De
+uitschakelpuls wordt pas ingepland nadat het inschakelcommando is geslaagd; een
+mislukte uitschakelpuls wordt eveneens na twee minuten opnieuw beoordeeld.
 
 ### Gesimuleerde regeling en handmatige bediening (0.5)
 

@@ -28,6 +28,7 @@ COMPATIBLE = {"heat": ("heat", "fan_only"), "cool": ("cool", "dry", "fan_only")}
 PULSE_SECONDS = 3
 CORRECTION_DELAY_SECONDS = 30  # Let people finish adjusting a unit first.
 CORRECTION_REPEAT_SECONDS = 120  # Never fight a unit in a tight loop.
+PRESET_RETRY_SECONDS = 120  # Retry failed service calls without a tight loop.
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,16 @@ class ModeCommand:
     fan_mode: str | None = None  # set_fan_mode only (0.9 room thermostat)
     domain: str = "climate"  # 0.10 vane: select / number entities
     value: str | float | None = None  # 0.10 vane position
+
+
+@dataclass
+class PresetApplication:
+    """A group preset awaiting successful service calls, one per indoor unit."""
+
+    memory: PresetMemory
+    commands: dict[str, ModeCommand]
+    in_flight: set[str]
+    retry_at: datetime | None = None
 
 
 @dataclass(frozen=True)
