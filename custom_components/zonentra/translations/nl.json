@@ -435,10 +435,10 @@
         "name": "Automatische ventilatorstand"
       },
       "screen": {
-        "name": "{screen} Zonwering",
+        "name": "{screen} Zonwering gewenst",
         "state": {
-          "open": "Open",
-          "shade": "Zonwering",
+          "open": "Omhoog",
+          "shade": "Omlaag",
           "hold": "Ongewijzigd"
         }
       },
@@ -539,11 +539,6 @@
       },
       "central_forecast_margin": {
         "name": "Startmarge op warme/koude dagen"
-      }
-    },
-    "button": {
-      "use_central_limits": {
-        "name": "Centrale grenzen gebruiken"
       }
     }
   },

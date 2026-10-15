@@ -82,6 +82,15 @@ from .thermostat import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+UNIT_RUNNING = ("heat", "cool", "dry", "fan_only")
+ZONE_LIMIT_KEYS = (
+    "heating_limit",
+    "cooling_limit",
+    "eco_heating_limit",
+    "eco_cooling_limit",
+    "away_heating_limit",
+    "away_cooling_limit",
+)
 
 
 def _cover_position(state) -> float | None:
@@ -255,6 +264,8 @@ class BuildingRuntime:
             self.building.settings.outdoor_max_age_seconds,
         )
         self._occupancy(sources, now)
+        if self.active_capable:
+            self._sync_zone_limits()
         bands, comfort, manual, manual_checks = {}, {}, {}, []
         for zone in self.building.zones:
             thermostat = self.thermostat(zone.id)
@@ -276,7 +287,10 @@ class BuildingRuntime:
             elif thermostat.manual:
                 manual_checks.append(until)
             band = (thermostat.heating_limit, thermostat.cooling_limit)
-            comfort[zone.id] = band if thermostat.has_band else None
+            # "Use central climate limits" (0.13.3): the room's own limits on
+            # its device only count when that is off.
+            own = thermostat.has_band and not zone.use_building_limits
+            comfort[zone.id] = band if own else None
             if thermostat.manual:
                 manual[zone.id] = (
                     thermostat.manual_heating_limit,
@@ -297,7 +311,7 @@ class BuildingRuntime:
                 self.outdoor_temperature,
                 "comfort" if zone.id in manual else bands[zone.id][0],
                 manual.get(zone.id, comfort[zone.id]),
-                self.thermostat(zone.id).bands,
+                None if zone.use_building_limits else self.thermostat(zone.id).bands,
             )
             for zone in self.building.zones
         }
@@ -379,6 +393,7 @@ class BuildingRuntime:
                     for d in self.group_decisions.values()
                 ],
             )
+        self._preview_auto_fans()
         self._plan(transitions, sources, now)
         if self.active_capable:
             self._control(sources, now)
@@ -548,6 +563,34 @@ class BuildingRuntime:
         """New limits set on the central device: same inputs, no reload."""
         self.building = building
         self.refresh()
+
+    def _sync_zone_limits(self) -> None:
+        """ "Use central climate limits" (0.13.3) decides the room's own limits.
+
+        On: the room has no own limits (earlier ones are cleared). Off: the
+        room gets the central limits once, as its own starting values; after
+        that they are the room's, changed only on its device.
+        """
+        changed = False
+        for zone in self.building.zones:
+            thermostat = self.thermostat(zone.id)
+            own = {key: getattr(thermostat, key) for key in ZONE_LIMIT_KEYS}
+            if zone.use_building_limits:
+                if any(value is not None for value in own.values()):
+                    self.thermostats[zone.id] = replace(
+                        thermostat, **dict.fromkeys(ZONE_LIMIT_KEYS)
+                    )
+                    changed = True
+            elif all(value is None for value in own.values()):
+                # The zone model already holds the central values it follows.
+                start = {key: getattr(zone, key) for key in ZONE_LIMIT_KEYS}
+                if start["heating_limit"] is None or start["cooling_limit"] is None:
+                    start.pop("heating_limit")
+                    start.pop("cooling_limit")  # Central limits are entities.
+                self.thermostats[zone.id] = replace(thermostat, **start)
+                changed = True
+        if changed:
+            self._save_thermostats()
 
     def thermostat(self, zone_id: str) -> Thermostat:
         return self.thermostats.get(zone_id) or Thermostat()
@@ -920,6 +963,47 @@ class BuildingRuntime:
                 "cover",
             )
         )
+
+    def _preview_auto_fans(self) -> None:
+        """The speed the automatic fan would choose now, for every room with
+        indoor units (0.13.3), also in simulation or with another fan mode.
+
+        The mode is that of a running unit, else the room's demand. A running
+        automatic fan (``_fan``) overwrites it with the speed it really sends.
+        """
+        previews = {}
+        for zone in self.building.zones:
+            units = [
+                unit
+                for item in self.building.equipment
+                if item.zone_id == zone.id
+                and item.kind == "hvac"
+                and (unit := self.indoor_units.get(item.id))
+            ]
+            speeds = fan_speeds(self.unit_options(zone.id)[1])
+            if not units or not speeds:
+                continue
+            running = next(
+                (u.selected_mode for u in units if u.selected_mode in UNIT_RUNNING),
+                None,
+            )
+            demand = self.zone_demands[zone.id].demand
+            mode = running or {"heating_demand": "heat", "cooling_demand": "cool"}.get(
+                demand, "off"
+            )
+            snapshot = self.zone_snapshots[zone.id]
+            previews[zone.id] = auto_fan(
+                speeds,
+                mode,
+                snapshot.temperature.value
+                if snapshot.temperature.quality == "valid"
+                else None,
+                snapshot.heating_limit.value,
+                snapshot.cooling_limit.value,
+                zone.hysteresis,
+                self.building.settings.auto_fan_step,
+            )
+        self.auto_fans = previews
 
     def zone_auto_fan(self, zone_id: str) -> bool:
         """The thermostat runs Zonentra's automatic fan (units have no auto)."""

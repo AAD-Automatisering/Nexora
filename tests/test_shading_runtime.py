@@ -47,6 +47,7 @@ async def test_screen_simulates_then_shades_and_respects_people(hass, freezer):
     assert state.state == "shade"
     assert state.attributes["reason"] == "room_warm"
     assert state.attributes["status"] == "simulation"  # Off by default.
+    assert state.attributes["current_position"] == 100  # Advice, not the screen.
     assert moves == []
 
     switch_id = entity(hass, "switch", f"{zone.entry_id}_screen_regulation")

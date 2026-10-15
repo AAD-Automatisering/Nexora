@@ -221,7 +221,6 @@ def test_every_sensor_state_has_a_label(language, key, states):
         ("number", "eco_cooling_limit"),
         ("number", "away_heating_limit"),
         ("number", "away_cooling_limit"),
-        ("button", "use_central_limits"),
     ],
 )
 def test_control_entities_have_a_name(language, platform, key):

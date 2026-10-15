@@ -2,8 +2,9 @@
 
 * Central device: the building's comfort, eco and away limits. They are kept
   in the central configuration and applied without reloading.
-* Zone device: the room's own comfort, eco and away limits. Until one is set,
-  the central value applies; "Use central limits" (button) clears them.
+* Zone device: the room's own comfort, eco and away limits, only when the
+  zone does not use the central climate limits; they start at the central
+  values (0.13.3).
 * Central device, with a weather entity (0.12): when a day counts as warm or
   cold (expected maximum of the coming hours) and the start margin.
 """
@@ -17,7 +18,7 @@ from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 
 from . import central_topology
 from .const import DOMAIN
-from .entity import ZoneEntity, zone_context
+from .entity import ZoneEntity, remove_stale, zone_context
 from .models import build_model
 from .topology import ENTRY_TYPE, ZONE
 
@@ -47,8 +48,14 @@ FORECAST_KEYS = {
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     if entry.data.get(ENTRY_TYPE) == ZONE:
-        context = zone_context(hass, entry)
-        async_add_entities(ZoneLimitNumber(entry, key, **context) for key in LIMIT_KEYS)
+        # 0.13.3: the room's own limits only when it does not use the central
+        # climate limits (zone configuration); otherwise they disappear.
+        entities = []
+        if not entry.options.get("use_building_limits", True):
+            context = zone_context(hass, entry)
+            entities = [ZoneLimitNumber(entry, key, **context) for key in LIMIT_KEYS]
+        remove_stale(hass, entry, "number", entities)
+        async_add_entities(entities)
         return
     entities = [CentralLimitNumber(entry, key) for key in LIMIT_KEYS]
     if entry.runtime_data.building.settings.weather_entity:

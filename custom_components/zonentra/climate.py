@@ -202,10 +202,10 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
             "comfort_cooling_limit": runtime.comfort[self._zone_id][1].value,
             "active_heating_limit": snapshot.heating_limit.value,
             "active_cooling_limit": snapshot.cooling_limit.value,
-            "comfort_source": "thermostat"
-            if thermostat.has_band
-            else "building"
+            "comfort_source": "building"
             if zone.use_building_limits
+            else "thermostat"
+            if thermostat.has_band
             else "zone",
             "zone_demand": demand.demand,
             "zone_demand_reason": demand.reason,

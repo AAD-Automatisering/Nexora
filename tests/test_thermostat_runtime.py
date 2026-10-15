@@ -70,11 +70,11 @@ async def later(hass, freezer, **delta):
     await hass.async_block_till_done()
 
 
-async def office(hass, freezer, mocks=None):
+async def office(hass, freezer, mocks=None, **fields):
     """West zone, 21 °C (heating demand), stand preset pulse completed."""
     set_states(hass, "west", UNIT)
     central = await setup_central(hass)
-    zone = await add_zone(hass, zone_options("west", UNIT))
+    zone = await add_zone(hass, zone_options("west", UNIT, **fields))
     await unit(hass, "heat")  # The integration applies the preset pulse.
     await later(hass, freezer, seconds=4)
     await unit(hass, "off")
@@ -93,7 +93,8 @@ def room_commands(runtime):
 
 async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
     # Real climate services: the thermostat is operated like any climate entity.
-    central, zone = await office(hass, freezer)
+    # The room's own limits (on its device) need "use central limits" off.
+    central, zone = await office(hass, freezer, use_building_limits=False)
     climate_id = entity(hass, "climate", f"{zone.entry_id}_thermostat")
     thermostat = hass.states.get(climate_id)
     assert thermostat.state == "heat_cool"
@@ -125,7 +126,7 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
     assert thermostat.attributes["preset_mode"] == "none"
     assert thermostat.attributes["manual"] is True
     assert float(hass.states.get(low_id).state) == 22  # Configuration unchanged.
-    assert runtime.thermostat("west").heating_limit is None
+    assert runtime.thermostat("west").heating_limit == 22  # Central, copied once.
     # Choosing a preset ends it.
     await hass.services.async_call(
         "climate",
@@ -171,7 +172,7 @@ async def test_zone_device_gets_thermostat_settings_and_band(hass, freezer):
         blocking=True,
     )
     await hass.async_block_till_done()
-    assert runtime.thermostat("west").eco_heating_limit is None
+    assert runtime.thermostat("west").eco_heating_limit == 19  # Unchanged.
     assert runtime.thermostat("west").manual_band == "eco"
     assert hass.states.get(climate_id).attributes["target_temp_high"] == 27
     assert runtime.zone_snapshots["west"].heating_limit.value == 18

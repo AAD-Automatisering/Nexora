@@ -31,7 +31,6 @@ PLATFORMS = [Platform.SENSOR]
 CENTRAL_PLATFORMS = [Platform.NUMBER, Platform.SENSOR, Platform.SWITCH]
 # 0.9: every zone gets a Zonentra thermostat, like Versatile Thermostat.
 ZONE_PLATFORMS = [
-    Platform.BUTTON,
     Platform.CLIMATE,
     Platform.NUMBER,
     Platform.SENSOR,
@@ -101,6 +100,13 @@ def zone_entries(hass: HomeAssistant) -> list[ConfigEntry]:
     ]
 
 
+def central_presence(hass: HomeAssistant) -> str | None:
+    """The building presence entity of the loaded central configuration."""
+    central = central_entry(hass)
+    runtime = getattr(central, "runtime_data", None) if central else None
+    return runtime.building.settings.presence_entity if runtime else None
+
+
 def central_topology(
     hass: HomeAssistant, central: ConfigEntry, options: dict | None = None
 ) -> dict:
@@ -167,6 +173,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
         )
     entry.async_on_unload(runtime.close)
     runtime.refresh()
+    if kind == CENTRAL:
+        # Zones show a presence sensor only with building presence (0.13.3):
+        # when that changes, the zones rebuild their entities.
+        known = hass.data.setdefault(DOMAIN, {}).setdefault("presence", {})
+        presence = building.settings.presence_entity
+        if entry.entry_id in known and known[entry.entry_id] != presence:
+            for zone in zone_entries(hass):
+                hass.config_entries.async_schedule_reload(zone.entry_id)
+        known[entry.entry_id] = presence
     if kind == CENTRAL and building.settings.weather_entity:
         # 0.12: the hourly forecast is asked for, it is not a state change.
         entry.async_on_unload(
@@ -204,6 +219,12 @@ async def _async_setup_zone(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         model="Zone",
         via_device_id=central_device.id if central_device else None,
     )
+    # 0.13.3: the "Use central limits" button is gone (the zone setting
+    # decides); remove it from the registry of existing zones.
+    registry = er.async_get(hass)
+    for record in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if record.platform == DOMAIN and record.domain == "button":
+            registry.async_remove(record.entity_id)
     entry.async_on_unload(entry.add_update_listener(_async_zone_updated))
     await hass.config_entries.async_forward_entry_setups(entry, ZONE_PLATFORMS)
     return True

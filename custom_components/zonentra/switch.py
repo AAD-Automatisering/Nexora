@@ -8,7 +8,9 @@
 * Zone device: room regulation (0.9). Off by default: the room is only
   simulated. On, Zonentra switches the room's indoor units on and off and
   steers their setpoints. Stored with the room thermostat.
-* Zone device: window bypass (0.10): an open window is ignored.
+* Zone device: window bypass (0.10): an open window is ignored. Only for a
+  zone with window/door contacts (0.13.3), like screen regulation only for a
+  zone with screens.
 """
 
 from homeassistant.components.switch import SwitchEntity
@@ -16,19 +18,22 @@ from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.restore_state import RestoreEntity
 
 from .const import DOMAIN
-from .entity import ZoneEntity, zone_context
+from .entity import ZoneEntity, remove_stale, zone_context
 from .topology import ENTRY_TYPE, ZONE
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     if entry.data.get(ENTRY_TYPE) == ZONE:
         context = zone_context(hass, entry)
-        entities = [
-            RoomRegulationSwitch(entry, **context),
-            WindowBypassSwitch(entry, **context),
-        ]
+        entities = []
+        if entry.options.get("indoor_units"):  # Nothing to regulate otherwise.
+            entities.append(RoomRegulationSwitch(entry, **context))
+        if entry.options.get("contact_entities"):
+            entities.append(WindowBypassSwitch(entry, **context))
         if entry.options.get("shading_entities"):
             entities.append(ScreenRegulationSwitch(entry, **context))
+        # A switch whose equipment was removed from the zone disappears.
+        remove_stale(hass, entry, "switch", entities)
         async_add_entities(entities)
         return
     runtime = entry.runtime_data

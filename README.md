@@ -340,8 +340,13 @@ Zoals de presettemperaturen bij Versatile Thermostat:
 | Apparaat | Instellingen |
 |---|---|
 | Centraal apparaat | Comfort verwarmen tot / koelen vanaf, Eco verwarmen tot / koelen vanaf, Afwezig verwarmen tot / koelen vanaf. Direct actief, zonder herladen |
-| Ruimteapparaat | Dezelfde zes, voor deze ruimte. Tot je er een wijzigt, tonen ze de centrale waarde (attribuut `source`: `central` of `zone`) |
-| Ruimteapparaat, knop **Centrale grenzen gebruiken** | Wist de eigen grenzen van de ruimte; daarna geldt weer alles centraal |
+| Ruimteapparaat | Dezelfde zes, voor deze ruimte — alleen als **Centrale klimaatgrenzen gebruiken** in de ruimteconfiguratie uit staat (sinds 0.13.3) |
+
+Staat **Centrale klimaatgrenzen gebruiken** aan, dan gelden altijd de centrale
+grenzen en heeft de ruimte geen eigen grenzen. Zet je de keuze uit, dan krijgt de
+ruimte eenmalig de centrale grenzen als eigen startwaarden; daarna wijzig je ze op
+het ruimteapparaat en volgen ze het centrale apparaat niet meer. Weer aanzetten wist
+de eigen grenzen.
 
 Een band moet geldig blijven: verwarmen + 2 × hysterese < koelen. Grensentiteiten
 (`input_number` e.d.) stel je nog wel in de wizard in.
@@ -397,22 +402,24 @@ Per zonwering (een `cover` met positie) beslist Zonentra, in deze volgorde:
   telt niet als bediening.
 - **Wind en regen** regelt KNX zelf. Geef je centraal een blokkeer-entiteit op
   (bijvoorbeeld het windalarm), dan stuurt Zonentra niets zolang die aan staat.
-- **Ruimteapparaat:** per zonwering een sensor **Zonwering** (open / zonwering /
-  ongewijzigd) met reden, beoogde stand, status, gevel, zon en de laatste commando's;
-  de schakelaar **Zonweringregeling** (standaard uit = simulatie).
+- **Ruimteapparaat:** per zonwering een sensor **Zonwering gewenst** (omhoog / omlaag /
+  ongewijzigd): wat Zonentra wil, niet de stand van de zonwering zelf (die staat in
+  het attribuut `current_position`). Verder reden, beoogde stand, status, gevel, zon en
+  de laatste commando's; de schakelaar **Zonweringregeling** (standaard uit =
+  simulatie: de zonwering beweegt dan niet, de sensor geeft alleen advies).
 
 ### Ruimtesensoren, raam, ventilator en lamel (0.10)
 
 | Entiteit op het ruimteapparaat | Betekenis |
 |---|---|
-| **Aanwezigheid** | Aanwezigheid van het gebouw zoals die voor deze ruimte geldt (`present`, `absent`, `unknown`, `not_configured`), met beweging als attribuut |
+| **Aanwezigheid** | Aanwezigheid van het gebouw zoals die voor deze ruimte geldt (`present`, `absent`, `unknown`), met beweging als attribuut; zonder gebouwaanwezigheid volgt hij de bewegingssensor van de ruimte. Alleen met een aanwezigheids- of bewegingssensor (sinds 0.13.3) |
 | **Veiligheid** | `safe`, of `sensor_fault` als de ruimtetemperatuur niet te vertrouwen is; dan regelt Zonentra niet op temperatuur |
-| **Raam** | `closed`, `opening` (open, wacht op de vertraging), `open`, `bypass`, `not_configured`, `unknown` |
-| **Raambypass** (schakelaar) | Negeert een open raam in deze ruimte |
-| **Geregeld setpoint** | Het setpoint waar Zonentra de binnenunit naartoe stuurt (of zou sturen) |
+| **Raam** | `closed`, `opening` (open, wacht op de vertraging), `open`, `bypass`, `unknown` — alleen met raam-/deurcontacten (sinds 0.13.3) |
+| **Raambypass** (schakelaar) | Negeert een open raam in deze ruimte — alleen met raam-/deurcontacten (sinds 0.13.3) |
+| **Geregeld setpoint** | Het setpoint waar Zonentra de binnenunit naartoe stuurt (of zou sturen) — alleen met binnenunits, net als de schakelaar **Ruimteregeling** en de automatische ventilatorstand (sinds 0.13.3) |
 | **Gemiddelde temperatuur** | Exponentieel gemiddelde van de ruimtetemperatuur (tijdconstante 5 min) |
 | **Temperatuurtrend** | Hoe snel de ruimte opwarmt (+) of afkoelt (−), in °C per uur |
-| **Automatische ventilatorstand** | De stand die de automatische ventilator nu kiest |
+| **Automatische ventilatorstand** | De stand die de automatische ventilator nu kiest; sinds 0.13.3 altijd zichtbaar (ook als simulatie of met een andere ventilatorstand), attribuut `in_use` zegt of de thermostaat op `auto` staat |
 
 - **Open raam:** na de vertraging vraagt de ruimte niets meer. Met Ruimteregeling gaan
   draaiende units direct uit (ook binnen de minimale aantijd) en gaat er niets aan tot

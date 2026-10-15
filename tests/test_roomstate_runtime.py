@@ -31,11 +31,13 @@ def entity(hass, platform, unique_id):
     return er.async_get(hass).async_get_entity_id(platform, DOMAIN, unique_id)
 
 
-async def office(hass, freezer, mocks):
+async def office(hass, freezer, mocks, **fields):
     set_states(hass, "west", UNIT)
     hass.states.async_set(WINDOW, "off")
     central = await setup_central(hass)
-    zone = await add_zone(hass, zone_options("west", UNIT, contact_entities=[WINDOW]))
+    zone = await add_zone(
+        hass, zone_options("west", UNIT, contact_entities=[WINDOW], **fields)
+    )
     await unit(hass, "heat", **KNX)  # The integration applies the preset pulse.
     await later(hass, freezer, seconds=4)
     await unit(hass, "off", **KNX)
@@ -50,7 +52,12 @@ def state(hass, zone, key, platform="sensor"):
 async def test_room_state_sensors(hass, freezer):
     mocks = await mock_climate(hass)
     central, zone = await office(hass, freezer, mocks)
-    assert state(hass, zone, "presence").state == "not_configured"
+    # 0.13.3: no motion sensor and no building presence: no presence sensor.
+    assert entity(hass, "sensor", f"{zone.entry_id}_presence") is None
+    # 0.13.3: the automatic fan's choice is shown without fan mode auto too:
+    # 21 °C, heating target 22.3 -> 1.3 °C away -> third speed.
+    fan = state(hass, zone, "auto_fan")
+    assert (fan.state, fan.attributes["in_use"]) == ("75%", False)
     assert state(hass, zone, "safety").state == "safe"
     assert state(hass, zone, "window").state == "closed"
     assert float(state(hass, zone, "ema_temperature").state) == 21
@@ -155,7 +162,7 @@ async def test_vane_follows_cooling_and_heating(hass, freezer):
 
 async def test_limits_are_set_on_the_devices_not_in_the_wizard(hass, freezer):
     mocks = await mock_climate(hass)
-    central, zone = await office(hass, freezer, mocks)
+    central, zone = await office(hass, freezer, mocks, use_building_limits=False)
     runtime = central.runtime_data
     # The central wizard no longer asks for fixed limits.
     flow = await hass.config_entries.options.async_init(central.entry_id)
@@ -191,25 +198,107 @@ async def test_limits_are_set_on_the_devices_not_in_the_wizard(hass, freezer):
             "number", "set_value", {"entity_id": eco_id, "value": 26}, blocking=True
         )
 
-    # Zone device: its own eco limit wins, the rest follows the central device.
+    # Zone device (own limits): it got the central limits once, when the zone
+    # was made; a later central change does not follow (0.13.3).
     zone_eco = entity(hass, "number", f"{zone.entry_id}_eco_heating_limit")
-    assert float(hass.states.get(zone_eco).state) == 18
-    assert hass.states.get(zone_eco).attributes["source"] == "central"
+    assert float(hass.states.get(zone_eco).state) == 19
+    assert hass.states.get(zone_eco).attributes["source"] == "zone"
     await hass.services.async_call(
         "number", "set_value", {"entity_id": zone_eco, "value": 20}, blocking=True
     )
     await hass.async_block_till_done()
-    assert hass.states.get(zone_eco).attributes["source"] == "zone"
     runtime.set_thermostat("west", preset="eco")
     snapshot = runtime.zone_snapshots["west"]
     assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (20, 26)
-    # Button: back to the central limits.
-    await hass.services.async_call(
-        "button",
-        "press",
-        {"entity_id": entity(hass, "button", f"{zone.entry_id}_use_central_limits")},
-        blocking=True,
+
+
+async def test_window_entities_only_with_contacts(hass):
+    """0.13.3: no window sensor or bypass switch without window contacts."""
+    set_states(hass, "west", UNIT)
+    hass.states.async_set(WINDOW, "off")
+    await setup_central(hass)
+    zone = await add_zone(hass, zone_options("west", UNIT))
+    assert entity(hass, "sensor", f"{zone.entry_id}_window") is None
+    assert entity(hass, "switch", f"{zone.entry_id}_window_bypass") is None
+    assert entity(hass, "switch", f"{zone.entry_id}_room_regulation") is not None
+
+    # Contacts added later: both appear; removed again: both disappear.
+    hass.config_entries.async_update_entry(
+        zone, options={**zone.options, "contact_entities": [WINDOW]}
     )
     await hass.async_block_till_done()
-    assert runtime.zone_snapshots["west"].heating_limit.value == 18
-    assert hass.states.get(zone_eco).attributes["source"] == "central"
+    assert entity(hass, "sensor", f"{zone.entry_id}_window") is not None
+    assert entity(hass, "switch", f"{zone.entry_id}_window_bypass") is not None
+    hass.config_entries.async_update_entry(
+        zone, options={**zone.options, "contact_entities": []}
+    )
+    await hass.async_block_till_done()
+    assert entity(hass, "sensor", f"{zone.entry_id}_window") is None
+    assert entity(hass, "switch", f"{zone.entry_id}_window_bypass") is None
+
+
+async def test_only_configured_entities(hass):
+    """0.13.3: presence only with presence/motion; regulation only with units."""
+    hass.states.async_set("sensor.store_temperature", "16", CELSIUS)
+    hass.states.async_set("binary_sensor.building", "on")
+    central = await setup_central(hass)
+    zone = await add_zone(hass, zone_options("store"))  # No indoor units.
+    for platform, key in (
+        ("sensor", "presence"),
+        ("sensor", "regulated_setpoint"),
+        ("sensor", "auto_fan"),
+        ("switch", "room_regulation"),
+    ):
+        assert entity(hass, platform, f"{zone.entry_id}_{key}") is None, key
+    assert entity(hass, "sensor", f"{zone.entry_id}_safety") is not None
+
+    # Building presence set centrally: the zones get their presence sensor.
+    building = {
+        **central.options["building"],
+        "presence_entity": "binary_sensor.building",
+    }
+    hass.config_entries.async_update_entry(
+        central, options={**central.options, "building": building}
+    )
+    assert await hass.config_entries.async_reload(central.entry_id)
+    await hass.async_block_till_done()
+    presence = entity(hass, "sensor", f"{zone.entry_id}_presence")
+    assert presence is not None
+    assert hass.states.get(presence).state == "present"
+
+
+async def test_zone_limits_only_without_central_limits(hass):
+    """0.13.3: "use central climate limits" on: no limit fields on the room's
+    device, and earlier own limits are ignored; off: the fields appear."""
+    set_states(hass, "west", UNIT)
+    central = await setup_central(hass)
+    zone = await add_zone(hass, zone_options("west", UNIT, use_building_limits=False))
+    runtime = central.runtime_data
+    low = f"{zone.entry_id}_comfort_heating_limit"
+    assert entity(hass, "number", low) is not None
+    await hass.services.async_call(
+        "number",
+        "set_value",
+        {"entity_id": entity(hass, "number", low), "value": 21},
+        blocking=True,
+    )
+    assert runtime.zone_snapshots["west"].heating_limit.value == 21
+
+    hass.config_entries.async_update_entry(
+        zone, options={**zone.options, "use_building_limits": True}
+    )
+    await hass.async_block_till_done()
+    runtime = central.runtime_data
+    assert entity(hass, "number", low) is None
+    assert runtime.zone_snapshots["west"].heating_limit.value == 22  # Central.
+    assert runtime.thermostat("west").heating_limit is None  # Own ones cleared.
+
+    # Off again: the central limits once, not the old own 21.
+    zone = hass.config_entries.async_get_entry(zone.entry_id)
+    hass.config_entries.async_update_entry(
+        zone, options={**zone.options, "use_building_limits": False}
+    )
+    await hass.async_block_till_done()
+    runtime = central.runtime_data
+    assert float(hass.states.get(entity(hass, "number", low)).state) == 22
+    assert runtime.thermostat("west").heating_limit == 22

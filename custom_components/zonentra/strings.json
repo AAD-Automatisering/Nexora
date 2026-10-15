@@ -435,11 +435,11 @@
         "name": "Auto fan speed"
       },
       "screen": {
-        "name": "{screen} Screen",
+        "name": "{screen} Screen target",
         "state": {
-          "open": "Open",
-          "shade": "Shade",
-          "hold": "Hold"
+          "open": "Up",
+          "shade": "Down",
+          "hold": "Unchanged"
         }
       },
       "forecast_maximum": {
@@ -539,11 +539,6 @@
       },
       "central_forecast_margin": {
         "name": "Start margin on warm/cold days"
-      }
-    },
-    "button": {
-      "use_central_limits": {
-        "name": "Use central limits"
       }
     }
   },

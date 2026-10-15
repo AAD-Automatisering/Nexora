@@ -3,11 +3,26 @@
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import callback
 from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, Entity
 
 from . import central_entry
 from .const import DOMAIN
+
+
+def remove_stale(hass, entry, platform: str, entities) -> None:
+    """Remove this entry's registered entities of a platform that are no longer
+    created (0.13.3: only what the zone has configured)."""
+    expected = {entity.unique_id for entity in entities}
+    registry = er.async_get(hass)
+    for record in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (
+            record.platform == DOMAIN
+            and record.domain == platform
+            and record.unique_id not in expected
+        ):
+            registry.async_remove(record.entity_id)
 
 
 def zone_context(hass, entry) -> dict:

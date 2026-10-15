@@ -11,7 +11,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 
-from . import ZonentraConfigEntry, entry_type
+from . import ZonentraConfigEntry, central_presence, entry_type
 from .const import DOMAIN
 from .entity import zone_context
 from .models import Equipment, Zone
@@ -82,19 +82,19 @@ def _zone_entities(hass, entry) -> list:
             **shared,
         ),
         ActiveBandSensor(entry, zone, **shared),
-        *(
-            sensor(entry, zone, **shared)
-            for sensor in (
-                PresenceSensor,
-                SafetySensor,
-                WindowSensor,
-                RegulatedSetpointSensor,
-                EmaTemperatureSensor,
-                TemperatureSlopeSensor,
-                AutoFanSensor,
-            )
-        ),
+        SafetySensor(entry, zone, **shared),
+        EmaTemperatureSensor(entry, zone, **shared),
+        TemperatureSlopeSensor(entry, zone, **shared),
     ]
+    # 0.13.3: only what is configured. Presence needs a motion sensor in the
+    # zone or building presence; setpoint and fan need indoor units.
+    if options.get("occupancy_entity") or central_presence(hass):
+        entities.append(PresenceSensor(entry, zone, **shared))
+    if options.get("indoor_units"):
+        entities.append(RegulatedSetpointSensor(entry, zone, **shared))
+        entities.append(AutoFanSensor(entry, zone, **shared))
+    if options.get("contact_entities"):  # 0.13.3: only with window contacts.
+        entities.append(WindowSensor(entry, zone, **shared))
     for record in zone_equipment(options):
         if record["kind"] == "shading":
             state = hass.states.get(record["entity_id"])
@@ -497,7 +497,8 @@ class ZoneStateSensor(ZonentraDiagnosticSensor):
 
 
 class PresenceSensor(ZoneStateSensor):
-    """Building presence as it applies to this room."""
+    """Building presence as it applies to this room; without building
+    presence (0.13.3) the room's own motion sensor."""
 
     key = "presence"
     _attr_device_class = SensorDeviceClass.ENUM
@@ -508,7 +509,13 @@ class PresenceSensor(ZoneStateSensor):
     @property
     def native_value(self):
         occupancy = self.runtime.zone_occupancy.get(self._zone.id)
-        return occupancy.presence if occupancy else "unknown"
+        if occupancy is None:
+            return "unknown"
+        if occupancy.presence == "not_configured":
+            return {"active": "present", "inactive": "absent"}.get(
+                occupancy.motion, "unknown"
+            )
+        return occupancy.presence
 
     @property
     def extra_state_attributes(self):
@@ -631,7 +638,8 @@ class TemperatureSlopeSensor(ZoneStateSensor):
 
 
 class AutoFanSensor(ZoneStateSensor):
-    """Fan speed the automatic fan chose (only with fan mode auto)."""
+    """Fan speed the automatic fan chooses now (0.13.3: always shown, also
+    when the thermostat has another fan mode or in simulation)."""
 
     key = "auto_fan"
     _attr_icon = "mdi:fan-auto"
@@ -639,13 +647,23 @@ class AutoFanSensor(ZoneStateSensor):
 
     @property
     def native_value(self):
-        if not self.runtime.zone_auto_fan(self._zone.id):
-            return None
         return self.runtime.auto_fans.get(self._zone.id)
+
+    @property
+    def extra_state_attributes(self):
+        runtime = self.runtime
+        return {
+            # The thermostat runs Zonentra's automatic fan (fan mode auto).
+            "in_use": runtime.zone_auto_fan(self._zone.id),
+            "room_regulation": runtime.regulated(self._zone.id),
+            "step": runtime.building.settings.auto_fan_step,
+        }
 
 
 class ScreenSensor(ZonentraDiagnosticSensor):
-    """What Zonentra wants a screen to do (0.11), and why."""
+    """What Zonentra wants a screen to do (0.11), and why. Not the screen's
+    own position (attribute ``current_position``): with Screen regulation off
+    it is only advice (0.13.3: named so)."""
 
     _attr_device_class = SensorDeviceClass.ENUM
     _attr_options = ["open", "shade", "hold"]
@@ -678,6 +696,7 @@ class ScreenSensor(ZonentraDiagnosticSensor):
             "screen_regulation": active,
             "reason": decision.reason,
             "target_position": decision.position,
+            "current_position": _screen_position(self.hass, self.item.entity_id),
             "status": move.status if move else None,
             "facade": zone.facade,
             "sunny": runtime.sunny,
@@ -753,6 +772,16 @@ class DayTypeSensor(ZonentraDiagnosticSensor):
             if self.runtime.day_type == "cold"
             else 0.0,
         }
+
+
+def _screen_position(hass, entity_id):
+    state = hass.states.get(entity_id)
+    if state is None:
+        return None
+    position = state.attributes.get("current_position")
+    if isinstance(position, (int, float)) and not isinstance(position, bool):
+        return position
+    return {"open": 100, "closed": 0}.get(state.state)
 
 
 def _iso(value):
