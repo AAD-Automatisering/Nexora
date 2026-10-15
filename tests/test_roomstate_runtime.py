@@ -160,7 +160,7 @@ async def test_limits_are_set_on_the_devices_not_in_the_wizard(hass, freezer):
     # The central wizard no longer asks for fixed limits.
     flow = await hass.config_entries.options.async_init(central.entry_id)
     flow = await hass.config_entries.options.async_configure(
-        flow["flow_id"], {"next_step_id": "building"}
+        flow["flow_id"], {"next_step_id": "general"}
     )
     schema = flow["data_schema"].schema
     assert "heating_limit" not in schema and "eco_heating_limit" not in schema

@@ -128,7 +128,14 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [x] Drempels en marge als instellingen op het centrale apparaat.
 - [ ] Praktijkperiode: drempels en marge afstemmen.
 
-### Versie 0.13.0 — warmtebron kiezen (gepland)
+### Versie 0.13.0 — centrale configuratie per onderwerp (geïmplementeerd)
+
+- [x] Menu: algemeen, aanwezigheid, ruimteregeling, zonwering, weersverwachting, buitenunitgroepen.
+- [x] Een onderwerp wijzigt alleen zijn eigen velden; bestaande instellingen blijven staan.
+- [x] Nieuwe centrale configuratie: alleen naam en buitentemperatuursensor.
+- [ ] Ruimte-instellingen op dezelfde manier uitsplitsen.
+
+### Versie 0.14.0 — warmtebron kiezen (gepland)
 
 - [ ] Vloerverwarming per ruimte (setpoint en warmtevraag); de ketel blijft bij KNX.
 - [ ] Per blok van een paar uur de goedkoopste warmte: airco (COP naar buitentemperatuur,

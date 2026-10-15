@@ -122,6 +122,53 @@ def building_fields(limits: bool = True) -> dict:
     return fields
 
 
+# 0.13: the central configuration is edited per subject (menu), like
+# Versatile Thermostat. Every central field belongs to exactly one section.
+CENTRAL_SECTIONS = {
+    "general": (
+        "outdoor_temperature_entity",
+        "outdoor_max_age_seconds",
+        "heating_limit_entity",
+        "cooling_limit_entity",
+        "hysteresis",
+        "sensor_validation",
+        "max_age_seconds",
+    ),
+    "presence": (
+        "presence_entity",
+        "motion_delay_seconds",
+        "motion_off_delay_minutes",
+    ),
+    "regulation": (
+        "manual_override_enabled",
+        "manual_override_duration_minutes",
+        "min_on_seconds",
+        "min_off_seconds",
+        "changeover_wait_seconds",
+        "setpoint_max_offset",
+        "setpoint_interval_seconds",
+        "window_delay_seconds",
+    ),
+    "screens": (
+        "sun_power_entity",
+        "sun_power_threshold",
+        "screen_block_entity",
+        "screen_shade_position",
+        "screen_override_minutes",
+    ),
+    "forecast": ("weather_entity",),
+}
+NEW_CENTRAL_FIELDS = ("outdoor_temperature_entity",)
+
+
+def section_fields(keys) -> dict:
+    return {
+        marker: value
+        for marker, value in building_fields(limits=False).items()
+        if marker.schema in keys
+    }
+
+
 def building_defaults() -> dict:
     default_settings = BuildingSettings()
     return {
@@ -334,12 +381,9 @@ class ZonentraConfigFlow(ZoneFormMixin, ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             name = str(user_input.get("name", "")).strip()
             settings = {
-                # Limits start at the defaults; set them on the device later.
-                **{
-                    key: value
-                    for key, value in building_defaults().items()
-                    if key in DEVICE_LIMITS
-                },
+                # Everything starts at the defaults: limits are set on the
+                # device, the other subjects later via Configure.
+                **building_defaults(),
                 **{
                     key: value
                     for key, value in user_input.items()
@@ -365,10 +409,10 @@ class ZonentraConfigFlow(ZoneFormMixin, ConfigFlow, domain=DOMAIN):
             vol.Schema(
                 {
                     vol.Required("name"): selector.TextSelector(),
-                    **building_fields(limits=False),
+                    **section_fields(NEW_CENTRAL_FIELDS),
                 }
             ),
-            {**building_defaults(), **(user_input or {})},
+            user_input or {},
         )
         return self.async_show_form(
             step_id="central", data_schema=schema, errors=errors
@@ -816,8 +860,70 @@ class CentralOptionsFlow(ZonentraOptionsFlow):
                 "equipment": [],
             }
         return self.async_show_menu(
-            step_id="init", menu_options=["building", "group", "finish"]
+            step_id="init",
+            # Literal, so every subject's label can be checked (= CENTRAL_SECTIONS).
+            menu_options=[
+                "general",
+                "presence",
+                "regulation",
+                "screens",
+                "forecast",
+                "group",
+                "finish",
+            ],
         )
+
+    async def _section(self, section, user_input):
+        """One subject of the central settings; the others stay as they are."""
+        keys = CENTRAL_SECTIONS[section]
+        current = self.topology.get("building", {})
+        errors = {}
+        if user_input is not None:
+            settings = {
+                **{key: value for key, value in current.items() if key not in keys},
+                **{key: value for key, value in user_input.items() if value != ""},
+            }
+            if settings.get("outdoor_temperature_entity"):
+                # The old candidates are resolved by choosing a sensor.
+                settings.pop("outdoor_temperature_candidates", None)
+            candidate = {**self.topology, "building": settings}
+            try:
+                self._validate(candidate)
+            except ValueError as err:
+                errors["base"] = str(err)
+            else:
+                self.topology = candidate
+                return await self.async_step_init()
+        schema = self.add_suggested_values_to_schema(
+            vol.Schema(section_fields(keys)),
+            {**building_defaults(), **current, **(user_input or {})},
+        )
+        return self.async_show_form(
+            step_id=section,
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "outdoor_candidates": ", ".join(
+                    current.get("outdoor_temperature_candidates", [])
+                )
+                or "—"
+            },
+        )
+
+    async def async_step_general(self, user_input=None):
+        return await self._section("general", user_input)
+
+    async def async_step_presence(self, user_input=None):
+        return await self._section("presence", user_input)
+
+    async def async_step_regulation(self, user_input=None):
+        return await self._section("regulation", user_input)
+
+    async def async_step_screens(self, user_input=None):
+        return await self._section("screens", user_input)
+
+    async def async_step_forecast(self, user_input=None):
+        return await self._section("forecast", user_input)
 
     def _model(self, topology):
         # Validate against every zone: a referenced group cannot be removed.

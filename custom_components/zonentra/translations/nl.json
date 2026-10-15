@@ -12,39 +12,10 @@
       },
       "central": {
         "title": "Centrale configuratie",
-        "description": "Gebouwbrede instellingen voor iedere ruimte die de centrale waarden gebruikt. Voeg daarna buitenunitgroepen toe via Configureren. De instellingen voor ruimteregeling gelden alleen voor ruimtes waarvan de schakelaar Ruimteregeling aan staat. De comfort-, eco- en afwezig-grenzen stel je daarna in op het centrale apparaat.",
+        "description": "Kies een naam en de buitentemperatuursensor. De rest begint met de standaardwaarden: de grenzen stel je in op het centrale apparaat, de andere onderwerpen (aanwezigheid, ruimteregeling, zonwering, weersverwachting, buitenunitgroepen) via Configureren.",
         "data": {
           "name": "Gebouwnaam",
-          "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
-          "outdoor_max_age_seconds": "Maximale buitentemperatuurleeftijd (seconden; 0 = uit)",
-          "heating_limit": "Centrale verwarmingsgrens (°C)",
-          "cooling_limit": "Centrale koelgrens (°C)",
-          "heating_limit_entity": "Centrale entiteit voor verwarmingsgrens (optioneel)",
-          "cooling_limit_entity": "Centrale entiteit voor koelgrens (optioneel)",
-          "hysteresis": "Centrale temperatuurhysterese (°C)",
-          "sensor_validation": "Centrale sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
-          "max_age_seconds": "Centrale maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)",
-          "manual_override_enabled": "Handmatige bediening via de roomcontroller toestaan",
-          "manual_override_duration_minutes": "Duur handmatige bediening (minuten, 5–120)",
-          "min_on_seconds": "Minimale inschakeltijd binnenunit vóór uitschakelen (seconden; comfort)",
-          "min_off_seconds": "Minimale uitschakeltijd binnenunit vóór inschakelen (seconden; veiligheid, controleer fabrikant)",
-          "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)",
-          "presence_entity": "Aanwezigheid gebouw (binary_sensor, input_boolean, alarmpaneel, persoon, groep of zone)",
-          "eco_heating_limit": "Eco-verwarmingsgrens (°C; geen beweging in de ruimte)",
-          "eco_cooling_limit": "Eco-koelgrens (°C; geen beweging in de ruimte)",
-          "away_heating_limit": "Afwezig-verwarmingsgrens (°C; gebouw afwezig)",
-          "away_cooling_limit": "Afwezig-koelgrens (°C; gebouw afwezig)",
-          "motion_delay_seconds": "Bewegingsdetectie-vertraging (seconden)",
-          "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)",
-          "setpoint_max_offset": "Ruimteregeling: maximale setpointcorrectie van een binnenunit (°C)",
-          "setpoint_interval_seconds": "Ruimteregeling: minimale tijd tussen setpointwijzigingen (seconden)",
-          "window_delay_seconds": "Raam open: vertraging voordat de ruimte stopt (seconden)",
-          "sun_power_entity": "Zonwering: vermogen zonnepanelen (zon schijnt)",
-          "sun_power_threshold": "Zonwering: vermogen waarboven de zon schijnt (W)",
-          "screen_block_entity": "Zonwering: blokkeer-entiteit, bijv. windalarm (optioneel; aan = geen commando's)",
-          "screen_shade_position": "Zonwering: stand bij zonwering (%; 100 = open)",
-          "screen_override_minutes": "Zonwering: handmatige bediening respecteren (minuten)",
-          "weather_entity": "Weersverwachting (optioneel; warme/koude dagen voor zonwering en minder omschakelen tussen verwarmen en koelen)"
+          "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)"
         }
       },
       "zone": {
@@ -117,7 +88,66 @@
           "zone": "Ruimte toevoegen of bewerken",
           "group": "Buitenunitgroep toevoegen of bewerken",
           "equipment": "Apparatuur toevoegen of bewerken",
+          "general": "Algemeen",
+          "presence": "Aanwezigheid",
+          "regulation": "Ruimteregeling",
+          "screens": "Zonwering",
+          "forecast": "Weersverwachting",
           "finish": "Opslaan"
+        }
+      },
+      "general": {
+        "title": "Algemeen",
+        "description": "Gebouwbrede metingen en parameters voor ruimtes die de centrale waarden gebruiken. De buitentemperatuur geldt voor het hele gebouw. Oudere buitensensoren die nog om een keuze vragen: {outdoor_candidates}. De comfort-, eco- en afwezig-grenzen stel je in op het centrale apparaat.",
+        "data": {
+          "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
+          "outdoor_max_age_seconds": "Maximale buitentemperatuurleeftijd (seconden; 0 = uit)",
+          "heating_limit_entity": "Centrale entiteit voor verwarmingsgrens (optioneel)",
+          "cooling_limit_entity": "Centrale entiteit voor koelgrens (optioneel)",
+          "hysteresis": "Centrale temperatuurhysterese (°C)",
+          "sensor_validation": "Centrale sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
+          "max_age_seconds": "Centrale maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)"
+        }
+      },
+      "presence": {
+        "title": "Aanwezigheid",
+        "description": "Aanwezigheid in het gebouw en beweging per ruimte kiezen tussen de comfort-, eco- en afwezig-band.",
+        "data": {
+          "presence_entity": "Aanwezigheid gebouw (binary_sensor, input_boolean, alarmpaneel, persoon, groep of zone)",
+          "motion_delay_seconds": "Bewegingsdetectie-vertraging (seconden)",
+          "motion_off_delay_minutes": "Ruimte bezet na laatste beweging (minuten)"
+        }
+      },
+      "regulation": {
+        "title": "Ruimteregeling",
+        "description": "Geldt alleen voor ruimtes waarvan de schakelaar Ruimteregeling aan staat, en voor de standregeling van de buitenunits.",
+        "data": {
+          "manual_override_enabled": "Handmatige bediening via de roomcontroller toestaan",
+          "manual_override_duration_minutes": "Duur handmatige bediening (minuten, 5–120)",
+          "min_on_seconds": "Minimale inschakeltijd binnenunit vóór uitschakelen (seconden; comfort)",
+          "min_off_seconds": "Minimale uitschakeltijd binnenunit vóór inschakelen (seconden; veiligheid, controleer fabrikant)",
+          "changeover_wait_seconds": "Wachttijd tussen stoppen en tegengestelde modus bij groepsomschakeling (seconden; veiligheid)",
+          "setpoint_max_offset": "Maximale setpointcorrectie van een binnenunit (°C)",
+          "setpoint_interval_seconds": "Minimale tijd tussen setpointwijzigingen (seconden)",
+          "window_delay_seconds": "Raam open: vertraging voordat de ruimte stopt (seconden)"
+        }
+      },
+      "screens": {
+        "title": "Zonwering",
+        "description": "De zon schijnt volgens het vermogen van de zonnepanelen; wind en regen blijven bij de eigen alarmen van het gebouw (blokkeer-entiteit). De schakelaar Zonweringregeling per ruimte bepaalt of de zonwering echt beweegt.",
+        "data": {
+          "sun_power_entity": "Vermogen zonnepanelen (zon schijnt)",
+          "sun_power_threshold": "Vermogen waarboven de zon schijnt (W)",
+          "screen_block_entity": "Blokkeer-entiteit, bijv. windalarm (optioneel; aan = geen commando's)",
+          "screen_shade_position": "Stand bij zonwering (%; 100 = open)",
+          "screen_override_minutes": "Handmatige bediening respecteren (minuten)"
+        }
+      },
+      "forecast": {
+        "title": "Weersverwachting",
+        "description": "De uurverwachting maakt een dag warm, neutraal of koud: op warme dagen gaat de zonwering vroeg omlaag, en verwarmen of koelen start later als het weer het werk doet. Drempels en marge stel je in op het centrale apparaat.",
+        "data": {
+          "weather_entity": "Weersverwachting (optioneel; warme/koude dagen voor zonwering en minder omschakelen tussen verwarmen en koelen)"
         }
       },
       "zone": {

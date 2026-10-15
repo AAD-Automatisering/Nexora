@@ -156,6 +156,13 @@ Zoals Versatile Thermostat bestaat Zonentra uit één **centrale configuratie**
 `groups`. Een ruimte bewaart haar eigen zone-record plus `indoor_units`,
 `floor_heating_entities`, `shading_entities` en `ventilation_entities`.
 
+De opties van de centrale entry (0.13) zijn een menu per onderwerp
+(`CENTRAL_SECTIONS` in `config_flow.py`: algemeen, aanwezigheid, ruimteregeling,
+zonwering, weersverwachting) plus de buitenunitgroepen. Elk centraal veld hoort bij
+precies één onderwerp; een onderwerp vervangt alleen zijn eigen sleutels in
+`building` en wordt pas bij **Opslaan** bewaard. Vaste grenzen staan op het centrale
+apparaat (number-entiteiten), niet in het menu.
+
 `topology.assemble()` (puur) voegt beide samen tot het bestaande topologieformaat;
 `build_model()` en de hele rekenkern zijn ongewijzigd. Apparatuur-ID's volgen uit
 de gekoppelde entiteit (`hvac_<object_id>`), dus ze zijn stabiel en uniek, en een

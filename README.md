@@ -55,8 +55,10 @@ De runtime heeft geen aanvullende Python-requirements en vereist geen VTherm.
    `<Home Assistant config>/custom_components/zonentra`.
 2. Herstart Home Assistant.
 3. Ga naar **Instellingen → Apparaten & diensten → Integratie toevoegen → Zonentra**
-   en kies **Centrale configuratie** (eenmalig): gebouwnaam en centrale instellingen.
-4. Open bij de centrale configuratie **Configureren** en voeg de buitenunitgroepen toe.
+   en kies **Centrale configuratie** (eenmalig): gebouwnaam en buitentemperatuursensor.
+4. Open bij de centrale configuratie **Configureren**: een menu met **Algemeen**,
+   **Aanwezigheid**, **Ruimteregeling**, **Zonwering**, **Weersverwachting** en de
+   buitenunitgroepen. Pas per onderwerp aan en kies **Opslaan**.
 5. Voeg daarna per ruimte opnieuw **Zonentra** toe en kies **Ruimte**: sensor,
    binnenunits (bestaande climate-entiteiten), buitenunitgroep en optionele context.
 
@@ -75,6 +77,15 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.13.0 — centrale configuratie per onderwerp
+
+Werk bij via HACS, herstart Home Assistant en herlaad de browser volledig.
+**Configureren** bij de centrale configuratie opent nu een menu per onderwerp
+(algemeen, aanwezigheid, ruimteregeling, zonwering, weersverwachting,
+buitenunitgroepen) in plaats van één lang scherm. Je instellingen blijven staan; een
+onderwerp wijzigt alleen zijn eigen velden. Een nieuwe centrale configuratie vraagt
+alleen nog de naam en de buitentemperatuursensor.
 
 ### Bijwerken naar 0.12.0 — weersverwachting
 
@@ -236,7 +247,9 @@ P1/PV en weeroptimalisatie volgen in latere fases.
 
 ## Klimaatintelligentie configureren
 
-Begin via **Opties → Centrale configuratie**:
+Begin via **Configureren** bij de centrale configuratie (onderwerpen **Algemeen**,
+**Aanwezigheid**, **Ruimteregeling**, **Zonwering** en **Weersverwachting**; de vaste
+grenzen staan op het centrale apparaat):
 
 | Centrale instelling | Gebruik / voorgestelde beginwaarde |
 |---|---|
