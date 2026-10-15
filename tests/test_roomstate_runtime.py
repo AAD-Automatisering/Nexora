@@ -54,10 +54,10 @@ async def test_room_state_sensors(hass, freezer):
     central, zone = await office(hass, freezer, mocks)
     # 0.13.3: no motion sensor and no building presence: no presence sensor.
     assert entity(hass, "sensor", f"{zone.entry_id}_presence") is None
-    # 0.13.3: the automatic fan's choice is shown without fan mode auto too:
-    # 21 °C, heating target 22.3 -> 1.3 °C away -> third speed.
+    # 21 °C, heating target 22.3 -> 1.3 °C away -> third speed. Since 0.13.5
+    # the automatic fan is the default (in use, also in simulation).
     fan = state(hass, zone, "auto_fan")
-    assert (fan.state, fan.attributes["in_use"]) == ("75%", False)
+    assert (fan.state, fan.attributes["in_use"]) == ("75%", True)
     assert state(hass, zone, "safety").state == "safe"
     assert state(hass, zone, "window").state == "closed"
     assert float(state(hass, zone, "ema_temperature").state) == 21
