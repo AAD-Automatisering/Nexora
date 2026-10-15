@@ -4,6 +4,8 @@
   in the central configuration and applied without reloading.
 * Zone device: the room's own comfort, eco and away limits. Until one is set,
   the central value applies; "Use central limits" (button) clears them.
+* Central device, with a weather entity (0.12): when a day counts as warm or
+  cold (expected maximum of the coming hours) and the start margin.
 """
 
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
@@ -35,6 +37,12 @@ PAIR = {
     "away_heating_limit": "away_cooling_limit",
     "away_cooling_limit": "away_heating_limit",
 }
+# 0.12 forecast settings: key -> (minimum, maximum, step).
+FORECAST_KEYS = {
+    "warm_day_temperature": (-20, 45, 0.5),
+    "cold_day_temperature": (-20, 45, 0.5),
+    "forecast_margin": (0, 3, 0.1),
+}
 
 
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
@@ -42,7 +50,10 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
         context = zone_context(hass, entry)
         async_add_entities(ZoneLimitNumber(entry, key, **context) for key in LIMIT_KEYS)
         return
-    async_add_entities(CentralLimitNumber(entry, key) for key in LIMIT_KEYS)
+    entities = [CentralLimitNumber(entry, key) for key in LIMIT_KEYS]
+    if entry.runtime_data.building.settings.weather_entity:
+        entities.extend(CentralForecastNumber(entry, key) for key in FORECAST_KEYS)
+    async_add_entities(entities)
 
 
 class LimitNumber(NumberEntity):
@@ -105,6 +116,20 @@ class CentralLimitNumber(LimitNumber):
         # No reload: the runtime takes the new building model directly.
         self.hass.config_entries.async_update_entry(entry, options=options)
         entry.runtime_data.apply_building(model)
+
+
+class CentralForecastNumber(CentralLimitNumber):
+    """When a day is warm or cold, and how much later heating/cooling starts."""
+
+    def __init__(self, entry, key) -> None:
+        super().__init__(entry, key)
+        minimum, maximum, step = FORECAST_KEYS[key]
+        self._attr_native_min_value = minimum
+        self._attr_native_max_value = maximum
+        self._attr_native_step = step
+        if key == "forecast_margin":
+            self._attr_device_class = None  # A temperature difference.
+            self._attr_icon = "mdi:thermometer-chevron-up"
 
 
 class ZoneLimitNumber(ZoneEntity, LimitNumber):

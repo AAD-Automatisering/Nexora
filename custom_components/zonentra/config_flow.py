@@ -110,6 +110,8 @@ def building_fields(limits: bool = True) -> dict:
         ),
         vol.Optional("screen_shade_position"): numeric(0, 100, 1, "%"),
         vol.Optional("screen_override_minutes"): numeric(5, 720, 1, "min"),
+        # Weather forecast (0.12): warm/cold days save gas and electricity.
+        vol.Optional("weather_entity"): entity_selector("weather"),
     }
     if not limits:
         fields = {

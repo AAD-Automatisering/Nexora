@@ -14,7 +14,10 @@ from homeassistant.exceptions import ConfigEntryError, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 from homeassistant.helpers.storage import Store
 
 from .const import DOMAIN
@@ -164,6 +167,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
         )
     entry.async_on_unload(runtime.close)
     runtime.refresh()
+    if kind == CENTRAL and building.settings.weather_entity:
+        # 0.12: the hourly forecast is asked for, it is not a state change.
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass, runtime.async_update_forecast, runtime.forecast_interval
+            )
+        )
+        entry.async_create_task(
+            hass, runtime.async_update_forecast(), "zonentra_forecast"
+        )
     await hass.config_entries.async_forward_entry_setups(entry, platforms(entry))
     return True
 

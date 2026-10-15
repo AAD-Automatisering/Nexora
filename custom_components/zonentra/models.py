@@ -128,6 +128,11 @@ class BuildingSettings:
     screen_block_entity: str | None = None  # e.g. a wind alarm: no commands
     screen_shade_position: float = 0.0  # % (100 = open)
     screen_override_minutes: float = 120.0
+    # 0.12 weather forecast: the coming hours make a day warm/neutral/cold.
+    weather_entity: str | None = None
+    warm_day_temperature: float = 22.0  # expected maximum from (°C)
+    cold_day_temperature: float = 12.0  # expected maximum up to (°C)
+    forecast_margin: float = 1.0  # °C later start of heating/cooling
 
 
 def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
@@ -262,6 +267,12 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _range(settings.sun_power_threshold, 0, 1_000_000)
     _range(settings.screen_shade_position, 0, 100)
     _range(settings.screen_override_minutes, 5, 720)
+    _entity(settings.weather_entity, ("weather",))
+    _range(settings.warm_day_temperature, -20, 45)
+    _range(settings.cold_day_temperature, -20, 45)
+    _range(settings.forecast_margin, 0, 3)
+    if settings.cold_day_temperature >= settings.warm_day_temperature:
+        raise ValueError("invalid_parameters")
     _validate_sensor_validation(settings)
     _validate_limits(settings)
     zones, groups, equipment = (

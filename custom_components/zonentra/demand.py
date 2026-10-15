@@ -140,9 +140,17 @@ def comfort_limits(
 
 
 def calculate_demand(
-    zone: Zone, snapshot: ZoneSnapshot, previous: str = "unknown"
+    zone: Zone,
+    snapshot: ZoneSnapshot,
+    previous: str = "unknown",
+    heating_margin: float = 0.0,
+    cooling_margin: float = 0.0,
 ) -> ZoneDemand:
-    """A configured missing/stale/invalid required input produces unknown, not zero."""
+    """A configured missing/stale/invalid required input produces unknown, not zero.
+
+    The margins (0.12, from the weather forecast) delay the start of heating on
+    a warm day and of cooling on a cold day; a running demand ends as usual.
+    """
     required = (snapshot.temperature, snapshot.heating_limit, snapshot.cooling_limit)
     bad = next((reading for reading in required if reading.quality != "valid"), None)
     if bad:
@@ -163,10 +171,14 @@ def calculate_demand(
         demand, reason = "heating_demand", "heating_hysteresis"
     elif previous == "cooling_demand" and temperature > cool - hysteresis:
         demand, reason = "cooling_demand", "cooling_hysteresis"
-    elif temperature < heat - hysteresis:
+    elif temperature < heat - hysteresis - heating_margin:
         demand, reason = "heating_demand", "below_heating_limit"
-    elif temperature > cool + hysteresis:
+    elif temperature > cool + hysteresis + cooling_margin:
         demand, reason = "cooling_demand", "above_cooling_limit"
+    elif temperature < heat - hysteresis:
+        demand, reason = "neutral", "heating_deferred_warm_day"
+    elif temperature > cool + hysteresis:
+        demand, reason = "neutral", "cooling_deferred_cold_day"
     else:
         demand, reason = "neutral", "within_comfort_band"
     # Saturate each zone's contribution at 5 K before weighting.

@@ -3,7 +3,10 @@
 Een lokaal, modulair gebouwbeheersysteem als native Home Assistant Custom Integration.
 **Eén Home Assistant = één Zonentra = één gebouw**, met meerdere ruimtes en installaties.
 
-Versie **0.11.0** regelt de **zonwering** (screens): omlaag als de zon op de gevel
+Versie **0.12.0** gebruikt de **weersverwachting** om zuinig te zijn met gas en
+elektra: op een warme dag gaat de zonwering al vroeg omlaag en wacht verwarmen
+langer, op een koude dag mag de zon binnen en wacht koelen langer; lege ruimtes
+houden de zonwering op energie. Versie 0.11.0 regelt de **zonwering** (screens): omlaag als de zon op de gevel
 staat en de ruimte warm is of koelt, omhoog voor gratis zonnewarmte, daglicht en
 's nachts. Per ruimte eerst als simulatie. Versie 0.10.0 vulde het ruimteapparaat aan met de sensoren en bediening die
 Versatile Thermostat ook heeft: aanwezigheid, veiligheid, raam (met bypass),
@@ -72,6 +75,14 @@ via de Home Assistant-integratie. Opname in de standaard HACS-catalogus is hierv
 niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
+
+### Bijwerken naar 0.12.0 — weersverwachting
+
+Werk bij via HACS, herstart Home Assistant en herlaad de browser volledig. Kies in
+**Centrale configuratie** de weerentiteit (`weather.`, met uurverwachting). Het
+centrale apparaat krijgt daarna de sensoren **Verwachte maximumtemperatuur**,
+**Verwachte minimumtemperatuur** en **Dagtype**, en de instellingen **Warme dag
+vanaf**, **Koude dag tot** en **Startmarge**. Zonder weerentiteit verandert er niets.
 
 ### Bijwerken naar 0.11.0 — zonwering
 
@@ -322,6 +333,30 @@ Zoals de presettemperaturen bij Versatile Thermostat:
 Een band moet geldig blijven: verwarmen + 2 × hysterese < koelen. Grensentiteiten
 (`input_number` e.d.) stel je nog wel in de wizard in.
 
+### Weersverwachting (0.12)
+
+Zonentra vraagt elke 30 minuten de uurverwachting van de weerentiteit op
+(`weather.get_forecasts`) en kijkt naar de komende 12 uur. Het verwachte maximum
+bepaalt het **dagtype**:
+
+| Dagtype | Verwacht maximum (standaard) | Verwarmen | Koelen | Zonwering (zon op de gevel, geen vraag) |
+|---|---|---|---|---|
+| Warm | vanaf 22 °C | Start pas 1 °C later (de zon warmt de ruimte toch op) | Normaal | Bezette ruimte: al omlaag; lege ruimte: omlaag |
+| Neutraal | tussen beide | Normaal | Normaal | Bezette ruimte: op de ruimtetemperatuur; lege ruimte: omlaag |
+| Koud | tot 12 °C | Normaal | Start pas 1 °C later (die warmte is gratis) | Omhoog (gratis zonnewarmte) |
+
+- **Minder omschakelen:** een koele ochtend op een warme dag zet de buitenunit niet op
+  verwarmen; een ruimte die op een koude dag door de zon iets te warm wordt, zet hem
+  niet op koelen. Een lopende vraag eindigt zoals altijd; vorst- en
+  oververhittingsbeveiliging veranderen niet.
+- **Lege ruimte** (eco of afwezig): de zonwering kiest puur op energie — omlaag tegen
+  opwarming, op een koude dag omhoog voor gratis warmte.
+- **Instelbaar** op het centrale apparaat: warme dag vanaf, koude dag tot en de
+  startmarge (0–3 °C).
+- **Geen verwachting** (geen weerentiteit, storing of ouder dan 3 uur): dagtype
+  onbekend, alles werkt zoals in 0.11. Na een mislukte eerste poging probeert
+  Zonentra het na 2 minuten opnieuw.
+
 ### Zonwering (0.11)
 
 Per zonwering (een `cover` met positie) beslist Zonentra, in deze volgorde:
@@ -566,7 +601,8 @@ Download diagnostiek via het integratiemenu. Namen, IDs en bronkoppelingen worde
 geredigeerd. De export bevat scores en verklaringen, geen ruwe sensorstates.
 Debuglogging kan via de standaard HA-functie worden ingeschakeld. Bronlisteners
 volgen wijzigingen én rapporten met dezelfde waarde; één deadline-timer houdt
-sensorleeftijd (alleen update_based) en wachttijden bij. Er is geen periodieke polling.
+sensorleeftijd (alleen update_based) en wachttijden bij. Er is geen periodieke polling,
+behalve de weersverwachting (elke 30 minuten, alleen met een weerentiteit).
 
 ## Veilig testen naast de bestaande regeling
 

@@ -43,7 +43,8 @@
           "sun_power_threshold": "Screens: solar power above which the sun shines (W)",
           "screen_block_entity": "Screens: block entity, e.g. wind alarm (optional; on = no commands)",
           "screen_shade_position": "Screens: position when shading (%; 100 = open)",
-          "screen_override_minutes": "Screens: respect manual operation for (minutes)"
+          "screen_override_minutes": "Screens: respect manual operation for (minutes)",
+          "weather_entity": "Weather forecast (optional; warm/cold days for screens and fewer heat/cool changeovers)"
         }
       },
       "zone": {
@@ -218,7 +219,8 @@
           "sun_power_threshold": "Screens: solar power above which the sun shines (W)",
           "screen_block_entity": "Screens: block entity, e.g. wind alarm (optional; on = no commands)",
           "screen_shade_position": "Screens: position when shading (%; 100 = open)",
-          "screen_override_minutes": "Screens: respect manual operation for (minutes)"
+          "screen_override_minutes": "Screens: respect manual operation for (minutes)",
+          "weather_entity": "Weather forecast (optional; warm/cold days for screens and fewer heat/cool changeovers)"
         }
       },
       "zone_settings": {
@@ -407,6 +409,20 @@
           "shade": "Shade",
           "hold": "Hold"
         }
+      },
+      "forecast_maximum": {
+        "name": "Expected maximum temperature"
+      },
+      "forecast_minimum": {
+        "name": "Expected minimum temperature"
+      },
+      "day_type": {
+        "name": "Day type",
+        "state": {
+          "warm": "Warm",
+          "neutral": "Neutral",
+          "cold": "Cold"
+        }
       }
     },
     "switch": {
@@ -478,6 +494,15 @@
       },
       "away_cooling_limit": {
         "name": "Away cooling limit"
+      },
+      "central_warm_day_temperature": {
+        "name": "Warm day from (expected maximum)"
+      },
+      "central_cold_day_temperature": {
+        "name": "Cold day up to (expected maximum)"
+      },
+      "central_forecast_margin": {
+        "name": "Start margin on warm/cold days"
       }
     },
     "button": {

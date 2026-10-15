@@ -7,8 +7,13 @@ Per screen, in order:
 3. no sun (solar power below the threshold, with delays against clouds) or
    the sun not on the screen's facade: up (daylight);
 4. sun on the facade: the room decides. Heating demand: up (free solar
-   heat); cooling demand: down; otherwise down when the room is in the warm
-   half of its band, up in the cold half (with hysteresis).
+   heat); cooling demand: down;
+5. (0.12, energy first, with a forecast) an empty room (eco or away band):
+   down on a warm or neutral day (no heat to cool away later), up on a cold day (free heat);
+6. an occupied room on a warm day: down already (before the room warms up);
+   on a cold day: up (solar heat saves gas);
+7. otherwise down when the room is in the warm half of its band, up in the
+   cold half (with hysteresis).
 
 Wind/rain alarms stay with KNX; a block entity stops all commands. A person
 moving a screen (Home Assistant or room controller) is respected for the
@@ -97,6 +102,8 @@ def decide_screen(
     cooling_limit: float | None,
     shade_position: int,
     previous: str | None,
+    day: str = "unknown",
+    occupied: bool = True,
 ) -> ScreenDecision:
     def result(target, reason):
         position = {"open": OPEN_POSITION, "shade": shade_position}.get(target)
@@ -114,6 +121,14 @@ def decide_screen(
         return result("open", "solar_gain_heating")
     if demand == "cooling_demand":
         return result("shade", "cooling")
+    if not occupied and day != "unknown":
+        if day == "cold":
+            return result("open", "empty_room_solar_gain")
+        return result("shade", "empty_room_keep_cool")
+    if day == "warm":
+        return result("shade", "warm_day_forecast")
+    if day == "cold":
+        return result("open", "cold_day_forecast")
     if room_temperature is None or heating_limit is None or cooling_limit is None:
         return result("hold", "room_temperature_unknown")
     middle = (heating_limit + cooling_limit) / 2

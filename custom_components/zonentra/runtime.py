@@ -6,8 +6,12 @@ from datetime import timedelta
 
 from homeassistant.const import EVENT_STATE_CHANGED
 from homeassistant.core import Context, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
-from homeassistant.helpers.event import async_track_point_in_utc_time
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_point_in_utc_time,
+)
 from homeassistant.util import dt as dt_util
 
 from .control import plan
@@ -19,6 +23,14 @@ from .executor import (
     PresetMemory,
     next_correction_check,
     plan_mode_commands,
+)
+from .forecast import (
+    REFRESH_MINUTES,
+    RETRY_SECONDS,
+    Forecast,
+    day_type,
+    demand_margins,
+    summarize_forecast,
 )
 from .indoor import compare_modes, observe_group, observe_unit
 from .models import Building
@@ -178,6 +190,11 @@ class BuildingRuntime:
         self.screen_last_move: dict = {}
         self.cover_tracker = CommandTracker(confirmation_seconds=240)
         self._screen_checks: list = []
+        # 0.12 weather forecast of the coming hours: warm / neutral / cold day.
+        self.forecast: Forecast | None = None
+        self.forecast_error: str | None = None
+        self.day_type = "unknown"
+        self._cancel_forecast_retry = None
         # 0.5 simulated control. In memory only: nothing survives a restart.
         self.overrides = {}
         self.last_transitions = {}
@@ -284,6 +301,20 @@ class BuildingRuntime:
             for zone in self.building.zones
         }
         self._room_state(now)
+        settings = self.building.settings
+        self.day_type = (
+            day_type(
+                self.forecast,
+                now,
+                settings.warm_day_temperature,
+                settings.cold_day_temperature,
+            )
+            if settings.weather_entity
+            else "unknown"
+        )
+        heating_margin, cooling_margin = demand_margins(
+            self.day_type, settings.forecast_margin
+        )
         demands = {}
         for zone in self.building.zones:
             demand = calculate_demand(
@@ -292,6 +323,8 @@ class BuildingRuntime:
                 self.zone_demands[zone.id].demand
                 if zone.id in self.zone_demands
                 else "unknown",
+                heating_margin,
+                cooling_margin,
             )
             # Thermostat mode: off asks nothing, heat/cool only one direction.
             demand = room_demand(self.thermostat(zone.id).hvac_mode, demand)
@@ -469,6 +502,45 @@ class BuildingRuntime:
                 if trend is not None:
                     self.trends[zone.id] = trend
         self._window_checks = checks
+
+    async def async_update_forecast(self, _now=None) -> None:
+        """Fetch the hourly forecast of the coming hours (0.12), then refresh."""
+        entity = self.building.settings.weather_entity
+        if not entity:
+            self.forecast = None
+            return
+        now = dt_util.utcnow()
+        try:
+            response = await self.hass.services.async_call(
+                "weather",
+                "get_forecasts",
+                {"entity_id": entity, "type": "hourly"},
+                blocking=True,
+                return_response=True,
+            )
+        except (HomeAssistantError, ValueError) as err:
+            # Weather not loaded yet or no hourly forecast: keep the last one
+            # until it is too old; the next attempt follows on the interval.
+            self.forecast_error = type(err).__name__
+            _LOGGER.debug("Weather forecast of %s unavailable: %s", entity, err)
+            if self.forecast is None and self._cancel_forecast_retry is None:
+                # At startup the weather integration may not be loaded yet.
+                self._cancel_forecast_retry = async_call_later(
+                    self.hass, RETRY_SECONDS, self._retry_forecast
+                )
+        else:
+            entries = ((response or {}).get(entity) or {}).get("forecast") or []
+            self.forecast = summarize_forecast(entries, now)
+            self.forecast_error = None if entries else "empty_forecast"
+        self.refresh()
+
+    async def _retry_forecast(self, _now=None) -> None:
+        self._cancel_forecast_retry = None
+        await self.async_update_forecast()
+
+    @property
+    def forecast_interval(self) -> timedelta:
+        return timedelta(minutes=REFRESH_MINUTES)
 
     @callback
     def apply_building(self, building: Building) -> None:
@@ -792,6 +864,9 @@ class BuildingRuntime:
                 cooling_limit=snapshot.cooling_limit.value,
                 shade_position=round(settings.screen_shade_position),
                 previous=previous.target if previous else None,
+                day=self.day_type,
+                occupied=self.zone_bands[zone.id][0] == "comfort"
+                or self.thermostat(zone.id).manual,
             )
             override = self.screen_overrides.get(item.id)
             if override is not None and now >= override:
@@ -1251,6 +1326,9 @@ class BuildingRuntime:
         if self._cancel_deadline:
             self._cancel_deadline()
             self._cancel_deadline = None
+        if self._cancel_forecast_retry:
+            self._cancel_forecast_retry()
+            self._cancel_forecast_retry = None
 
     @property
     def status(self) -> str:
@@ -1274,6 +1352,9 @@ class BuildingRuntime:
             "outdoor_temperature_quality": self.outdoor_temperature.quality,
             "building_presence": self.presence,
             "sunny": self.sunny,
+            "day_type": self.day_type,
+            "forecast_maximum": self.forecast.maximum if self.forecast else None,
+            "forecast_minimum": self.forecast.minimum if self.forecast else None,
             "sun_power": self.sun_power,
             "regulated_zones": sum(
                 self.regulated(zone.id) for zone in self.building.zones

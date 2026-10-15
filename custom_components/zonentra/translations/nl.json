@@ -43,7 +43,8 @@
           "sun_power_threshold": "Zonwering: vermogen waarboven de zon schijnt (W)",
           "screen_block_entity": "Zonwering: blokkeer-entiteit, bijv. windalarm (optioneel; aan = geen commando's)",
           "screen_shade_position": "Zonwering: stand bij zonwering (%; 100 = open)",
-          "screen_override_minutes": "Zonwering: handmatige bediening respecteren (minuten)"
+          "screen_override_minutes": "Zonwering: handmatige bediening respecteren (minuten)",
+          "weather_entity": "Weersverwachting (optioneel; warme/koude dagen voor zonwering en minder omschakelen tussen verwarmen en koelen)"
         }
       },
       "zone": {
@@ -218,7 +219,8 @@
           "sun_power_threshold": "Zonwering: vermogen waarboven de zon schijnt (W)",
           "screen_block_entity": "Zonwering: blokkeer-entiteit, bijv. windalarm (optioneel; aan = geen commando's)",
           "screen_shade_position": "Zonwering: stand bij zonwering (%; 100 = open)",
-          "screen_override_minutes": "Zonwering: handmatige bediening respecteren (minuten)"
+          "screen_override_minutes": "Zonwering: handmatige bediening respecteren (minuten)",
+          "weather_entity": "Weersverwachting (optioneel; warme/koude dagen voor zonwering en minder omschakelen tussen verwarmen en koelen)"
         }
       },
       "zone_settings": {
@@ -407,6 +409,20 @@
           "shade": "Zonwering",
           "hold": "Ongewijzigd"
         }
+      },
+      "forecast_maximum": {
+        "name": "Verwachte maximumtemperatuur"
+      },
+      "forecast_minimum": {
+        "name": "Verwachte minimumtemperatuur"
+      },
+      "day_type": {
+        "name": "Dagtype",
+        "state": {
+          "warm": "Warm",
+          "neutral": "Neutraal",
+          "cold": "Koud"
+        }
       }
     },
     "switch": {
@@ -478,6 +494,15 @@
       },
       "away_cooling_limit": {
         "name": "Afwezig koelen vanaf"
+      },
+      "central_warm_day_temperature": {
+        "name": "Warme dag vanaf (verwacht maximum)"
+      },
+      "central_cold_day_temperature": {
+        "name": "Koude dag tot (verwacht maximum)"
+      },
+      "central_forecast_margin": {
+        "name": "Startmarge op warme/koude dagen"
       }
     },
     "button": {

@@ -57,6 +57,14 @@ def _building_entities(entry) -> list:
     if legacy:
         entities.extend(UnitControlSensor(entry, item) for item in hvac)
     entities.extend(GroupCoordinationSensor(entry, group) for group in groups)
+    if not legacy and runtime.building.settings.weather_entity:
+        entities.extend(
+            [
+                ForecastTemperatureSensor(entry, "maximum"),
+                ForecastTemperatureSensor(entry, "minimum"),
+                DayTypeSensor(entry),
+            ]
+        )
     return entities
 
 
@@ -674,12 +682,76 @@ class ScreenSensor(ZonentraDiagnosticSensor):
             "facade": zone.facade,
             "sunny": runtime.sunny,
             "sun_power": runtime.sun_power,
+            "day_type": runtime.day_type,
             "manual_until": _iso(runtime.screen_overrides.get(self.item.id)),
             "last_commands": [
                 {key: entry[key] for key in ("at", "value", "reason", "result")}
                 for entry in runtime.command_log
                 if entry["equipment_id"] == self.item.id
             ][-5:],
+        }
+
+
+class ForecastTemperatureSensor(ZonentraDiagnosticSensor):
+    """Highest or lowest temperature expected in the coming hours (0.12)."""
+
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_entity_category = None
+
+    def __init__(self, entry, kind):
+        super().__init__(entry)
+        self._kind = kind
+        self._attr_translation_key = f"forecast_{kind}"
+        self._attr_unique_id = f"{entry.entry_id}_forecast_{kind}"
+
+    @property
+    def native_value(self):
+        forecast = self.runtime.forecast
+        if self.runtime.day_type == "unknown" or forecast is None:
+            return None
+        return getattr(forecast, self._kind)
+
+    @property
+    def extra_state_attributes(self):
+        forecast = self.runtime.forecast
+        return {
+            "hours": forecast.hours if forecast else 0,
+            "fetched_at": _iso(forecast.fetched_at) if forecast else None,
+            "error": self.runtime.forecast_error,
+        }
+
+
+class DayTypeSensor(ZonentraDiagnosticSensor):
+    """Warm, neutral or cold day by the forecast; drives screens and margins."""
+
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["warm", "neutral", "cold"]
+    _attr_icon = "mdi:weather-partly-cloudy"
+    _attr_translation_key = "day_type"
+    _attr_entity_category = None
+
+    def __init__(self, entry):
+        super().__init__(entry)
+        self._attr_unique_id = f"{entry.entry_id}_day_type"
+
+    @property
+    def native_value(self):
+        kind = self.runtime.day_type
+        return None if kind == "unknown" else kind
+
+    @property
+    def extra_state_attributes(self):
+        settings = self.runtime.building.settings
+        return {
+            "warm_from": settings.warm_day_temperature,
+            "cold_to": settings.cold_day_temperature,
+            "heating_start_margin": settings.forecast_margin
+            if self.runtime.day_type == "warm"
+            else 0.0,
+            "cooling_start_margin": settings.forecast_margin
+            if self.runtime.day_type == "cold"
+            else 0.0,
         }
 
 

@@ -136,6 +136,18 @@ ruimteregeling. De lamel is een tweede domein naast `climate`
 (`select`/`number`), alleen voor de centrale opbouw, eenmaal per start of modewissel
 en met commandolog.
 
+## Zonwering en weersverwachting (0.11, 0.12)
+
+`shading.py` en `forecast.py` zijn puur. De zonwering is het derde domein
+(`cover.set_cover_position`), met een eigen CommandTracker. De weersverwachting is
+geen state-input: de centrale entry vraagt `weather.get_forecasts` (uurverwachting)
+elke 30 minuten op met `async_track_time_interval`, bewaart alleen het maximum en
+minimum van de komende 12 uur in het geheugen en ververst daarna de runtime. Het
+dagtype werkt via de bestaande klimaatvraag (startmarge) en het zonweringsbesluit.
+Sensoren en instellingen (drempels, marge) staan op het centrale apparaat en
+bestaan alleen met een weerentiteit; de instellingen worden zonder herladen
+toegepast, zoals de grenzen.
+
 ## Config entries (0.6)
 
 Zoals Versatile Thermostat bestaat Zonentra uit één **centrale configuratie**

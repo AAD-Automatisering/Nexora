@@ -120,6 +120,21 @@ versie wordt niets actief geregeld, ook geen off-/uitschakelcommando.
 - [ ] Praktijkperiode met één ruimte: commandolog, setpointgedrag en comfort beoordelen.
 - [x] Ventilatorstand en raamcontacten (raam open → unit uit) in de ruimteregeling (0.10).
 
+### Versie 0.12.0 — weersverwachting (geïmplementeerd)
+
+- [x] Uurverwachting van de komende 12 uur; dagtype warm / neutraal / koud.
+- [x] Zonwering: warme dag vroeg omlaag, koude dag omhoog; lege ruimte op energie.
+- [x] Startmarge: op een warme dag later verwarmen, op een koude dag later koelen.
+- [x] Drempels en marge als instellingen op het centrale apparaat.
+- [ ] Praktijkperiode: drempels en marge afstemmen.
+
+### Versie 0.13.0 — warmtebron kiezen (gepland)
+
+- [ ] Vloerverwarming per ruimte (setpoint en warmtevraag); de ketel blijft bij KNX.
+- [ ] Per blok van een paar uur de goedkoopste warmte: airco (COP naar buitentemperatuur,
+  elektraprijs, zonnestroom-overschot via P1) of gas (vaste prijs).
+- [ ] Nooit vloer verwarmen en airco koelen tegelijk; standaard simulatie.
+
 ### Versie 0.11.0 — zonwering (geïmplementeerd)
 
 - [x] Screens per ruimte op zon (vermogen zonnepanelen), zonnestand en gevel.

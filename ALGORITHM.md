@@ -1,4 +1,4 @@
-# Zonentra 0.11.0 — uitlegbare klimaatintelligentie
+# Zonentra 0.12.0 — uitlegbare klimaatintelligentie
 
 Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
 commando en verandert ook niet de intern bijgehouden actuele modus. De actieve
@@ -553,12 +553,32 @@ per 900 s; `cover.set_cover_position`, bevestigd via een eigen CommandTracker
 (240 s). Een standwijziging die niet van Zonentra komt en geen automation is,
 start de handmatige periode.
 
+## Weersverwachting (0.12)
+
+`forecast.py` is puur. De runtime vraagt elke 30 minuten (en bij het laden; zonder
+verwachting na een fout opnieuw na 120 s) `weather.get_forecasts` met type `hourly`
+op. `summarize_forecast` neemt de uren met een tijd in (nu − 1 uur, nu + 12 uur]:
+maximum en minimum. `day_type`: verwachting ouder dan 3 uur of leeg → `unknown`;
+maximum ≥ `warm_day_temperature` (22) → `warm`; ≤ `cold_day_temperature` (12) →
+`cold`; anders `neutral`. `demand_margins` geeft (verwarmen, koelen):
+warm → (`forecast_margin`, 0), koud → (0, `forecast_margin`), anders (0, 0).
+`calculate_demand` start verwarmen pas onder grens − hysterese − marge
+(daartussen: neutraal, reden `heating_deferred_warm_day`) en koelen pas boven
+grens + hysterese + marge (`cooling_deferred_cold_day`); een lopende vraag houdt de
+gewone hysterese. `decide_screen` krijgt dagtype en bezetting (band comfort of een
+handmatige temperatuur): na nacht/zon/gevel en de verwarmings-/koelvraag kiest een
+lege ruimte bij een bekend dagtype zonwering (`empty_room_keep_cool`), op een koude
+dag open (`empty_room_solar_gain`); een bezette ruimte op een warme dag zonwering
+(`warm_day_forecast`), op een koude dag open (`cold_day_forecast`); anders de
+ruimtetemperatuur zoals in 0.11.
+
 ## Events en herbeoordeling
 
 Bronveranderingen gebruiken `async_track_state_change_event`. Voor rapporten met
 ongewijzigde waarde is er een gefilterde `EVENT_STATE_REPORTED`-listener, zoals de
 actuele HA-API voorschrijft. De runtime plant slechts één timer naar de eerstvolgende
-sensorvervaldatum of geblokkeerde omschakeldeadline. Er is geen periodieke polling.
+sensorvervaldatum of geblokkeerde omschakeldeadline. Er is geen periodieke polling,
+behalve het opvragen van de weersverwachting (elke 30 minuten, alleen met weerentiteit).
 Binnenunits zijn al gevolgde apparatuurentiteiten: een `hvac_action`-wijziging
 is een attribuutwijziging en komt via hetzelfde state_changed-event binnen.
 Override-afloop, anti-pendelblokkades en wachttijden van de omschakeling worden
