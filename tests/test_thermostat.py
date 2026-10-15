@@ -507,6 +507,11 @@ def test_fan_until_is_restored():
     # 0.13.5: the automatic fan switch is on unless stored off.
     assert Thermostat.from_dict({}).fan_control is True
     assert Thermostat.from_dict({"fan_control": False}).fan_control is False
+    # 0.13.6: the units' last known options are restored, invalid parts dropped.
+    restored = Thermostat.from_dict(
+        {"unit_hvac_modes": ["heat", 3, "cool"], "unit_fan_modes": "25%"}
+    )
+    assert (restored.unit_hvac_modes, restored.unit_fan_modes) == (("heat", "cool"), ())
 
 
 def test_fan_mode_is_stored_and_validated():

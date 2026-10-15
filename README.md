@@ -78,6 +78,17 @@ niet nodig. Home Assistant 2026.10.1 is de ingestelde minimumversie.
 Na publicatie van deze versie kan HACS de bijgewerkte bestanden downloaden.
 De lokale wijziging op zichzelf publiceert nog geen GitHub-release.
 
+### Bijwerken naar 0.13.6 — vaste mogelijkheden voor HomeKit
+
+HomeKit Bridge legt de onderdelen van een accessoire (zoals de ventilator en de
+modi) vast op het moment dat het start. Was een airco op dat moment niet beschikbaar
+(bijvoorbeeld tijdens een herstart, KNX nog niet klaar), dan miste de
+Zonentra-thermostaat zijn modi en ventilatorstanden en kreeg HomeKit een ander
+accessoire dan bij een ruimte waar de airco wel klaar was. Zonentra onthoudt nu per
+ruimte de laatst bekende modi en ventilatorstanden van de airco's en biedt die
+altijd aan. Na deze update eenmalig alle Zonentra-thermostaten in HomeKit resetten:
+actie `homekit.reset_accessory` met alle Zonentra-thermostaten.
+
 ### Bijwerken naar 0.13.5 — ventilator standaard automatisch
 
 Heeft een thermostaat geen ventilatorstand gekozen, dan regelt Zonentra de

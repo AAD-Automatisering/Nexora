@@ -1,4 +1,4 @@
-# Zonentra 0.13.5 — uitlegbare klimaatintelligentie
+# Zonentra 0.13.6 — uitlegbare klimaatintelligentie
 
 Dit document beschrijft vooral **read-only analyse**: een voorgestelde modus is geen
 commando en verandert ook niet de intern bijgehouden actuele modus. De actieve

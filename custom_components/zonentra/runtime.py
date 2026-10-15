@@ -266,6 +266,7 @@ class BuildingRuntime:
         self._occupancy(sources, now)
         if self.active_capable:
             self._sync_zone_limits()
+        self._remember_unit_options()
         bands, comfort, manual, manual_checks = {}, {}, {}, []
         for zone in self.building.zones:
             thermostat = self.thermostat(zone.id)
@@ -1149,24 +1150,57 @@ class BuildingRuntime:
         )
 
     def unit_options(self, zone_id: str) -> tuple[frozenset[str], tuple[str, ...]]:
-        """HVAC modes and fan speeds that every indoor unit of a zone supports."""
+        """HVAC modes and fan speeds that every indoor unit of a zone supports.
+
+        0.13.6: the last known options of the room (stored with its
+        thermostat), so they do not disappear while a unit is unavailable,
+        e.g. during a restart; HomeKit fixes an accessory's features when it
+        starts.
+        """
+        thermostat = self.thermostat(zone_id)
+        return frozenset(thermostat.unit_hvac_modes), thermostat.unit_fan_modes
+
+    def _observed_unit_options(self, zone_id: str):
+        """The options of the units now; None while one is not reporting."""
         states = [
             self.hass.states.get(item.entity_id)
             for item in self.building.equipment
             if item.kind == "hvac" and item.zone_id == zone_id
         ]
-        states = [state for state in states if state is not None]
-        if not states:
-            return frozenset(), ()
-        modes = frozenset.intersection(
-            *(frozenset(state.attributes.get("hvac_modes") or ()) for state in states)
+        if not states or any(
+            state is None
+            or state.state in ("unavailable", "unknown")
+            or not state.attributes.get("hvac_modes")
+            for state in states
+        ):
+            return None
+        modes = tuple(
+            mode
+            for mode in states[0].attributes.get("hvac_modes") or ()
+            if all(mode in state.attributes.get("hvac_modes") for state in states)
         )
         fans = tuple(
             fan
             for fan in states[0].attributes.get("fan_modes") or ()
             if all(fan in (state.attributes.get("fan_modes") or ()) for state in states)
         )
-        return modes, fans
+        return tuple(str(mode) for mode in modes), tuple(str(fan) for fan in fans)
+
+    def _remember_unit_options(self) -> None:
+        """Store the units' options per room when every unit reports them."""
+        changed = False
+        for zone in self.building.zones:
+            observed = self._observed_unit_options(zone.id)
+            if observed is None:
+                continue
+            thermostat = self.thermostat(zone.id)
+            if (thermostat.unit_hvac_modes, thermostat.unit_fan_modes) != observed:
+                self.thermostats[zone.id] = replace(
+                    thermostat, unit_hvac_modes=observed[0], unit_fan_modes=observed[1]
+                )
+                changed = True
+        if changed:
+            self._save_thermostats()
 
     def _setpoint_plan(self, item, zone, settings, now) -> SetpointPlan:
         unit = self.indoor_units.get(item.id)

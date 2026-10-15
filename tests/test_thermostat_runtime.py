@@ -463,3 +463,23 @@ async def test_reload_keeps_memory_and_running_units(hass, freezer):
     assert reloaded.command_log  # The command history continues too.
     await later(hass, freezer, minutes=1)
     assert ("set_hvac_mode", "heat") not in calls(mocks)
+
+
+async def test_thermostat_keeps_its_features_while_a_unit_is_unavailable(hass, freezer):
+    """0.13.6: HomeKit fixes an accessory's features when it starts; the
+    thermostat keeps the units' last known modes and fan speeds."""
+    central, zone = await office(hass, freezer)
+    await unit(hass, "off", **KNX)
+    climate_id = entity(hass, "climate", f"{zone.entry_id}_thermostat")
+    before = hass.states.get(climate_id).attributes
+    assert before["fan_modes"] == ["auto", "low", "middle", "medium", "high"]
+    hass.states.async_set(UNIT, "unavailable", {})
+    await hass.async_block_till_done()
+    after = hass.states.get(climate_id).attributes
+    assert after["fan_modes"] == before["fan_modes"]
+    assert after["hvac_modes"] == before["hvac_modes"]
+    assert after["supported_features"] == before["supported_features"]
+    # Remembered with the thermostat: also right after a restart.
+    stored = central.runtime_data.thermostat("west")
+    assert "fan_only" in stored.unit_hvac_modes
+    assert stored.unit_fan_modes == ("off", "25%", "50%", "75%", "100%")

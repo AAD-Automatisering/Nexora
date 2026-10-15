@@ -80,6 +80,11 @@ class Thermostat:
     fan_until: str | None = None  # ISO time; set by the runtime
     # 0.13.5: off = Zonentra leaves the units' fan alone in this room.
     fan_control: bool = True
+    # 0.13.6: last known HVAC modes and fan modes that every indoor unit of the
+    # room supports. The thermostat always offers these, also while a unit is
+    # (briefly) unavailable, so HomeKit and dashboards see stable features.
+    unit_hvac_modes: tuple[str, ...] = ()
+    unit_fan_modes: tuple[str, ...] = ()
 
     @classmethod
     def from_dict(cls, data: Any) -> "Thermostat":
@@ -124,6 +129,8 @@ class Thermostat:
             if isinstance(data.get("fan_until"), str)
             else None,
             fan_control=data.get("fan_control") is not False,
+            unit_hvac_modes=_names(data.get("unit_hvac_modes")),
+            unit_fan_modes=_names(data.get("unit_fan_modes")),
         )
 
     def as_dict(self) -> dict:
@@ -145,6 +152,12 @@ class Thermostat:
     @property
     def has_band(self) -> bool:
         return self.heating_limit is not None and self.cooling_limit is not None
+
+
+def _names(value: Any) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
 
 
 CLEAR_MANUAL = {
