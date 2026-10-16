@@ -200,14 +200,14 @@
       },
       "group_details": {
         "title": "Outdoor unit group",
-        "description": "The feedback source must report heat, cool or off. Use reliable feedback, not a requested mode. Without feedback the actual mode stays unknown. This source supplies mode feedback; the group switch enables active control.",
+        "description": "The feedback source must report heat, cool or off. Use reliable feedback, not a requested mode. Without feedback the actual mode stays unknown. This source supplies mode feedback; the group switch enables active control. Valid one-sided heating or cooling requests are followed without score gates; score thresholds apply only to opposing requests. Minimum run and switch times still apply.",
         "data": {
           "name": "Name",
           "delete": "Delete this record",
           "mode_entity": "Reliable actual mode feedback (optional)",
           "min_switch_seconds": "Minimum time between mode changes (seconds)",
-          "min_demand_score": "Minimum demand score",
-          "score_deadband": "Minimum heat/cool score difference",
+          "min_demand_score": "Minimum demand score for opposing requests",
+          "score_deadband": "Minimum score difference for opposing heating and cooling requests",
           "max_age_seconds": "Maximum feedback age (seconds; 0 = disabled)"
         }
       },

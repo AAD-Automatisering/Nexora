@@ -180,16 +180,24 @@ de volledige klimaatvraag kiezen en conflicterende units corrigeren.
 Bereken `S_heat=sum(heating_score)`, `S_cool=sum(cooling_score)` en `Δ=S_heat−S_cool`.
 Standaard minimale score M=0,5; score-deadband D=0,5:
 
-1. `max(S_heat,S_cool) < M`: desired=off, no_significant_demand.
-2. `abs(Δ) < D`: behoud current heat/cool alleen als die richting score ≥ M heeft.
-   Anders desired=unknown, blocked_reason=balanced_demand.
-3. Anders: desired=heat bij Δ>0, anders cool.
-4. Actuele modus unknown: proposed=unknown, blocked_reason=current_mode_unknown;
-   gewenste richting blijft zichtbaar als deze berekenbaar is.
-5. Desired verschilt van bekende current en minimuminterval is nog niet verstreken:
+1. Geen enkele ruimte vraagt verwarmen of koelen: desired=off (`no_zone_demand`).
+2. Alleen `heating_demand` of alleen `cooling_demand`: kies die richting, onafhankelijk
+   van M en D. De vraagtoestand is leidend, ook als de score nul is tijdens het afmaken
+   van de ruimtehysterese (`heating_only_demand` / `cooling_only_demand`).
+3. Beide richtingen vragen: bij `max(S_heat,S_cool) < M` blijft een huidige modus met
+   geldige vraag behouden (`weak_demand_keep_current_mode`); zonder zo'n modus volgt off.
+4. Anders, bij `abs(Δ) < D`: behoud de huidige heat/cool-modus met vraag, ook bij
+   score nul. Zonder passende huidige modus is desired=unknown (`balanced_demand`).
+5. Bij voldoende verschil kies heat bij Δ>0, anders cool.
+6. Actuele modus unknown: proposed=unknown; geen fysieke feedback wordt verzonnen.
+7. Gewenste modus verschilt van bekende current en minimuminterval is nog niet verstreken:
    proposed=current, blocked_reason=minimum_switch_interval, blocked_until=deadline.
-6. Anders proposed=desired; mode_change_proposed is alleen true bij een werkelijk
-   verschillend en volledig toegestaan **simulatievoorstel**.
+8. Anders proposed=desired; een omschakelvoorstel vereist alle bestaande voorwaarden.
+
+`select_group_mode` wordt door analyse en actieve coördinatie gedeeld. De coördinator
+mag binnen een gebalanceerde/zwakke gemengde vraag de bekende gecoördineerde modus
+met vraag vasthouden. Bij waargenomen conflicterende unitmodi bepaalt dezelfde helper
+de herstelrichting. Ontbrekende meetgegevens of apparatuur worden hiermee niet omzeild.
 
 De minimumtijd (standaard 900 seconden) geldt voor alle overgangen, ook vanaf/naar
 off. Hij wordt gemeten vanaf de laatste **waargenomen** modusverandering of
@@ -291,9 +299,9 @@ bevestigd gerapporteerd. De Decision Engine (0.2–0.4) is ongewijzigd.
 | Decision Engine | Groepsmodus |
 |---|---|
 | desired heat / cool | heat / cool |
-| desired off (geen significante vraag) | neutral |
-| score-deadband (gebalanceerd) | huidige gecoördineerde modus als die zelf ≥ minimale vraagscore heeft, anders neutral |
-| observed_group_conflict (units al in heat én cool) | de complete zonevraag beslist met dezelfde drempels (minimale score, deadband), zodat afwijkende units gecorrigeerd kunnen worden |
+| desired off (geen geldige vraag) | neutral |
+| zwakke/gemengde of gebalanceerde vraag | huidige gecoördineerde modus zolang die geldige ruimtevraag heeft, anders neutral |
+| observed_group_conflict (units al in heat én cool) | dezelfde gedeelde keuze op complete ruimtevraag bepaalt de herstelrichting; drempels gelden alleen bij tegengestelde vragen |
 | insufficient_data, onbeschikbare units, ontbrekende sensoren | unknown → alle nieuwe acties geblokkeerd |
 
 De groepsmodus is leidend voor iedere binnenunit in de groep, ook tijdens een

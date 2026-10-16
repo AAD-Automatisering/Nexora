@@ -200,14 +200,14 @@
       },
       "group_details": {
         "title": "Buitenunitgroep",
-        "description": "De feedbackbron moet heat, cool of off melden. Gebruik alleen betrouwbare terugmelding, geen gewenste modus. Zonder feedback blijft de actuele modus unknown. Deze bron levert terugmelding; de groepsschakelaar bepaalt de actieve aansturing.",
+        "description": "De feedbackbron moet heat, cool of off melden. Gebruik alleen betrouwbare terugmelding, geen gewenste modus. Zonder feedback blijft de actuele modus unknown. Deze bron levert terugmelding; de groepsschakelaar bepaalt de actieve aansturing. Eenzijdige geldige warmte- of koelvraag wordt altijd gevolgd; scoredrempels gelden alleen bij tegengestelde vragen. Minimale looptijden blijven gelden.",
         "data": {
           "name": "Naam",
           "delete": "Dit item verwijderen",
           "mode_entity": "Betrouwbare actuele modus-feedback (optioneel)",
           "min_switch_seconds": "Minimale tijd tussen moduswisselingen (seconden)",
-          "min_demand_score": "Minimale vraagscore",
-          "score_deadband": "Minimaal verschil tussen warmte- en koelvraag",
+          "min_demand_score": "Minimale vraagscore bij tegengestelde vragen",
+          "score_deadband": "Minimaal verschil bij tegengestelde warmte- en koelvraag",
           "max_age_seconds": "Maximale feedbackleeftijd (seconden; 0 = uit)"
         }
       },

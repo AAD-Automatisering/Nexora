@@ -198,11 +198,12 @@ def test_mode_hysteresis_retains_current_mode():
     assert not decision.mode_change_proposed
 
 
-def test_small_demand_does_not_switch():
+def test_small_unopposed_demand_is_not_blocked_by_group_scores():
     building, sources = scenario((20.65,))
     decision = decision_for(building, sources)
     assert decision.heating_score == 0.35
-    assert decision.desired_mode == decision.proposed_mode == "off"
+    assert decision.desired_mode == decision.proposed_mode == "heat"
+    assert decision.reason == "heating_only_demand"
 
 
 @pytest.mark.parametrize("mode", [None, "unknown", "unavailable", "auto", "heat_cool"])

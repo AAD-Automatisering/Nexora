@@ -29,7 +29,9 @@ deadline-timers bewaken wachttijden en commandobevestigingen. Weersverwachtingen
 en agenda's worden daarnaast periodiek opgehaald. Unload ruimt listeners en timers op.
 
 Groepsarbitrage voorkomt tegengestelde warmte-/koelcommando's aan een gedeelde
-buitenunit. De groepsschakelaar blokkeert HVAC en lamellen; ruimteregeling en
+buitenunit. Analyse en coördinatie delen `engine.select_group_mode`: eenzijdige
+geldige ruimtevraag wordt gevolgd; alleen tegengestelde vragen gebruiken scoredrempels.
+Vraagtoestanden blijven leidend als hysterese tijdelijk een nul-score oplevert. De groepsschakelaar blokkeert HVAC en lamellen; ruimteregeling en
 zonwering hebben daarnaast hun eigen toestemming. De dispatcher controleert
 blokkades opnieuw vóór verzending. Stoppen, bevestigen, wachten en opnieuw starten
 vormen een afzonderlijke omschakelfase.

@@ -30,6 +30,35 @@ class GroupDecision:
     member_zone_ids: tuple[str, ...]
     reliable_zones: int
     mode_quality: str
+    heating_requested: bool = False
+    cooling_requested: bool = False
+
+
+def select_group_mode(
+    group, heating, cooling, heating_requested, cooling_requested, preferred
+):
+    """Requests determine whether to run; scores arbitrate opposing requests."""
+    requested = {
+        mode
+        for mode, active in (("heat", heating_requested), ("cool", cooling_requested))
+        if active
+    }
+    if not requested:
+        return "off", "no_zone_demand"
+    if len(requested) == 1:
+        mode = next(iter(requested))
+        return mode, "heating_only_demand" if mode == "heat" else "cooling_only_demand"
+    if max(heating, cooling) < group.min_demand_score:
+        if preferred in requested:
+            return preferred, "weak_demand_keep_current_mode"
+        return "off", "no_significant_demand"
+    if abs(heating - cooling) < group.score_deadband:
+        return preferred if preferred in requested else "unknown", "score_deadband"
+    return (
+        ("heat", "weighted_heating_demand")
+        if heating > cooling
+        else ("cool", "weighted_cooling_demand")
+    )
 
 
 def observe_mode(
@@ -61,6 +90,8 @@ def decide_group(
     ]
     heating = round(sum(item.heating_score * item.priority for item in known), 4)
     cooling = round(sum(item.cooling_score * item.priority for item in known), 4)
+    heating_requested = any(item.demand == "heating_demand" for item in known)
+    cooling_requested = any(item.demand == "cooling_demand" for item in known)
     mode = observe_mode(group, sources, now)
     current = mode.value if mode.quality == "valid" else "unknown"
     desired, reason, blocked, deadline = "unknown", "insufficient_data", None, None
@@ -85,27 +116,11 @@ def decide_group(
     elif group.single_hvac_mode and len(reported_modes) > 1:
         reason, blocked = "observed_group_conflict", "observed_group_conflict"
     else:
-        delta = heating - cooling
-        if max(heating, cooling) < group.min_demand_score:
-            desired, reason = "off", "no_significant_demand"
-        elif abs(delta) < group.score_deadband:
-            # Do not retain an unrelated mode; keep only a mode with real demand.
-            desired = (
-                current
-                if current in ("heat", "cool")
-                and (heating if current == "heat" else cooling)
-                >= group.min_demand_score
-                else "unknown"
-            )
-            reason = "score_deadband"
-            if desired == "unknown":
-                blocked = "balanced_demand"
-        else:
-            desired, reason = (
-                ("heat", "weighted_heating_demand")
-                if delta > 0
-                else ("cool", "weighted_cooling_demand")
-            )
+        desired, reason = select_group_mode(
+            group, heating, cooling, heating_requested, cooling_requested, current
+        )
+        if desired == "unknown":
+            blocked = "balanced_demand"
         if current == "unknown":
             blocked = blocked or "current_mode_unknown"
         elif desired != "unknown" and desired != current:
@@ -141,6 +156,8 @@ def decide_group(
         zone_ids,
         len(known),
         mode.quality,
+        heating_requested,
+        cooling_requested,
     )
 
 

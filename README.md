@@ -46,6 +46,10 @@ Via **Configureren** bij de centrale configuratie stel je aanwezigheid,
 ruimteregeling, zonwering, weersverwachting, afspraakvoorbereiding en groepen in.
 Ruimtes nemen standaard centrale instellingen over en kunnen daarvan afwijken.
 Comfortgrenzen stel je in op het centrale apparaat of het ruimteapparaat.
+Een geldige, uitsluitend verwarmende of koelende vraag wordt door de groep gevolgd,
+ook bij een kleine of nul-score tijdens het afmaken van de kamerhysterese.
+De minimale vraagscore en verschilgrens kiezen alleen tussen tegengestelde vragen.
+Wachttijden, apparaatbeschikbaarheid en beveiligingen blijven gelden.
 
 | Functie | Gebruik |
 |---|---|

@@ -210,6 +210,8 @@ class BuildingRuntime(
     @callback
     def refresh(self, event=None) -> None:
         """Refresh configured state values on an input event, without polling."""
+        if self._closed:
+            return
         now = dt_util.utcnow()
         if (
             event is not None

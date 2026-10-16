@@ -21,7 +21,7 @@ from datetime import datetime, timedelta
 from typing import Mapping
 
 from .demand import ZoneDemand
-from .engine import GroupDecision
+from .engine import GroupDecision, select_group_mode
 from .indoor import GroupModeObservation, IndoorUnitObservation
 from .models import Building, BuildingSettings, EquipmentGroup
 from .override import ManualOverride
@@ -116,22 +116,28 @@ def resolve_group_mode(
     desired = decision.desired_mode
     if desired in ("heat", "cool"):
         return desired, decision.reason
+    if decision.reason in (
+        "score_deadband",
+        "observed_group_conflict",
+        "no_significant_demand",
+    ):
+        target, reason = select_group_mode(
+            group,
+            decision.heating_score,
+            decision.cooling_score,
+            decision.heating_requested or decision.heating_score > 0,
+            decision.cooling_requested or decision.cooling_score > 0,
+            memory_mode,
+        )
+        if target in ("heat", "cool"):
+            return target, (
+                "demand_leads_unit_conflict"
+                if decision.reason == "observed_group_conflict"
+                else "balanced_demand_keep_coordinated_mode"
+            )
+        return "neutral", reason
     if desired == "off":
         return "neutral", decision.reason
-    scores = {"heat": decision.heating_score, "cool": decision.cooling_score}
-    if decision.reason == "observed_group_conflict":
-        # Units already run heat and cool. The Decision Engine refuses a desired
-        # mode; the coordinator lets the (complete) zone demand lead so the
-        # conflicting units can be corrected, using the same group thresholds.
-        if max(scores.values()) < group.min_demand_score:
-            return "neutral", "no_significant_demand_with_unit_conflict"
-        if abs(scores["heat"] - scores["cool"]) >= group.score_deadband:
-            mode = "heat" if scores["heat"] > scores["cool"] else "cool"
-            return mode, "demand_leads_unit_conflict"
-    if decision.reason in ("score_deadband", "observed_group_conflict"):
-        if memory_mode in scores and scores[memory_mode] >= group.min_demand_score:
-            return memory_mode, "balanced_demand_keep_coordinated_mode"
-        return "neutral", "balanced_demand"
     return "unknown", decision.blocked_reason or decision.reason
 
 
@@ -401,9 +407,8 @@ def unit_intent(
             return intend_on(target, "zone_demand")
         return correct(target, "mode_differs_from_group_mode")
     if target is None and wanted is not None and mode == wanted:
-        # 0.13.4: the group's total demand is too small to choose a mode, but
-        # this room still asks (within its hysteresis): keep its running unit
-        # on instead of switching it off and on again.
+        # A mixed group can remain neutral while this room still asks. Keep
+        # its running unit on rather than interrupting the hysteresis cycle.
         return result(mode, "hold", "room_still_asks")
     reason = (
         "override_expired"

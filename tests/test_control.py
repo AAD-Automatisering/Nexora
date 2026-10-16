@@ -176,23 +176,22 @@ def test_no_demand_means_off():
 
 
 def test_running_unit_stays_on_while_its_room_still_asks():
-    """0.13.4: 0.4 °C below the limit is too little for the group to choose a
-    mode, but a running unit of that room is not switched off."""
+    """One-sided demand chooses heat, including a small hysteretic request."""
     demand = {"west": "slight_heat", "meeting": "neutral", "director": "neutral"}
     coordinations, intents, _ = simulate(
         demand, {"west": "heat", "meeting": "off", "director": "off"}
     )
-    assert coordinations["outdoor_1"].group_mode == "neutral"
+    assert coordinations["outdoor_1"].group_mode == "heat"
     assert (intents["west"].action, intents["west"].reason) == (
         "hold",
-        "room_still_asks",
+        "following_group_mode",
     )
-    # A unit that is off is not started for so little demand.
+    # An off unit is also allowed to follow the room's valid heating request.
     _, intents, _ = simulate(
         demand, {"west": "off", "meeting": "off", "director": "off"}
     )
-    assert intents["west"].action == "hold"
-    assert intents["west"].desired_mode == "off"
+    assert intents["west"].action == "turn_on_heat"
+    assert intents["west"].desired_mode == "heat"
 
 
 def test_wrong_mode_is_corrected_to_group_mode():
