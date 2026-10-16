@@ -283,6 +283,36 @@ async def test_thermostat_off_switches_a_regulated_room_off(hass, freezer):
     assert ("turn_off", None) in calls(mocks)
 
 
+async def test_away_shutdown_waits_for_confirmation_before_setpoint(hass, freezer):
+    """A delayed off report must not allow a setpoint command after shutdown."""
+    mocks = await mock_climate(hass)
+    central, _ = await office(hass, freezer, mocks)
+    runtime = central.runtime_data
+    runtime.set_thermostat("west", regulation=True)
+    await later(hass, freezer, minutes=4)
+    await unit(hass, "heat", temperature=23.5)
+    await later(hass, freezer, minutes=11)
+    clear(mocks)
+
+    # The room is 21 °C, well above the away heating limit of 16 °C.
+    runtime.set_thermostat("west", preset="away")
+    await hass.async_block_till_done()
+    assert runtime.zone_demands["west"].demand == "neutral"
+    assert calls(mocks) == [("turn_off", None)]
+
+    # The gateway still reports heat while processing the off command.
+    # Re-evaluation must not send a temperature or fan command in that gap.
+    runtime.refresh()
+    await hass.async_block_till_done()
+    assert runtime.room_controls[EQUIPMENT].status == "waiting_for_confirmation"
+    assert calls(mocks) == [("turn_off", None)]
+
+    await unit(hass, "off", temperature=23.5)
+    clear(mocks)
+    await later(hass, freezer, minutes=16)
+    assert calls(mocks) == []
+
+
 async def test_regulated_room_keeps_its_unit_on_after_a_stand_change(hass, freezer):
     mocks = await mock_climate(hass)
     central, zone = await office(hass, freezer, mocks)

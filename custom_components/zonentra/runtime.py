@@ -865,7 +865,9 @@ class BuildingRuntime:
                 and enabled
                 and available
                 and control.command is None
-                and item.id not in busy
+                # A gateway may still report heat/cool after a mode or off
+                # command. Wait for confirmation before steering its target.
+                and not unit_busy
                 and not self.setpoint_tracker.is_pending(item.entity_id, now)
             ):
                 self.setpoint_sent[item.id] = now
