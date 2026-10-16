@@ -12,7 +12,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 
 from . import ZonentraConfigEntry, central_presence, entry_type
-from .bookings import outdoor_band
+from .bookings import ThermalRates, outdoor_band, rate_quality
 from .const import DOMAIN
 from .entity import zone_context
 from .models import Equipment, Zone
@@ -539,6 +539,18 @@ class BookingSensor(ZoneStateSensor):
             "outdoor_temperature": outside,
             "outdoor_band": outdoor_band(outside),
             "regulation_enabled": runtime.regulated(self._zone.id),
+            "priority": runtime.zone_demands[self._zone.id].priority,
+            "last_result": runtime.booking_results.get(self._zone.id),
+            "learning_quality": {
+                mode: rate_quality(
+                    mode,
+                    runtime.thermal_rates.get(self._zone.id, {}).get(
+                        outdoor_band(outside), ThermalRates()
+                    ),
+                    runtime.evaluated_at,
+                )
+                for mode in ("heating", "cooling")
+            },
         }
         if plan:
             values.update(

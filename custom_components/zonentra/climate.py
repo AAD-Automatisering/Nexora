@@ -41,6 +41,17 @@ BASE_FEATURES = (
 )
 
 
+def _zone_units(runtime, zone_id):
+    return tuple(
+        unit
+        for item in runtime.building.equipment
+        if item.zone_id == zone_id
+        and item.kind == "hvac"
+        and (unit := runtime.indoor_units.get(item.id))
+        and unit.available
+    )
+
+
 async def async_setup_entry(hass, entry, async_add_entities) -> None:
     async_add_entities([ZonentraThermostat(entry, **zone_context(hass, entry))])
 
@@ -158,21 +169,26 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
         if mode == "off":
             return HVACAction.OFF
         runtime = self.runtime
-        modes = {
-            unit.selected_mode
-            for item in runtime.building.equipment
-            if item.zone_id == self._zone_id
-            and item.kind == "hvac"
-            and (unit := runtime.indoor_units.get(item.id))
-            and unit.available
+        units = _zone_units(runtime, self._zone_id)
+        actions = {
+            unit.reported_action
+            if unit.activity is not None
+            else {
+                "heat": "heating",
+                "cool": "cooling",
+                "dry": "drying",
+                "fan_only": "fan",
+                "off": "off",
+            }.get(unit.selected_mode, "idle")
+            for unit in units
         }
-        if "heat" in modes and mode != "cool":
+        if actions & {"heating", "preheating", "defrosting"}:
             return HVACAction.HEATING
-        if "cool" in modes and mode != "heat":
+        if "cooling" in actions:
             return HVACAction.COOLING
-        if "dry" in modes:
+        if "drying" in actions:
             return HVACAction.DRYING
-        if "fan_only" in modes:
+        if "fan" in actions:
             return HVACAction.FAN
         return HVACAction.IDLE
 
@@ -184,7 +200,20 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
         demand = runtime.zone_demands[self._zone_id]
         zone = next(z for z in runtime.building.zones if z.id == self._zone_id)
         thermostat = self.thermostat
+        units = _zone_units(runtime, self._zone_id)
+        reported = sum(unit.activity is not None for unit in units)
         return {
+            "activity_source": (
+                "thermostat_off"
+                if thermostat.hvac_mode == "off"
+                else "unavailable"
+                if not units
+                else "reported"
+                if reported == len(units)
+                else "mixed"
+                if reported
+                else "selected_mode"
+            ),
             "active_band": band,
             "active_band_reason": reason,
             "chosen_preset": thermostat.preset,

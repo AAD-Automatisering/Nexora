@@ -42,8 +42,14 @@ De beslisregels en tijden staan in [ALGORITHM.md](ALGORITHM.md).
 ## Opslag en privacy
 
 Configuratie blijft in Home Assistant-config-entries. De laatst toegepaste
-HVAC-preset en geleerde thermische tempo's gebruiken lokale HA-opslag; een reload
-binnen dezelfde sessie draagt ook tijdelijk regelgeheugen over.
+HVAC-preset, geleerde thermische tempos, voorbereidingsresultaten en zonweringspauzes
+gebruiken lokale HA-opslag. Het zonweringsrecord koppelt apparatuur-ID aan entiteit
+en bewaart alleen de laatste beweging en de handmatige eindtijd. Een herstart telt
+stabiliteit opnieuw; een reload draagt lopend regelgeheugen over. Thermische
+profielen bewaren meettijd, spreiding en een begrensde extra voorbereidingsmarge.
+Oude profielen zonder leeftijd blijven leesbaar, maar sturen de planning pas na
+nieuw meetbewijs. `ZoneDemand.priority` weegt afspraakurgentie uitsluitend in
+groepsarbitrage; bronvalidatie, autorisatie en schakeltijden blijven afzonderlijk gelden.
 
 Diagnostiek redigeert namen, identifiers en gekoppelde bronnen en beperkt de
 geëxporteerde observaties. Agenda-invoer bewaart geen titels, beschrijvingen of

@@ -1,6 +1,7 @@
 """Room booking retrieval, adaptive preparation and persisted thermal learning."""
 
 import asyncio
+import math
 from dataclasses import asdict, replace
 from datetime import timedelta
 
@@ -10,6 +11,9 @@ from homeassistant.util import dt as dt_util
 from .bookings import (
     BookingPlan,
     ThermalRates,
+    assess_booking,
+    booking_priority,
+    learn_booking_margin,
     learn_rate,
     outdoor_band,
     parse_bookings,
@@ -28,10 +32,53 @@ BOOKING_ARRIVAL_GRACE_MINUTES = 15
 class BookingRuntimeMixin:
     """Calendars request comfort; existing room and group controls authorize HVAC."""
 
+    def _booking_priority(self, zone, demand, now):
+        plan = self.booking_plans[zone.id]
+        if (
+            not plan.active
+            or self.zone_bands[zone.id][0] != "comfort"
+            or not self.regulated(zone.id)
+            or demand.demand not in ("heating_demand", "cooling_demand")
+            or any(
+                item.id in self.overrides
+                for item in self.building.equipment
+                if item.zone_id == zone.id and item.kind == "hvac"
+            )
+        ):
+            return demand
+        if plan.status == "preparing":
+            self._booking_checks.append(min(plan.start, now + timedelta(minutes=1)))
+        return replace(demand, priority=booking_priority(plan, now))
+
     def load_thermal_rates(self, data):
         if not isinstance(data, dict):
             return
         for zone in self.building.zones:
+            result = (
+                data.get("_results", {}).get(zone.id)
+                if isinstance(data.get("_results"), dict)
+                else None
+            )
+            if (
+                isinstance(result, dict)
+                and result.get("status")
+                in ("ready", "too_cold", "too_warm", "unknown", "not_evaluated")
+                and isinstance(result.get("start"), str)
+                and (start := dt_util.parse_datetime(result["start"])) is not None
+                and start.tzinfo is not None
+            ):
+                deficit = result.get("deficit")
+                if deficit is None or (
+                    isinstance(deficit, (int, float))
+                    and not isinstance(deficit, bool)
+                    and math.isfinite(deficit)
+                    and 0 <= deficit <= 100
+                ):
+                    self.booking_results[zone.id] = {
+                        "status": result["status"],
+                        "start": start.isoformat(),
+                        "deficit": deficit,
+                    }
             stored = data.get(zone.id)
             if isinstance(stored, dict):
                 self.thermal_rates[zone.id] = {
@@ -45,8 +92,11 @@ class BookingRuntimeMixin:
             return
         self.thermal_store.async_delay_save(
             lambda: {
-                zone: {band: asdict(rates) for band, rates in values.items()}
-                for zone, values in self.thermal_rates.items()
+                "_results": dict(self.booking_results),
+                **{
+                    zone: {band: asdict(rates) for band, rates in values.items()}
+                    for zone, values in self.thermal_rates.items()
+                },
             },
             5,
         )
@@ -146,6 +196,7 @@ class BookingRuntimeMixin:
             previous=self.booking_plans.get(zone.id),
             outdoor=outside,
         )
+        self._booking_result(zone, plan, temperature, heat, cool, sources, now)
         self.booking_plans[zone.id] = plan
         if plan.next_check:
             self._booking_checks.append(plan.next_check)
@@ -173,6 +224,93 @@ class BookingRuntimeMixin:
             mode="eco",
             reason="calendar_unknown" if plan.status == "unknown" else "no_booking",
         )
+
+    def _booking_result(self, zone, plan, temperature, heat, cool, sources, now):
+        previous = self.booking_plans.get(zone.id)
+        thermostat = self.thermostat(zone.id)
+        units = [
+            item
+            for item in self.building.equipment
+            if item.zone_id == zone.id and item.kind == "hvac"
+        ]
+        eligible = (
+            self.regulated(zone.id)
+            and thermostat.hvac_mode in ("heat", "cool", "heat_cool", "auto")
+            and not (plan.direction == "heating" and thermostat.hvac_mode == "cool")
+            and not (plan.direction == "cooling" and thermostat.hvac_mode == "heat")
+            and thermostat.preset == "comfort"
+            and not thermostat.manual
+            and bool(units)
+            and not any(
+                command.equipment_id in {item.id for item in units}
+                for command, _, _ in self.command_retries.values()
+            )
+            and all(
+                item.id not in self.overrides
+                and not self._group_block(item.group_id)
+                and not (
+                    item.group_id in self.group_decisions
+                    and self.group_decisions[item.group_id].blocked_reason
+                )
+                and (source := sources.get(item.entity_id)) is not None
+                and source.trustworthy
+                and source.state not in (None, "unknown", "unavailable")
+                for item in units
+            )
+            and all(
+                (source := sources.get(entity)) is not None
+                and source.trustworthy
+                and source.state == "off"
+                for entity in zone.contact_entities
+            )
+        )
+        if plan.status == "preparing":
+            start, interrupted, direction = self.booking_interrupted.get(
+                zone.id, (None, False, None)
+            )
+            self.booking_interrupted[zone.id] = (
+                plan.start,
+                (interrupted if start == plan.start else False) or not eligible,
+                direction if start == plan.start and direction else plan.direction,
+            )
+            return
+        if plan.status == "unknown" and zone.id in self.booking_interrupted:
+            start, _, direction = self.booking_interrupted[zone.id]
+            self.booking_interrupted[zone.id] = (start, True, direction)
+            return
+        progress = self.booking_interrupted.pop(zone.id, None)
+        if (
+            plan.status != "meeting"
+            or previous is None
+            or previous.status != "preparing"
+            or previous.start != plan.start
+            or now > plan.start + timedelta(minutes=5)
+        ):
+            return
+        if self.booking_results.get(zone.id, {}).get("start") == plan.start.isoformat():
+            return
+        fresh = (
+            temperature.quality == "valid"
+            and temperature.reported_at is not None
+            and temperature.reported_at >= plan.start - timedelta(minutes=5)
+        )
+        status, deficit = assess_booking(
+            temperature.value if fresh else None,
+            heat.value if heat.quality == "valid" else None,
+            cool.value if cool.quality == "valid" else None,
+            eligible and progress is not None and not progress[1],
+        )
+        self.booking_results[zone.id] = {
+            "start": plan.start.isoformat(),
+            "status": status,
+            "deficit": deficit,
+        }
+        band = outdoor_band(self._booking_outdoor_temperature())
+        rates = self.thermal_rates.setdefault(zone.id, {}).get(band, ThermalRates())
+        self.thermal_rates[zone.id][band] = learn_booking_margin(
+            rates, status, progress[2] if progress else None
+        )
+        self._save_thermal_rates()
 
     def _booking_outdoor_temperature(self):
         if self.building.settings.outdoor_temperature_entity:

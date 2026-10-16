@@ -59,8 +59,8 @@ def decide_group(
         for zone_id in zone_ids
         if zone_id in demands and demands[zone_id].demand != "unknown"
     ]
-    heating = round(sum(item.heating_score for item in known), 4)
-    cooling = round(sum(item.cooling_score for item in known), 4)
+    heating = round(sum(item.heating_score * item.priority for item in known), 4)
+    cooling = round(sum(item.cooling_score * item.priority for item in known), 4)
     mode = observe_mode(group, sources, now)
     current = mode.value if mode.quality == "valid" else "unknown"
     desired, reason, blocked, deadline = "unknown", "insufficient_data", None, None

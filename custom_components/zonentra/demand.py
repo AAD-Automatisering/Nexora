@@ -38,6 +38,7 @@ class ZoneDemand:
     cooling_score: float | None
     reason: str
     sensor_health: str
+    priority: float = 1.0
 
 
 def collect_zone(

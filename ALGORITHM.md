@@ -580,7 +580,11 @@ gelijktijdig. De runtime plant hun deadlines en bewaart de doelstandtimer bij re
 `cover.set_cover_position` wordt bevestigd via een eigen CommandTracker
 (240 s). Een standwijziging die niet van Zonentra komt en geen automation is,
 start de handmatige periode. Herstel vanuit `unknown`, `unavailable` of een
-herstelde/aangenomen state telt niet als bediening.
+herstelde/aangenomen state telt niet als bediening. Laatste automatische beweging
+en handmatige eindtijd worden per fysieke cover opgeslagen en bij een volledige
+HA-herstart hersteld. Onbekende, verlopen of ongeldige tijden worden genegeerd;
+een gewijzigde entiteitskoppeling erft de vorige pauze niet. Stabiliteitsduur
+wordt bij een volledige herstart opnieuw opgebouwd.
 
 `runtime_shading.py` blokkeert bij ontbrekende of onbeschikbare covers. Bij een
 ingestelde blokkeerbron staat alleen een betrouwbare `off` beweging toe; ontbrekend,
@@ -658,9 +662,33 @@ Tijdens actieve, ongeblokkeerde ruimteregeling worden geldige temperatuurverschi
 uit intervallen van 5–30 minuten gebruikt voor een EMA (α = 0,25). Alleen een tempo
 van 0,005–0,5 °C/min in de actieve richting telt mee. Verwarmen en koelen hebben
 ieder een eigen tempo per buitenklasse (< 0, 0–10, 10–20, 20–30, ≥ 30 °C, onbekend).
-Na twee samples wordt het betreffende geleerde tempo gebruikt. Een mode- of
-buitenklassewisseling start een nieuw meetinterval. Geleerde profielen worden
-opgeslagen; lopende meetankers beginnen na een reload opnieuw.
+Vanaf vier samples met bekende meettijd, hooguit 30 dagen oud, en relatieve
+spreiding ≤ 0,5 wordt het profiel gebruikt. De EMA-variantie gebruikt dezelfde
+α; standaardafwijking/gemiddelde bepaalt de spreiding. De schatting verlaagt het
+gemiddelde met die spreiding. Een sneller tempo dan de beginschatting wordt
+geleidelijk vertrouwd: factor `min(1, samples/8) × (1 − spreiding)`. Een lager tempo
+werkt direct conservatief. Profielen zonder tijdstempel, te oude of te variabele
+profielen gebruiken de beginschatting. Bij nieuw leren na 30 dagen of zonder
+bekende leeftijd begint het aantal samples opnieuw. Een mode- of buitenklassewisseling
+start een nieuw meetinterval. Profielen blijven opgeslagen; meetankers beginnen
+na reload opnieuw.
+
+Bij de overgang van voorbereiding naar afspraak wordt eenmalig de comfortband
+beoordeeld, met een hooguit vijf minuten oude temperatuurwaarneming. Uitgeschakelde
+regeling, overrides, open/onbekende contacten, apparaatuitval, bekende commandofouten
+of agenda-uitval tijdens voorbereiding sluiten marge-aanpassing uit. Een geldige
+`too_cold`/`too_warm` verhoogt de richtingsmarge in die buitenklasse met vijf minuten,
+maximaal dertig extra; `ready` verlaagt de oorspronkelijke richtingsmarge met één.
+Onbekende meetgegevens veranderen de marge niet. De maximale voorbereidingstijd
+blijft alles begrenzen. Het laatste resultaat en de correcties blijven opgeslagen.
+
+Een comfortvraag van een gereguleerde agendaruimte krijgt groepsprioriteit
+`1 + clamp(1 − resterende_minuten / max(1, voorbereidingstijd), 0, 1)` tijdens
+voorbereiding en 2 tijdens de afspraak. De scores blijven verder gelijk; alleen
+groepsarbitrage vermenigvuldigt ze met de prioriteit. Deze wordt tijdens voorbereiding
+elke minuut opnieuw beoordeeld. Eco, Afwezig, thermostaat-uit, uitgeschakelde
+ruimteregeling en apparaat-overrides krijgen geen verhoging. Groepsblokkades,
+onbetrouwbare bronnen, deadband en minimale schakeltijd blijven gelden.
 
 Tijdens `preparing` en `meeting` vraagt de agenda comfort, ook als gebouwpresentie
 `absent` is, zodat voorbereiding vóór aankomst mogelijk blijft. Bij `meeting`
@@ -708,3 +736,12 @@ Onbekend zonvermogen wist `pending_since`, maar bewaart de laatst bevestigde
 zonnigheidsstatus. Thermisch leren gebruikt het tijdstip van een nieuw bronrapport,
 niet van een willekeurige runtime-update. Een oud rapport of een rapport van vóór
 het actieve regelinterval levert geen nieuw meetanker op.
+
+## Activiteitsweergave en ventilatorvolgorde
+
+De thermostaat gebruikt bruikbare `hvac_action` per binnenunit vóór de geselecteerde
+modus. Idle geeft geen verwarmings- of koelactiviteit. Bij ontbrekende feedback
+blijft de geselecteerde modus een terugval; `activity_source` benoemt of de weergave
+gerapporteerd, afgeleid, gemengd of niet beschikbaar is. Thermostaat-uit blijft Off.
+Bekende ventilatornamen en numerieke standen met dezelfde eenheid worden
+oplopend gesorteerd. Opaque of gemengde fabrikantstanden behouden hun volgorde.

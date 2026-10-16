@@ -61,12 +61,26 @@ Comfortgrenzen stel je in op het centrale apparaat of het ruimteapparaat.
 Standaard is comfort 21–24 °C, eco 19–26 °C en afwezig 16–30 °C.
 Handmatige bediening krijgt standaard 30 minuten voorrang. Automatische
 ventilatorregeling volgt daarna weer; de schakelaar **Automatische ventilator**
-laat de ventilatorkeuze volledig aan de gebruiker wanneer hij uit staat.
+laat de ventilatorkeuze volledig aan de gebruiker wanneer hij uit staat. Bekende
+snelheidsnamen en numerieke standen worden van laag naar hoog geordend; onbekende
+fabrikantstanden behouden hun volgorde. De thermostaat gebruikt gemelde activiteit
+zoals `idle` waar beschikbaar; `activity_source` maakt terugval op de gekozen modus zichtbaar.
 
 Agenda's gebruiken de comfortband en geleerde opwarm-/afkoeltempo's per ruimte.
 Stel marge en maximale voorbereiding centraal in via **Afspraakvoorbereiding**;
 ruimtes kunnen eigen waarden gebruiken. Een agenda schakelt een uitgeschakelde
-thermostaat, ruimteregeling of groepsstop niet in.
+thermostaat, ruimteregeling of groepsstop niet in. Voorbereidende en lopende afspraken
+krijgen bij tegengestelde groepsvragen een oplopende prioriteit van maximaal 2×.
+Geleerde tempos vereisen minstens vier recente, voldoende consistente meetintervallen;
+ouder dan 30 dagen of zonder tijdstempel gebruikt de planning de beginschatting.
+Bij afspraakstart wordt gecontroleerd of de comfortband is bereikt. Een geldige
+mislukking voegt 5 minuten marge toe, tot 30 minuten extra per buitenklasse en
+verwarmings-/koelrichting; succes bouwt deze met 1 minuut af. Onderbroken voorbereiding
+en oude metingen passen de marge niet aan. De maximale voorbereiding blijft gelden.
+
+Zonwering bewaart de laatste beweging en eindtijd van handmatige bedieningspauzes
+in lokale HA-opslag. Die blijven ook na een volledige HA-herstart gelden. Een nog
+niet bevestigde stabiele doelstand begint na een herstart opnieuw te tellen.
 
 ## Bijwerken
 
@@ -85,7 +99,10 @@ Werk bij via HACS, herstart Home Assistant en herlaad de browser.
 
 De sensoren tonen klimaatvraag, plannen, blokkades en commandobevestigingen.
 Download diagnostiek via het integratiemenu; namen, identifiers en bronkoppelingen
-worden geredigeerd. Controleer exports en logs altijd voordat je ze openbaar deelt.
+worden geredigeerd. Zowel centraal als per ruimte zijn zonweringsbesluiten,
+wachttijden en recente commando’s zichtbaar. Voor agendaruimtes worden ook planning,
+leerkwaliteit, prioriteit en het laatste voorbereidingsresultaat opgenomen.
+Controleer exports en logs altijd voordat je ze openbaar deelt.
 Configuratie en geleerde gegevens blijven in je eigen Home Assistant-installatie.
 
 Commit geen Home Assistant-configuratie, agenda-exports, diagnostiek, logs,

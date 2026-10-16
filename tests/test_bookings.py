@@ -71,12 +71,31 @@ def test_hot_day_cooling_starts_earlier():
     )
 
 
-def test_learned_rate_used_only_after_two_samples():
-    one = plan(rates=ThermalRates(heating=0.1, heating_samples=1))
-    two = plan(rates=ThermalRates(heating=0.1, heating_samples=2))
-    assert not one.learned
-    assert two.learned
-    assert two.lead_minutes == pytest.approx(33)
+def test_learned_rate_needs_recent_consistent_evidence_and_builds_trust():
+    one = plan(
+        rates=ThermalRates(
+            heating=0.1, heating_samples=1, heating_updated=NOW.isoformat()
+        )
+    )
+    two = plan(
+        rates=ThermalRates(
+            heating=0.1, heating_samples=2, heating_updated=NOW.isoformat()
+        )
+    )
+    four = plan(
+        rates=ThermalRates(
+            heating=0.1, heating_samples=4, heating_updated=NOW.isoformat()
+        )
+    )
+    eight = plan(
+        rates=ThermalRates(
+            heating=0.1, heating_samples=8, heating_updated=NOW.isoformat()
+        )
+    )
+    assert not one.learned and not two.learned
+    assert four.learned and eight.learned
+    assert four.rate == pytest.approx(0.075)
+    assert eight.lead_minutes == pytest.approx(33)
 
 
 def test_lead_is_bounded_and_missing_temperature_uses_maximum():

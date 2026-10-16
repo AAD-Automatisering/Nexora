@@ -6,6 +6,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.config_entries import ConfigEntryState
 
 from . import ZonentraConfigEntry, central_entry, entry_type
+from .bookings import rate_quality
 from .models import ZONE_ENTITY_FIELDS, BuildingSettings
 from .observations import describe
 from .topology import EQUIPMENT_FIELDS, ZONE
@@ -77,6 +78,75 @@ def _source_validation(runtime) -> list[dict]:
     ]
 
 
+def _room_context(runtime, zone_ids):
+    """Explain screen and booking decisions without raw sensor/calendar content."""
+    return {
+        "screen_timing": {
+            "minimum_move_minutes": runtime.building.settings.screen_min_move_minutes,
+            "open_delay_minutes": runtime.building.settings.screen_open_delay_minutes,
+            "shade_delay_minutes": runtime.building.settings.screen_shade_delay_minutes,
+        },
+        "screens": [
+            {
+                "equipment_id": item.id,
+                "zone_id": item.zone_id,
+                "decision": asdict(runtime.screen_decisions[item.id])
+                if item.id in runtime.screen_decisions
+                else None,
+                "movement": {**asdict(move), "next_check": _iso(move.next_check)}
+                if (move := runtime.screen_moves.get(item.id))
+                else None,
+                "target_since": _iso(memory.since)
+                if (memory := runtime.screen_targets.get(item.id))
+                else None,
+                "last_move": _iso(runtime.screen_last_move.get(item.id)),
+                "manual_until": _iso(runtime.screen_overrides.get(item.id)),
+                "command_log": [
+                    entry
+                    for entry in runtime.command_log
+                    if entry["equipment_id"] == item.id
+                ][-5:],
+            }
+            for item in runtime.building.equipment
+            if item.kind == "shading" and item.zone_id in zone_ids
+        ],
+        "bookings": [
+            {
+                "zone_id": zone.id,
+                "plan": {
+                    **asdict(plan),
+                    "start": _iso(plan.start),
+                    "end": _iso(plan.end),
+                    "prepare_at": _iso(plan.prepare_at),
+                    "next_check": _iso(plan.next_check),
+                }
+                if (plan := runtime.booking_plans.get(zone.id))
+                else None,
+                "calendar_error": runtime.booking_errors.get(zone.calendar_entity),
+                "calendar_updated": _iso(
+                    runtime.booking_updated.get(zone.calendar_entity)
+                ),
+                "active_band": runtime.zone_bands.get(zone.id),
+                "uses_central_settings": zone.use_building_preconditioning,
+                "priority": runtime.zone_demands[zone.id].priority,
+                "last_result": runtime.booking_results.get(zone.id),
+                "learned_profiles": {
+                    band: {
+                        **asdict(rates),
+                        "quality": {
+                            mode: rate_quality(mode, rates, runtime.evaluated_at)
+                            for mode in ("heating", "cooling")
+                        },
+                    }
+                    for band, rates in runtime.thermal_rates.get(zone.id, {}).items()
+                },
+            }
+            for zone in runtime.building.zones
+            if zone.id in zone_ids and zone.calendar_entity
+        ],
+    }
+
+
 async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -> dict:
     if entry_type(entry) == ZONE:
         return _zone_diagnostics(hass, entry)
@@ -94,6 +164,7 @@ async def async_get_config_entry_diagnostics(hass, entry: ZonentraConfigEntry) -
                 asdict(item) for item in entry.runtime_data.zone_demands.values()
             ],
             "source_validation": _source_validation(entry.runtime_data),
+            **_room_context(runtime, {zone.id for zone in runtime.building.zones}),
             "group_observations": [
                 {
                     **asdict(observation),
@@ -205,6 +276,7 @@ def _zone_diagnostics(hass, entry) -> dict:
         # 0.9 room thermostat and what room regulation does per unit.
         data["thermostat"] = runtime.thermostat(zone_id).as_dict()
         data["active_band"] = list(runtime.zone_bands.get(zone_id, ()))
+        data.update(_room_context(runtime, {zone_id}))
         data["room_regulation"] = [
             {
                 "equipment_id": item.id,

@@ -168,6 +168,7 @@ class BuildingRuntime(
         self.screen_moves: dict[str, ScreenMove] = {}
         self.screen_overrides: dict = {}  # equipment -> until
         self.screen_last_move: dict = {}
+        self.screen_store = None
         self.screen_targets: dict = {}
         self.screen_retry_at: dict = {}
         self.cover_tracker = CommandTracker(confirmation_seconds=240)
@@ -181,6 +182,8 @@ class BuildingRuntime(
         self.booking_updated: dict = {}
         self.booking_errors: dict = {}
         self.booking_plans: dict = {}
+        self.booking_results: dict = {}
+        self.booking_interrupted: dict = {}
         self._booking_checks: list = []
         self._calendar_refreshing = False
         self.thermal_rates: dict = {}
@@ -353,6 +356,7 @@ class BuildingRuntime(
                 demand = ZoneDemand(
                     zone.id, "neutral", 0.0, 0.0, "window_open", demand.sensor_health
                 )
+            demand = self._booking_priority(zone, demand, now)
             demands[zone.id] = demand
         self.zone_demands = demands
         for group in self.building.groups:
@@ -590,6 +594,8 @@ class BuildingRuntime(
         "booking_updated",
         "booking_errors",
         "booking_plans",
+        "booking_results",
+        "booking_interrupted",
         "thermal_rates",
         "zone_demands",
         "coordination_memories",
@@ -647,6 +653,18 @@ class BuildingRuntime(
             if zone.id in self.booking_plans
             and zone.calendar_entity == previous_calendars.get(zone.id)
         }
+        for name in ("booking_results", "booking_interrupted"):
+            setattr(
+                self,
+                name,
+                {
+                    zone.id: getattr(self, name)[zone.id]
+                    for zone in self.building.zones
+                    if zone.id in getattr(self, name)
+                    and zone.calendar_entity == previous_calendars.get(zone.id)
+                    and zone.calendar_entity
+                },
+            )
         # Removed/disabled equipment must not retain delayed hardware commands.
         equipment = {(item.id, item.entity_id) for item in self.building.equipment}
         self.pending_offs = [

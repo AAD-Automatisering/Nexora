@@ -454,8 +454,14 @@ async def test_learned_winter_and_spring_profiles_have_distinct_start_times(hass
     central, _, _ = await office(hass, start=120)
     runtime = central.runtime_data
     runtime.thermal_rates["west"] = {
-        "mild": ThermalRates(heating=0.1, heating_samples=4),
-        "freezing": ThermalRates(heating=0.025, heating_samples=4),
+        "mild": ThermalRates(
+            heating=0.1, heating_samples=8, heating_updated=dt_util.utcnow().isoformat()
+        ),
+        "freezing": ThermalRates(
+            heating=0.025,
+            heating_samples=8,
+            heating_updated=dt_util.utcnow().isoformat(),
+        ),
     }
     runtime.refresh()
     spring = runtime.booking_plans["west"]

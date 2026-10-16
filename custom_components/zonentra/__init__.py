@@ -165,6 +165,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
             hass, 1, f"{DOMAIN}.{entry.entry_id}.thermal_rates"
         )
         runtime.load_thermal_rates(await runtime.thermal_store.async_load())
+        screen_stores = hass.data[DOMAIN].setdefault("screen_stores", {})
+        if entry.entry_id not in screen_stores:
+            screen_stores[entry.entry_id] = Store(
+                hass, 1, f"{DOMAIN}.{entry.entry_id}.screens"
+            )
+        runtime.screen_store = screen_stores[entry.entry_id]
+        runtime.load_screen_state(await runtime.screen_store.async_load())
         # A reload (options, zones) continues where the old runtime was.
         previous = hass.data.setdefault(DOMAIN, {}).setdefault("runtimes", {})
         if old := previous.pop(entry.entry_id, None):
@@ -307,6 +314,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         data.get("thermostats", {}).pop(entry.entry_id, None)
         data.get("runtimes", {}).pop(entry.entry_id, None)
         if store := data.get("thermostat_stores", {}).pop(entry.entry_id, None):
+            await store.async_remove()
+        if store := data.get("screen_stores", {}).pop(entry.entry_id, None):
             await store.async_remove()
     elif kind == "legacy":
         ir.async_delete_issue(hass, DOMAIN, f"legacy_configuration_{entry.entry_id}")

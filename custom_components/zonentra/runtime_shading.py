@@ -41,6 +41,50 @@ class ShadingRuntimeMixin:
 
     # --- Screens (0.11) ---------------------------------------------------------
 
+    def load_screen_state(self, data):
+        """Restore finite expiry times only for the same physical screen."""
+        if not isinstance(data, dict):
+            return
+        now = dt_util.utcnow()
+        for item in self.building.equipment:
+            record = data.get(item.id)
+            if item.kind != "shading" or not isinstance(record, dict):
+                continue
+            if record.get("entity_id") != item.entity_id:
+                continue
+            for key, destination in (
+                ("last_move", self.screen_last_move),
+                ("override_until", self.screen_overrides),
+            ):
+                raw = record.get(key)
+                at = dt_util.parse_datetime(raw) if isinstance(raw, str) else None
+                if at is None or at.tzinfo is None:
+                    continue
+                if key == "last_move" and now - timedelta(hours=4) <= at <= now:
+                    destination[item.id] = at
+                elif key == "override_until" and now < at <= now + timedelta(hours=12):
+                    destination[item.id] = at
+
+    def _save_screen_state(self):
+        if self.screen_store is None:
+            return
+        self.screen_store.async_delay_save(
+            lambda: {
+                item.id: {
+                    "entity_id": item.entity_id,
+                    "last_move": self.screen_last_move[item.id].isoformat()
+                    if item.id in self.screen_last_move
+                    else None,
+                    "override_until": self.screen_overrides[item.id].isoformat()
+                    if item.id in self.screen_overrides
+                    else None,
+                }
+                for item in self.building.equipment
+                if item.kind == "shading"
+            },
+            1,
+        )
+
     def _screen_transition(self, entity_id, old, new, event, now) -> None:
         """A screen moved by a person (HA or room controller) is respected."""
         for item in self.building.equipment:
@@ -101,6 +145,7 @@ class ShadingRuntimeMixin:
                 return
             minutes = self.building.settings.screen_override_minutes
             self.screen_overrides[item.id] = now + timedelta(minutes=minutes)
+            self._save_screen_state()
             self.last_transitions[item.id] = ("manual_screen", now)
 
     def _shading(self, sources, now) -> None:
@@ -158,6 +203,7 @@ class ShadingRuntimeMixin:
             override = self.screen_overrides.get(item.id)
             if override is not None and now >= override:
                 del self.screen_overrides[item.id]  # Manual time is over.
+                self._save_screen_state()
                 override = None
             state = self.hass.states.get(item.entity_id)
             move = plan_screen_move(
@@ -240,6 +286,7 @@ class ShadingRuntimeMixin:
             if success:
                 entry.setdefault("confirmation", "pending")
                 runtime.screen_last_move[item.id] = now
+                runtime._save_screen_state()
                 runtime.screen_retry_at.pop(item.id, None)
             else:
                 entry["confirmation"] = "not_sent"

@@ -8,6 +8,7 @@
 """
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -145,8 +146,28 @@ def vane_mode(modes: set[str]) -> str | None:
 
 
 def fan_speeds(fan_modes: tuple[str, ...]) -> tuple[str, ...]:
-    """The real speeds of a unit, low to high (its own off/auto excluded)."""
-    return tuple(mode for mode in fan_modes if mode not in ("off", AUTO_FAN))
+    """Order recognized numeric/named speeds; preserve opaque vendor ordering."""
+    speeds = tuple(
+        dict.fromkeys(
+            mode for mode in fan_modes if mode.strip().lower() not in ("off", AUTO_FAN)
+        )
+    )
+    numeric = [re.fullmatch(r"\s*(\d+(?:\.\d+)?)\s*(%)?\s*", mode) for mode in speeds]
+    if speeds and all(numeric) and len({bool(match[2]) for match in numeric}) == 1:
+        return tuple(sorted(speeds, key=lambda mode: float(mode.strip().rstrip("%"))))
+    ranks = {
+        "silent": 0,
+        "quiet": 0,
+        "low": 1,
+        "middle": 2,
+        "medium": 3,
+        "high": 4,
+        "turbo": 5,
+        "boost": 5,
+    }
+    if speeds and all(mode.strip().lower() in ranks for mode in speeds):
+        return tuple(sorted(speeds, key=lambda mode: ranks[mode.strip().lower()]))
+    return speeds
 
 
 # 0.13.2: Home Assistant's standard fan names, which HomeKit turns into a fan
