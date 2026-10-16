@@ -5,3 +5,35 @@ __pycache__/
 *.pyc
 .coverage
 htmlcov/
+
+# Local editor, agent and operating-system settings
+.idea/
+.vscode/
+.agents/
+.codex/
+.claude/
+.aws/
+*.code-workspace
+Thumbs.db
+
+# Credentials and private Home Assistant data
+.env
+.env.*
+*.pem
+*.key
+secrets.yaml
+secrets.yml
+configuration.yaml
+.storage/
+backups/
+*.db
+*.db-*
+*.log
+*diagnostics*.json
+
+# Local reports and generated artifacts
+review/
+coverage.xml
+dist/
+build/
+*.egg-info/
