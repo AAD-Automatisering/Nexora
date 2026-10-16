@@ -145,7 +145,10 @@
           "screen_block_entity": "Blokkeer-entiteit, bijv. windalarm (optioneel; alleen uit staat beweging toe)",
           "screen_shade_position": "Stand bij zonwering (%; 100 = open)",
           "screen_override_minutes": "Handmatige bediening respecteren (minuten)",
-          "sun_entity": "Zonstand-entiteit (standaard sun.sun)"
+          "sun_entity": "Zonstand-entiteit (standaard sun.sun)",
+          "screen_min_move_minutes": "Minimale tijd tussen automatische bewegingen (minuten; standaard 30)",
+          "screen_open_delay_minutes": "Stabiele vraag vóór omhoog (minuten; standaard 15)",
+          "screen_shade_delay_minutes": "Stabiele vraag vóór omlaag (minuten; standaard 5)"
         }
       },
       "forecast": {
@@ -263,7 +266,10 @@
           "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
           "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
           "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
-          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "screen_min_move_minutes": "Minimale tijd tussen automatische bewegingen (minuten; standaard 30)",
+          "screen_open_delay_minutes": "Stabiele vraag vóór omhoog (minuten; standaard 15)",
+          "screen_shade_delay_minutes": "Stabiele vraag vóór omlaag (minuten; standaard 5)"
         }
       },
       "zone_settings": {

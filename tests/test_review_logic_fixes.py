@@ -276,12 +276,14 @@ async def test_cover_missing_confirmation_retries_without_external_events(
     await later(hass, freezer, minutes=6)
     runtime.set_thermostat("west", screen_regulation=True)
     await hass.async_block_till_done()
+    assert not moves
+    await later(hass, freezer, minutes=5)
     assert len(moves) == 1
     assert hass.states.get(SCREEN).attributes["current_position"] == 100
     assert runtime._cancel_deadline is not None
     await later(hass, freezer, minutes=5)
     assert len(moves) == 1
-    await later(hass, freezer, minutes=11)
+    await later(hass, freezer, minutes=25)
     assert len(moves) == 2
 
 

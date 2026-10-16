@@ -15,6 +15,7 @@ from .shading import (
     ScreenMove,
     decide_screen,
     plan_screen_move,
+    stable_screen_target,
     sun_on_facade,
     sunny_state,
 )
@@ -125,6 +126,12 @@ class ShadingRuntimeMixin:
         blocked = block is not None
         available = self.hass.services.has_service("cover", "set_cover_position")
         zones = {zone.id: zone for zone in self.building.zones}
+        screens = {
+            item.id for item in self.building.equipment if item.kind == "shading"
+        }
+        self.screen_targets = {
+            key: memory for key, memory in self.screen_targets.items() if key in screens
+        }
         decisions, moves = {}, {}
         for item in self.building.equipment:
             if item.kind != "shading":
@@ -163,6 +170,7 @@ class ShadingRuntimeMixin:
                 blocked=blocked,
                 override_until=override,
                 busy=self.cover_tracker.is_pending(item.entity_id, now),
+                interval_seconds=settings.screen_min_move_minutes * 60,
             )
             retry_at = self.screen_retry_at.get(item.id)
             if move.status == "move" and retry_at and now < retry_at:
@@ -173,6 +181,26 @@ class ShadingRuntimeMixin:
                 move = ScreenMove(block)
             if move.status == "move" and not available:
                 move = ScreenMove("cover_service_unavailable")
+            if (
+                move.status in ("move", "interval", "retry")
+                and self._screen_guard(item) is None
+                and available
+            ):
+                delay = (
+                    settings.screen_open_delay_minutes
+                    if decision.target == "open"
+                    else settings.screen_shade_delay_minutes
+                )
+                memory, stable_at = stable_screen_target(
+                    decision, self.screen_targets.get(item.id), now, delay * 60
+                )
+                self.screen_targets[item.id] = memory
+                if stable_at:
+                    checks.append(stable_at)
+                    if move.status == "move":
+                        move = ScreenMove("stabilizing", next_check=stable_at)
+            else:
+                self.screen_targets.pop(item.id, None)
             if move.status == "move":
                 self._move_screen(item, move.position, decision.reason, now)
             if move.next_check:

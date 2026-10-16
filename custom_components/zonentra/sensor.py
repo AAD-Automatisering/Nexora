@@ -759,6 +759,7 @@ class ScreenSensor(ZonentraDiagnosticSensor):
                 self.hass.states.get(self.item.entity_id)
             ),
             "status": move.status if move else None,
+            "next_check": _iso(move.next_check) if move else None,
             "facade": zone.facade,
             "sunny": runtime.sunny,
             "sun_power": runtime.sun_power,

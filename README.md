@@ -406,9 +406,20 @@ Per zonwering (een `cover` met positie) beslist Zonentra, in deze volgorde:
   de richting van de gevel (noord, oost, zuid, west en tussenrichtingen).
 - **Klimaat weegt het zwaarst:** de band die nu geldt (comfort, eco, afwezig) en de
   klimaatvraag van de ruimte bepalen omhoog of omlaag.
-- **Bewegen:** hooguit eens per 15 minuten per zonwering, alleen bij minstens 10 %
-  verschil, naar de centraal ingestelde zonweringsstand (standaard 0 % = helemaal
-  omlaag) of 100 % (open).
+- **Rustig bewegen:** standaard minstens 30 minuten tussen automatische bewegingen
+  per zonwering. Een nieuwe doelstand moet bovendien 5 minuten stabiel blijven voor
+  omlaag en 15 minuten voor omhoog, ook bij de eerste beweging. Beide voorwaarden
+  gelden tegelijk; de wachttijden worden niet onnodig achter elkaar opgeteld.
+  De drie tijden stel je centraal in onder **Zonwering**. Een ander doel of een
+  onbruikbare bron onderbreekt de stabiliteitswachttijd; een andere reden voor
+  dezelfde doelstand doet dat niet. Deze geldt ook bij veranderende klimaatvraag,
+  aanwezigheid, zonstand en weersverwachting.
+  Bij nieuw opkomende zon volgt sluiten daardoor normaal na ongeveer 10 minuten
+  (5 minuten zonbevestiging en 5 minuten stabiele doelstand); bij aanhoudende
+  bewolking volgt openen na ongeveer 30 minuten (15 + 15), eventueel later door
+  het bewegingsinterval. Er moet minstens 10 % positieverschil zijn. De doelstand
+  is de centraal ingestelde zonweringsstand (standaard 0 % = helemaal omlaag)
+  of 100 % (open).
 - **Mensen gaan voor:** wie de zonwering bedient via Home Assistant of de
   roomcontroller, wordt 2 uur gerespecteerd (centraal instelbaar). Een automation
   telt niet als bediening.
@@ -649,7 +660,7 @@ Serviceacceptatie en statebevestiging zijn apart zichtbaar: `result: sent` betek
 dat HA de aanroep accepteerde; `confirmation` toont `pending`, `confirmed`,
 `timeout`, `not_sent` of `superseded`. HVAC-, setpoint-, ventilator- en lamelcommando’s
 krijgen een bevestigingsdeadline van 60 seconden; covers behouden 240 seconden en
-het bewegingsinterval van 15 minuten. Verlopen deadlines starten zelf een
+het instelbare bewegingsinterval (standaard 30 minuten). Verlopen deadlines starten zelf een
 herbeoordeling. Alleen nog gewenste en toegestane commando’s worden opnieuw
 gepland. Dit bevestigt HA-states, geen fysieke compressorfeedback.
 

@@ -121,6 +121,9 @@ def building_fields(limits: bool = True) -> dict:
         ),
         vol.Optional("screen_shade_position"): numeric(0, 100, 1, "%"),
         vol.Optional("screen_override_minutes"): numeric(5, 720, 1, "min"),
+        vol.Optional("screen_min_move_minutes"): numeric(15, 240, 1, "min"),
+        vol.Optional("screen_open_delay_minutes"): numeric(0, 60, 1, "min"),
+        vol.Optional("screen_shade_delay_minutes"): numeric(0, 60, 1, "min"),
         # Weather forecast (0.12): warm/cold days save gas and electricity.
         vol.Optional("weather_entity"): entity_selector("weather"),
     }
@@ -166,6 +169,9 @@ CENTRAL_SECTIONS = {
         "screen_block_entity",
         "screen_shade_position",
         "screen_override_minutes",
+        "screen_min_move_minutes",
+        "screen_open_delay_minutes",
+        "screen_shade_delay_minutes",
     ),
     "forecast": ("weather_entity",),
     "preconditioning": PRECONDITIONING_FIELDS,
@@ -208,6 +214,9 @@ def building_defaults() -> dict:
                 "sun_power_threshold",
                 "screen_shade_position",
                 "screen_override_minutes",
+                "screen_min_move_minutes",
+                "screen_open_delay_minutes",
+                "screen_shade_delay_minutes",
             )
         },
     }

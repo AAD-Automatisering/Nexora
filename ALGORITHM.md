@@ -568,8 +568,16 @@ verwarmingsvraag → open; koelvraag → zonwering; anders zonwering als de
 ruimtetemperatuur ≥ midden van de actieve band + 0,5 °C (eenmaal omlaag: tot
 midden − 0,5 °C), anders open. **Bewegen** (`plan_screen_move`), alleen met
 Zonweringregeling: niet bij blokkering, niet tijdens handmatige bediening
-(`screen_override_minutes`, standaard 120), niet bij < 10 % verschil, hooguit eens
-per 900 s; `cover.set_cover_position`, bevestigd via een eigen CommandTracker
+(`screen_override_minutes`, standaard 120), niet bij < 10 % verschil.
+`screen_min_move_minutes` begrenst bewegingen op standaard eens per 30 minuten.
+`stable_screen_target` bewaakt bovendien dezelfde doelpositie gedurende
+`screen_shade_delay_minutes` (standaard 5) of `screen_open_delay_minutes` (15).
+Dit geldt ook voor de eerste beweging en alle beslisredenen. Een gewijzigde reden
+voor dezelfde positie herstart de timer niet; hold, blokkering, handmatige bediening,
+uitgeschakelde regeling en onbruikbare bronnen wel. Interval en stabiliteit lopen
+gelijktijdig. De runtime plant hun deadlines en bewaart de doelstandtimer bij reload.
+`stabilizing` en `next_check` maken het wachten zichtbaar in de zonweringssensor.
+`cover.set_cover_position` wordt bevestigd via een eigen CommandTracker
 (240 s). Een standwijziging die niet van Zonentra komt en geen automation is,
 start de handmatige periode. Herstel vanuit `unknown`, `unavailable` of een
 herstelde/aangenomen state telt niet als bediening.

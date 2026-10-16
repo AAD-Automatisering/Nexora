@@ -12,10 +12,19 @@ from pytest_homeassistant_custom_component.common import async_mock_service
 from custom_components.zonentra.const import DOMAIN
 from custom_components.zonentra.observations import cover_position
 from tests.test_entry_layout import setup_central
-from tests.test_shading_runtime import EQUIPMENT, SCREEN, entity, office
+from tests.test_shading_runtime import EQUIPMENT, SCREEN, entity
+from tests.test_shading_runtime import office as screen_office
 from tests.test_thermostat_runtime import later
 
 BLOCK = "binary_sensor.wind_alarm"
+
+
+async def office(hass):
+    # These tests isolate source recovery and dispatch guards; timing is covered
+    # by the shading runtime tests with the default delays.
+    return await screen_office(
+        hass, screen_open_delay_minutes=0, screen_shade_delay_minutes=0
+    )
 
 
 async def block_office(hass):

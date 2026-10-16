@@ -168,6 +168,7 @@ class BuildingRuntime(
         self.screen_moves: dict[str, ScreenMove] = {}
         self.screen_overrides: dict = {}  # equipment -> until
         self.screen_last_move: dict = {}
+        self.screen_targets: dict = {}
         self.screen_retry_at: dict = {}
         self.cover_tracker = CommandTracker(confirmation_seconds=240)
         self._screen_checks: list = []
@@ -609,6 +610,7 @@ class BuildingRuntime(
         "sunny",
         "screen_overrides",
         "screen_last_move",
+        "screen_targets",
         "screen_retry_at",
         "screen_decisions",
         "forecast",

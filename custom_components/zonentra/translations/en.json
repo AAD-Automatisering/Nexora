@@ -145,7 +145,10 @@
           "screen_block_entity": "Block entity, e.g. wind alarm (optional; only off allows movement)",
           "screen_shade_position": "Position when shading (%; 100 = open)",
           "screen_override_minutes": "Respect manual operation for (minutes)",
-          "sun_entity": "Sun position entity (default sun.sun)"
+          "sun_entity": "Sun position entity (default sun.sun)",
+          "screen_min_move_minutes": "Minimum time between automatic movements (minutes; default 30)",
+          "screen_open_delay_minutes": "Stable demand before opening (minutes; default 15)",
+          "screen_shade_delay_minutes": "Stable demand before shading (minutes; default 5)"
         }
       },
       "forecast": {
@@ -263,7 +266,10 @@
           "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
           "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
           "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
-          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "screen_min_move_minutes": "Minimum time between automatic movements (minutes; default 30)",
+          "screen_open_delay_minutes": "Stable demand before opening (minutes; default 15)",
+          "screen_shade_delay_minutes": "Stable demand before shading (minutes; default 5)"
         }
       },
       "zone_settings": {

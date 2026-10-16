@@ -434,6 +434,12 @@ de geïnstalleerde HA-broncode. Geen nieuwe installatie getest met oudere HA-ver
 - [Manifest](https://developers.home-assistant.io/docs/creating_integration_manifest/)
 - [Tests](https://developers.home-assistant.io/docs/development_testing/)
 
+De zonwering combineert een instelbaar minimuminterval (standaard 30 minuten)
+met een stabiele doelpositie (5 minuten omlaag, 15 omhoog). De pure helper
+`stable_screen_target` telt per scherm; veranderende beslisredenen voor dezelfde
+positie onderbreken de teller niet. `runtime_shading.py` verwerkt deadlines,
+onderbrekingen en reload-overdracht via `screen_targets`.
+
 ## Agenda en adaptieve meeting room-voorbereiding
 
 De optionele ruimteagenda is een bron van comfortvraag. De vier voorbereidingsinstellingen

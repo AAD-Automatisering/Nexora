@@ -16,13 +16,17 @@ def entity(hass, platform, unique_id):
     return er.async_get(hass).async_get_entity_id(platform, DOMAIN, unique_id)
 
 
-async def office(hass):
+async def office(hass, **settings):
     hass.states.async_set("sensor.west_temperature", "23.5", CELSIUS)
     hass.states.async_set("sensor.solar_power", "2500", {"unit_of_measurement": "W"})
     hass.states.async_set("sun.sun", "above_horizon", {"azimuth": 180, "elevation": 50})
     hass.states.async_set(SCREEN, "open", {"current_position": 100})
     central = await setup_central(hass)
-    building = {**central.options["building"], "sun_power_entity": "sensor.solar_power"}
+    building = {
+        **central.options["building"],
+        "sun_power_entity": "sensor.solar_power",
+        **settings,
+    }
     hass.config_entries.async_update_entry(
         central, options={**central.options, "building": building}
     )
@@ -55,6 +59,9 @@ async def test_screen_simulates_then_shades_and_respects_people(hass, freezer):
         "switch", "turn_on", {"entity_id": switch_id}, blocking=True
     )
     await hass.async_block_till_done()
+    assert not moves
+    assert runtime.screen_moves[EQUIPMENT].status == "stabilizing"
+    await later(hass, freezer, minutes=5)
     assert [call.data["position"] for call in moves] == [0]
     hass.states.async_set(SCREEN, "closing", {"current_position": 40})
     hass.states.async_set(SCREEN, "closed", {"current_position": 0})
@@ -72,6 +79,8 @@ async def test_screen_simulates_then_shades_and_respects_people(hass, freezer):
     assert len(moves) == 1
     assert runtime.screen_moves[EQUIPMENT].status == "manual_override"
     await later(hass, freezer, minutes=91)
+    assert len(moves) == 1
+    await later(hass, freezer, minutes=5)
     assert [call.data["position"] for call in moves] == [0, 0]
 
 
@@ -107,6 +116,8 @@ async def test_person_taking_over_right_after_our_move(hass, freezer):
     await later(hass, freezer, minutes=6)
     runtime.set_thermostat("west", screen_regulation=True)
     await hass.async_block_till_done()
+    assert not moves
+    await later(hass, freezer, minutes=15)
     assert [call.data["position"] for call in moves] == [100]  # Up: room cool.
     # Within the confirmation time the room controller sends it down again.
     hass.states.async_set(SCREEN, "opening", {"current_position": 0})
@@ -118,3 +129,71 @@ async def test_person_taking_over_right_after_our_move(hass, freezer):
     await later(hass, freezer, minutes=60)
     assert len(moves) == 1  # Not opened again during the manual time.
     assert runtime.screen_moves[EQUIPMENT].status == "manual_override"
+
+
+async def test_first_move_waits_for_sun_and_continuous_shading_demand(hass, freezer):
+    moves = async_mock_service(hass, "cover", "set_cover_position")
+    central, _ = await office(hass)
+    runtime = central.runtime_data
+    runtime.set_thermostat("west", screen_regulation=True)
+    await later(hass, freezer, minutes=5)
+    assert not moves
+    assert runtime.screen_moves[EQUIPMENT].status == "stabilizing"
+    await later(hass, freezer, minutes=4, seconds=59)
+    assert not moves
+    await later(hass, freezer, seconds=1)
+    assert [call.data["position"] for call in moves] == [0]
+
+
+async def test_reversal_waits_for_interval_and_restarts_when_target_changes(
+    hass, freezer
+):
+    moves = async_mock_service(hass, "cover", "set_cover_position")
+    central, _ = await office(hass)
+    runtime = central.runtime_data
+    runtime.set_thermostat("west", screen_regulation=True)
+    await later(hass, freezer, minutes=5)
+    await later(hass, freezer, minutes=5)
+    assert len(moves) == 1
+    hass.states.async_set(SCREEN, "closed", {"current_position": 0})
+    await hass.async_block_till_done()
+    hass.states.async_set("sensor.west_temperature", "20", CELSIUS)
+    await hass.async_block_till_done()
+    await later(hass, freezer, minutes=15)
+    assert len(moves) == 1
+    assert runtime.screen_moves[EQUIPMENT].status == "interval"
+    # Returning to shade cancels the pending opening request.
+    hass.states.async_set("sensor.west_temperature", "23.5", CELSIUS)
+    await hass.async_block_till_done()
+    await later(hass, freezer, minutes=14)
+    hass.states.async_set("sensor.west_temperature", "20", CELSIUS)
+    await hass.async_block_till_done()
+    await later(hass, freezer, minutes=1)
+    assert len(moves) == 1  # 30-minute move interval ended, target still too new.
+    assert runtime.screen_moves[EQUIPMENT].status == "stabilizing"
+    await later(hass, freezer, minutes=14)
+    assert [call.data["position"] for call in moves] == [0, 100]
+
+
+async def test_unknown_sun_interrupts_stability_and_reload_preserves_new_timer(
+    hass, freezer
+):
+    moves = async_mock_service(hass, "cover", "set_cover_position")
+    central, _ = await office(hass)
+    runtime = central.runtime_data
+    runtime.set_thermostat("west", screen_regulation=True)
+    await later(hass, freezer, minutes=5)
+    await later(hass, freezer, minutes=4)
+    hass.states.async_set("sun.sun", "unavailable")
+    await hass.async_block_till_done()
+    assert EQUIPMENT not in runtime.screen_targets
+    hass.states.async_set("sun.sun", "above_horizon", {"azimuth": 180, "elevation": 50})
+    await hass.async_block_till_done()
+    await later(hass, freezer, minutes=3)
+    assert not moves
+    pending = runtime.screen_targets[EQUIPMENT]
+    assert await hass.config_entries.async_reload(central.entry_id)
+    await hass.async_block_till_done()
+    assert central.runtime_data.screen_targets[EQUIPMENT] == pending
+    await later(hass, freezer, minutes=2)
+    assert [call.data["position"] for call in moves] == [0]

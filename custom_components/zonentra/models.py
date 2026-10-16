@@ -140,6 +140,9 @@ class BuildingSettings:
     screen_block_entity: str | None = None  # configured: only valid off allows moves
     screen_shade_position: float = 0.0  # % (100 = open)
     screen_override_minutes: float = 120.0
+    screen_min_move_minutes: float = 30.0
+    screen_open_delay_minutes: float = 15.0
+    screen_shade_delay_minutes: float = 5.0
     # 0.12 weather forecast: the coming hours make a day warm/neutral/cold.
     weather_entity: str | None = None
     warm_day_temperature: float = 22.0  # expected maximum from (°C)
@@ -278,6 +281,9 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _range(settings.sun_power_threshold, 0, 1_000_000)
     _range(settings.screen_shade_position, 0, 100)
     _range(settings.screen_override_minutes, 5, 720)
+    _range(settings.screen_min_move_minutes, 15, 240)
+    _range(settings.screen_open_delay_minutes, 0, 60)
+    _range(settings.screen_shade_delay_minutes, 0, 60)
     _entity(settings.weather_entity, ("weather",))
     _range(settings.warm_day_temperature, -20, 45)
     _range(settings.cold_day_temperature, -20, 45)

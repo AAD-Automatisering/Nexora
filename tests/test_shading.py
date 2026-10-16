@@ -10,6 +10,7 @@ from custom_components.zonentra.shading import (
     SunMemory,
     decide_screen,
     plan_screen_move,
+    stable_screen_target,
     sun_on_facade,
     sunny_state,
 )
@@ -132,7 +133,8 @@ def move(decision=SHADE, current=100, last=None, **kwargs):
         ({"current": 5}, "in_position"),
         ({"busy": True}, "waiting_for_confirmation"),
         ({"last": NOW - timedelta(minutes=5)}, "interval"),
-        ({"last": NOW - timedelta(minutes=16)}, "move"),
+        ({"last": NOW - timedelta(minutes=16)}, "interval"),
+        ({"last": NOW - timedelta(minutes=30)}, "move"),
         ({"override_until": NOW - timedelta(minutes=1)}, "move"),
         ({"decision": ScreenDecision("hold", None, "sun_unknown")}, "hold"),
     ],
@@ -144,7 +146,36 @@ def test_move(kwargs, status):
 def test_move_position_and_next_check():
     assert move().position == 0
     assert move(last=NOW - timedelta(minutes=5)).next_check == NOW + timedelta(
-        minutes=10
+        minutes=25
+    )
+
+
+def test_target_must_be_continuous_but_reason_can_change():
+    memory, deadline = stable_screen_target(SHADE, None, NOW, 300)
+    assert deadline == NOW + timedelta(minutes=5)
+    memory, deadline = stable_screen_target(
+        ScreenDecision("shade", 0, "room_warm"), memory, NOW + timedelta(minutes=4), 300
+    )
+    assert deadline == NOW + timedelta(minutes=5)
+    memory, deadline = stable_screen_target(
+        SHADE, memory, NOW + timedelta(minutes=5), 300
+    )
+    assert deadline is None
+    memory, deadline = stable_screen_target(
+        ScreenDecision("open", 100, "no_sun"), memory, NOW + timedelta(minutes=6), 900
+    )
+    assert deadline == NOW + timedelta(minutes=21)
+    memory, deadline = stable_screen_target(
+        ScreenDecision("hold", None, "sun_unknown"), memory, NOW, 300
+    )
+    assert memory is deadline is None
+
+
+def test_move_interval_can_be_configured():
+    assert move(last=NOW - timedelta(minutes=20), interval_seconds=900).status == "move"
+    assert (
+        move(last=NOW - timedelta(minutes=40), interval_seconds=3600).status
+        == "interval"
     )
 
 
@@ -185,6 +216,9 @@ def test_screen_settings_and_tracked_entities():
         {"screen_shade_position": 120},
         {"screen_override_minutes": 1},
         {"screen_block_entity": "sensor.wind"},
+        {"screen_min_move_minutes": 14},
+        {"screen_open_delay_minutes": -1},
+        {"screen_shade_delay_minutes": 61},
     ],
 )
 def test_invalid_screen_settings(settings):

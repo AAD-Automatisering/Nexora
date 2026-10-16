@@ -38,7 +38,7 @@ MIN_ELEVATION = 5.0  # Low sun is blocked by surroundings.
 SUNNY_DELAY_SECONDS = 300.0  # Bright this long before "sunny".
 CLOUDY_DELAY_SECONDS = 900.0  # Dim this long before "not sunny".
 CLOUDY_FACTOR = 0.7  # "Dim" = below 70 % of the threshold (hysteresis).
-MOVE_INTERVAL_SECONDS = 900.0  # At most one move per screen per 15 min.
+MOVE_INTERVAL_SECONDS = 1800.0  # At most one move per screen per 30 min.
 MIN_STEP = 10  # Ignore position differences below 10 %.
 OPEN_POSITION = 100
 WARM_HYSTERESIS = 0.5  # °C around the middle of the band.
@@ -145,6 +145,22 @@ class ScreenMove:
     next_check: datetime | None = None
 
 
+@dataclass(frozen=True)
+class ScreenTargetMemory:
+    position: int
+    since: datetime
+
+
+def stable_screen_target(decision, memory, now, delay_seconds):
+    """Require a continuous target position, irrespective of its changing reason."""
+    if decision.position is None:
+        return None, None
+    if memory is None or memory.position != decision.position:
+        memory = ScreenTargetMemory(decision.position, now)
+    until = memory.since + timedelta(seconds=delay_seconds)
+    return memory, until if now < until else None
+
+
 def plan_screen_move(
     decision: ScreenDecision,
     current: int | None,
@@ -155,6 +171,7 @@ def plan_screen_move(
     blocked: bool,
     override_until: datetime | None,
     busy: bool,
+    interval_seconds: float = MOVE_INTERVAL_SECONDS,
 ) -> ScreenMove:
     """Whether to move a screen now (only with screen regulation on)."""
     if decision.position is None:
@@ -170,7 +187,7 @@ def plan_screen_move(
     if busy:
         return ScreenMove("waiting_for_confirmation")
     if last_move_at is not None:
-        allowed = last_move_at + timedelta(seconds=MOVE_INTERVAL_SECONDS)
+        allowed = last_move_at + timedelta(seconds=interval_seconds)
         if now < allowed:
             return ScreenMove("interval", next_check=allowed)
     return ScreenMove("move", decision.position)
