@@ -55,7 +55,7 @@ def sunny_state(
 ) -> tuple[bool | None, SunMemory, datetime | None]:
     """(sunny or None if unknown, memory, next check) from solar power."""
     if power is None:
-        return None, memory, None
+        return None, SunMemory(memory.sunny), None
     if memory.sunny:
         changing = power < threshold * CLOUDY_FACTOR
         delay = CLOUDY_DELAY_SECONDS

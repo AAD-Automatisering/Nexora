@@ -98,9 +98,10 @@ def learn_rate(rates, sample, now, temperature, mode, outdoor=None):
         sample is None
         or sample.mode != mode
         or sample.outdoor_band != current.outdoor_band
-        or now <= sample.at
     ):
         return rates, current
+    if now <= sample.at:
+        return rates, sample
     minutes = (now - sample.at).total_seconds() / 60
     if minutes < MIN_SAMPLE_MINUTES:
         return rates, sample

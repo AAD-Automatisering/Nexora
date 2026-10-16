@@ -608,11 +608,13 @@ Bronveranderingen gebruiken `async_track_state_change_event`. Voor rapporten met
 ongewijzigde waarde is er een gefilterde `EVENT_STATE_REPORTED`-listener, zoals de
 actuele HA-API voorschrijft. De runtime plant slechts één timer naar de eerstvolgende
 sensorvervaldatum of geblokkeerde omschakeldeadline. Er is geen periodieke polling,
-behalve het opvragen van de weersverwachting (elke 30 minuten, alleen met weerentiteit).
+behalve het opvragen van de weersverwachting (elke 30 minuten, alleen met weerentiteit)
+en agenda’s (elke vijf minuten, alleen met ingestelde ruimteagenda).
 Binnenunits zijn al gevolgde apparatuurentiteiten: een `hvac_action`-wijziging
 is een attribuutwijziging en komt via hetzelfde state_changed-event binnen.
 Override-afloop, anti-pendelblokkades en wachttijden van de omschakeling worden
-als deadlines in dezelfde ene timer meegenomen.
+als deadlines in dezelfde ene timer meegenomen. Ook de bevestigingsdeadlines van
+commando’s en de back-off na een fout of ontbrekende bevestiging worden meegenomen.
 Bij unload worden zowel bronlisteners als de timer verwijderd.
 
 De beslisengine importeert geen Home Assistant en heeft geen uitvoerinterface.
@@ -653,3 +655,31 @@ thermostaatinstellingen en alle bestaande apparaat-/groepsblokkades blijven leid
 Zonder beweging gebruikt een ongereserveerde ruimte met bruikbare agenda eco;
 gebouwafwezigheid blijft dan away. Timers evalueren start en einde zonder nieuw
 sensorevent. `BookingSensor` toont alleen planning en schatting, geen afspraakinhoud.
+
+## Herstel en actieve timing na de vervolg-review
+
+De actieve uitvoering bewaakt minimale aan-/uit-tijd en heat/cool-omschakelpauze
+via `runtime_timing.py`, ook voor groepspresets en zelfstandige units. Stopaanroepen
+moeten eerst in HA als uit worden waargenomen. Alleen al serviceacceptatie start de
+wachttijd niet. Eerder draaiende units worden daarna hervat zonder preset-uit-puls;
+een reeds uitgeschakelde unit krijgt pas na zijn minimale uit-tijd een presetpuls.
+Bij correctie naar de bestaande groepsstand blijft minstens de 30 s
+bedieningsvertraging gelden, naast de ingestelde minimale aan-tijd.
+
+Voor modus, setpoint, ventilator en lamel geldt 60 s bevestigingstijd, voor covers
+240 s. Een verlopen bevestiging krijgt een herbeoordeling en maakt de bijbehorende
+toegepast-cache ongeldig. Retry start op 120 s en verdubbelt bij herhaald falen tot
+maximaal 1.800 s. Alleen de actuele planner mag opnieuw verzenden: gewijzigde vraag,
+uitgeschakelde regeling of een override mag geen oud commando laten herleven.
+Een geaccepteerde preset-uit-puls die niet in de state terugkomt, krijgt eveneens
+een herpoging. Bestaande minimumintervallen voor setpoints en covers blijven gelden.
+
+Ventilator en lamel worden pas na een geslaagde aanroep als toegepast gemarkeerd;
+de marker blijft niet bestaan na een servicefout of bevestigingstime-out. Tijdens
+een handmatige apparaat-override worden ventilatorcommando’s gepauzeerd en de cache
+gewist, zodat automatisch regelen na afloop weer kan hervatten.
+
+Onbekend zonvermogen wist `pending_since`, maar bewaart de laatst bevestigde
+zonnigheidsstatus. Thermisch leren gebruikt het tijdstip van een nieuw bronrapport,
+niet van een willekeurige runtime-update. Een oud rapport of een rapport van vóór
+het actieve regelinterval levert geen nieuw meetanker op.

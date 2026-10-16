@@ -67,6 +67,7 @@ from .runtime_bookings import BookingRuntimeMixin
 from .runtime_commands import CommandRuntimeMixin
 from .runtime_helpers import _origin, _setpoint
 from .runtime_shading import ShadingRuntimeMixin
+from .runtime_timing import TimingRuntimeMixin
 from .shading import ScreenDecision, ScreenMove, SunMemory
 from .temperature import convert_temperature
 from .thermostat import (
@@ -97,7 +98,9 @@ ZONE_LIMIT_KEYS = (
 )
 
 
-class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMixin):
+class BuildingRuntime(
+    BookingRuntimeMixin, ShadingRuntimeMixin, TimingRuntimeMixin, CommandRuntimeMixin
+):
     """Observe one building, evaluate its plans and dispatch enabled controls."""
 
     def __init__(
@@ -110,8 +113,12 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
         self.preset_memories: dict[str, PresetMemory] = {}
         self.preset_applications: dict[str, PresetApplication] = {}
         self.mode_controls = {}
+        self.group_switches: dict = {}
+        self.room_switches: dict = {}
         self.pending_offs = []  # (due, ModeCommand, target mode)
         self.command_log: list[dict] = []
+        self.command_receipts: dict = {}
+        self.command_retries: dict = {}
         self.mode_store = None
         self.building = building
         self.signal = f"zonentra_{building.id}_updated"
@@ -177,6 +184,9 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
         self._calendar_refreshing = False
         self.thermal_rates: dict = {}
         self.thermal_samples: dict = {}
+        self.thermal_reports: dict = {}
+        self.thermal_started: dict = {}
+        self.thermal_context: dict = {}
         self.thermal_store = None
         # Coordination and manual overrides survive reloads, not HA restarts.
         self.overrides = {}
@@ -389,13 +399,14 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
                 ],
             )
         self._preview_auto_fans()
+        self._command_feedback(now)
         self._plan(transitions, sources, now)
         if self.active_capable:
             self._control(sources, now)
         if self._cancel_deadline:
             self._cancel_deadline()
             self._cancel_deadline = None
-        deadlines = []
+        deadlines = self._command_deadlines(now)
         for zone in self.building.zones:
             # Only update_based measurements can expire; limit entities never do.
             if max_age := max_age_for(zone.sensor_validation, zone.max_age_seconds):
@@ -570,6 +581,10 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
     # without it a reload forgot hysteresis, manual overrides, anti-cycling
     # and pending commands, and running units could be switched off.
     CARRIED = (
+        "command_receipts",
+        "command_retries",
+        "group_switches",
+        "room_switches",
         "booking_events",
         "booking_updated",
         "booking_errors",
@@ -637,7 +652,35 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
             for pending in self.pending_offs
             if (pending[1].equipment_id, pending[1].entity_id) in equipment
         ]
+        valid_entities = self.building.entity_ids
+        valid_ids = {item.id for item in self.building.equipment}
+        self.room_switches = {
+            key: value for key, value in self.room_switches.items() if key in valid_ids
+        }
+        self.command_receipts = {
+            key: value
+            for key, value in self.command_receipts.items()
+            if value.command.equipment_id in valid_ids
+            and value.command.entity_id in valid_entities
+        }
+        self.command_retries = {
+            key: value
+            for key, value in self.command_retries.items()
+            if value[0].equipment_id in valid_ids
+            and value[0].entity_id in valid_entities
+        }
+        for tracker in (
+            self.command_tracker,
+            self.setpoint_tracker,
+            self.cover_tracker,
+        ):
+            for pending in tracker.pending:
+                if pending.entity_id not in valid_entities:
+                    tracker.cancel(pending.entity_id)
         groups = {group.id for group in self.building.groups}
+        self.group_switches = {
+            key: value for key, value in self.group_switches.items() if key in groups
+        }
         self.preset_applications = {
             group_id: application
             for group_id, application in self.preset_applications.items()
@@ -784,7 +827,7 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
     def _safe_modes(self, item) -> frozenset[str]:
         if item.group_id is None:
             return frozenset({"heat", "cool"})
-        if self._group_block(item.group_id):
+        if self._group_block(item.group_id) or item.group_id in self.group_switches:
             return frozenset()
         memory = self.preset_memories.get(item.group_id, PresetMemory())
         return safe_modes((), memory.mode)
@@ -809,6 +852,50 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
                 item.entity_id, now
             )
             override = self.overrides.get(item.id)
+            direct = thermostat.hvac_mode in UNIT_MODES
+            target = thermostat.hvac_mode if direct else intent.desired_mode
+            needs_changeover = (
+                enabled
+                and unit is not None
+                and unit.available
+                and not (override and override.active(now))
+                and (
+                    item.group_id is None
+                    or direct
+                    and (
+                        self.mode_applied.get(item.id) != target
+                        or unit.selected_mode == "off"
+                    )
+                )
+            )
+            if (
+                needs_changeover
+                and self.windows.get(item.zone_id) != "open"
+                and target in ("heat", "cool", "dry")
+                and ("cool" if target == "dry" else target) in self._safe_modes(item)
+            ):
+                timing, until = self._room_changeover(item, unit, target, now)
+                if timing:
+                    controls[item.id] = timing
+                    plans[item.id] = SetpointPlan(timing.status)
+                    if timing.command and available:
+                        self._execute(timing.command, now)
+                    if until:
+                        checks.append(until)
+                    continue
+            else:
+                uncertain = (
+                    unit is None
+                    or not unit.available
+                    or intent.zone_demand == "unknown"
+                )
+                if enabled and thermostat.hvac_mode != "off" and uncertain:
+                    if (
+                        unit is None or not unit.available
+                    ) and item.id in self.room_switches:
+                        self.room_switches[item.id].stopped_at = None
+                else:
+                    self.room_switches.pop(item.id, None)
             if self.windows.get(item.zone_id) == "open" and enabled:
                 # Open window: running units go off at once (no minimum run
                 # time), nothing starts until it closes.
@@ -860,8 +947,6 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
                 control = RoomUnitControl(item.id, "climate_service_unavailable")
             controls[item.id] = control
             if control.command:
-                if thermostat.hvac_mode in UNIT_MODES:
-                    self.mode_applied[item.id] = thermostat.hvac_mode
                 self._execute(control.command, now)
             elif enabled and unit and unit.available and not unit_busy:
                 if check := self._fan(item, unit, thermostat, now, available):
@@ -877,7 +962,6 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
                 and not unit_busy
                 and not self.setpoint_tracker.is_pending(item.entity_id, now)
             ):
-                self.setpoint_sent[item.id] = now
                 self._execute(
                     ModeCommand(
                         item.id,
@@ -948,7 +1032,6 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
             domain, service, data = command
             if not self.hass.services.has_service(domain, service):
                 continue
-            self.vane_applied[zone.id] = mode
             self._execute(
                 ModeCommand(
                     units[0].id if units else zone.id,
@@ -1022,6 +1105,10 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
         With the automatic fan the speed follows the distance to the target,
         changed at most once per setpoint interval.
         """
+        override = self.overrides.get(item.id)
+        if override and override.active(now):
+            self.fan_applied.pop(item.id, None)
+            return override.expires_at
         state = self.hass.states.get(item.entity_id)
         supported = tuple((state.attributes.get("fan_modes") or ()) if state else ())
         if not supported or not thermostat.fan_control:
@@ -1062,8 +1149,6 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
             self.fan_applied[item.id] = desired
         if fan is None or not available:
             return None
-        self.fan_applied[item.id] = fan
-        self.fan_sent_at[item.id] = now
         self._execute(
             ModeCommand(
                 item.id,
@@ -1208,6 +1293,17 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
             ]
             # Late responses from an earlier preset must not schedule a pulse.
             self.preset_applications.pop(group_id, None)
+            self.group_switches.pop(group_id, None)
+            self.command_receipts = {
+                key: receipt
+                for key, receipt in self.command_receipts.items()
+                if receipt.command.equipment_id not in group_units
+            }
+            self.command_retries = {
+                key: retry
+                for key, retry in self.command_retries.items()
+                if retry[0].equipment_id not in group_units
+            }
             for item in self.building.equipment:
                 if item.id not in group_units:
                     continue
@@ -1252,6 +1348,12 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
             ):
                 del self.preset_applications[group.id]
                 application = None
+            timing = self._group_timing(group, target, previous, now)
+            if timing is not None:
+                controls[group.id] = timing
+                for command in timing.commands:
+                    self._execute(command, now)
+                continue
             if application:
                 commands = ()
                 until = application.retry_at
@@ -1274,6 +1376,12 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
                                 command,
                                 reason="preset_pulse"
                                 if unit.selected_mode == "off"
+                                and key
+                                not in getattr(
+                                    self.group_switches.get(group.id),
+                                    "resume_units",
+                                    (),
+                                )
                                 else "switch_running_unit",
                             )
                     commands = tuple(
@@ -1306,6 +1414,37 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
                 now,
                 enabled=enabled,
             )
+            progress = self.group_switches.get(group.id)
+            if progress and progress.ready:
+                resume = progress.resume_units
+                commands = [
+                    replace(command, reason="switch_running_unit")
+                    if command.equipment_id in resume
+                    else command
+                    for command in control.commands
+                    if not (command.equipment_id in resume and command.delay_seconds)
+                ]
+                covered = {command.equipment_id for command in commands}
+                commands.extend(
+                    ModeCommand(
+                        unit.equipment_id,
+                        entity_ids[unit.equipment_id],
+                        "set_hvac_mode",
+                        target,
+                        0,
+                        "switch_running_unit",
+                    )
+                    for unit in self._group_units(group)
+                    if unit.equipment_id in resume
+                    and unit.equipment_id not in covered
+                    and unit.available
+                    and unit.selected_mode == "off"
+                )
+                if commands:
+                    control = replace(
+                        control, status="group_mode_applied", commands=tuple(commands)
+                    )
+                    memory = PresetMemory(target, now, previous.corrected)
             if control.commands and not available:
                 control = replace(
                     control, status="climate_service_unavailable", commands=()
@@ -1332,6 +1471,8 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
                 )
                 continue
             controls[group.id] = control
+            if progress and progress.ready and not control.commands:
+                self.group_switches.pop(group.id, None)
             if memory != previous:
                 self.preset_memories[group.id] = memory
                 if memory.mode != previous.mode:
@@ -1389,6 +1530,7 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
         if not application.commands:
             self.preset_memories[group_id] = application.memory
             del self.preset_applications[group_id]
+            self.group_switches.pop(group_id, None)
             self._save_presets()
             return ModeControl(
                 group_id,
@@ -1401,6 +1543,14 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
         if not available:
             commands = ()
             application.retry_at = now + timedelta(seconds=PRESET_RETRY_SECONDS)
+        waiting = [
+            until for command in commands if (until := self._command_wait(command, now))
+        ]
+        commands = tuple(
+            command for command in commands if not self._command_wait(command, now)
+        )
+        if waiting:
+            application.retry_at = min(waiting)
         application.in_flight.update(command.equipment_id for command in commands)
         for command in commands:
             self._execute(
@@ -1431,6 +1581,7 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
             return
         now = dt_util.utcnow()
         if success:
+            application.memory = replace(application.memory, changed_at=now)
             del application.commands[command.equipment_id]
             if command.reason == "switch_running_unit":
                 corrected = dict(application.memory.corrected)
@@ -1457,6 +1608,7 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
         if not application.commands:
             runtime.preset_memories[group_id] = application.memory
             del runtime.preset_applications[group_id]
+            runtime.group_switches.pop(group_id, None)
             if not runtime._closed:
                 runtime._save_presets()
         if not runtime._closed:
@@ -1480,13 +1632,11 @@ class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMi
         if item is None or not runtime.mode_active.get(item.group_id):
             return
         runtime.command_tracker.cancel(command.entity_id)
-        runtime.pending_offs.append(
-            (
-                dt_util.utcnow() + timedelta(seconds=PRESET_RETRY_SECONDS),
-                command,
-                target,
-            )
+        now = dt_util.utcnow()
+        retry_at = runtime._command_wait(command, now) or now + timedelta(
+            seconds=PRESET_RETRY_SECONDS
         )
+        runtime.pending_offs.append((retry_at, command, target))
         if not runtime._closed:
             runtime.refresh()
 

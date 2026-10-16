@@ -8,7 +8,8 @@ Zonentra therefore keeps every indoor unit of a group *preset* in the group
 mode, replacing a manual "airco stand" automation:
 
 * on a group mode change, every available indoor unit gets the new mode:
-  running units are switched directly; units that are off get a short preset
+  running units are stopped and wait through the runtime timing gate before
+  they restart; units that were already off get a short preset
   pulse (``set_hvac_mode`` -> a few seconds -> ``turn_off``), so the next
   person who switches a unit on starts it in the right mode;
 * a running unit in a mode that does not fit the group mode is corrected
@@ -45,7 +46,7 @@ class PresetMemory:
 class ModeCommand:
     equipment_id: str
     entity_id: str
-    service: str  # "set_hvac_mode" or "turn_off"
+    service: str  # HA service name; the runtime dispatches through domain.
     hvac_mode: str | None
     delay_seconds: int  # 0 = now; turn_off of a preset pulse is delayed
     reason: str  # preset_pulse / switch_running_unit / correct_running_unit

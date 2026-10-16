@@ -53,6 +53,7 @@ async def test_disabling_zone_keeps_other_zones_and_cancels_its_pulse(hass, free
     runtime = central.runtime_data
     runtime.preset_memories.clear()
     runtime.refresh()
+    await later(hass, freezer, minutes=3)  # Both units must satisfy min-off.
     await hass.async_block_till_done()
     assert any(
         command.entity_id == other_unit for _, command, _ in runtime.pending_offs

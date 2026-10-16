@@ -451,3 +451,36 @@ gebruikt per bron een timeout van 30 seconden en ververst een gesloten runtime n
 Een fout of response ouder dan tien minuten maakt de planning onbekend; de normale
 aanwezigheidsregeling blijft beschikbaar. Alleen tijden worden in het geheugen
 opgenomen; afspraakinhoud wordt niet opgeslagen of in diagnostiek geëxporteerd.
+
+## Gedeelde commandolifecycle en actieve timing — 16 oktober 2026
+
+`runtime_timing.py` begrenst de actieve groepspresets, inclusief korte pulsen, met
+minimale uit-tijden. Voor een heat/cool-wissel worden draaiende thermische units
+na hun minimale aan-tijd gestopt. Pas een geobserveerde uit-state start de
+omschakelpauze; daarna worden eerder draaiende units zonder uitschakelpuls hervat.
+Zelfstandige ruimtes en expliciete dry-overgangen gebruiken dezelfde stop/wacht-
+voorwaarden. Een centrale reload bewaart de voortgang, een volledige HA-herstart
+neemt opnieuw de geobserveerde toestanden en conservatieve timing als uitgangspunt.
+De pure coördinator blijft een diagnostisch plan; de actieve timingvoorwaarden
+autoriseren de uitvoering afzonderlijk.
+
+`runtime_commands.py` bewaart per entity/servicedomein/service een begrensde receipt
+voor in-flight en geaccepteerde commando’s, met verwacht state- of attribuutantwoord.
+Fouten en onbevestigde aanroepen maken toegepaste caches ongeldig. De eigen planner
+beoordeelt vervolgens opnieuw de actuele gewenste toestand. Retry begint op 120 s
+en loopt op tot maximaal 1.800 s; bevestiging of een nieuwe gewenste opdracht
+beëindigt de oude back-off. Bevestigings-, retry- en coverdeadlines lopen mee in de
+centrale eventtimer. De minimumintervallen van setpoints en covers blijven gelden.
+Ook een geaccepteerde preset-uit-puls zonder bevestiging krijgt een nieuwe poging.
+
+Groepsstop, ruimte-/ventilatorschakelaar, thermostaat-uit en overrides worden vlak
+voor de serviceaanroep gecontroleerd. Een lopende API-aanroep is begrensd op 30 s.
+De ruwe servicestatus (`result`) en de bevestigingsstatus (`confirmation`) staan
+apart in de commandolog en diagnostische sensorattributen. Verwijderde apparatuur
+verliest bij runtime-adoptie ook haar receipts, retries en trackerrecords.
+
+Thermisch leren consumeert alleen nieuwe valide `reported_at`-waarnemingen, binnen
+hetzelfde actieve regelinterval en dezelfde buitenklasse. Timer- en agenda-updates
+kunnen geen nieuw meetanker met een oude temperatuur maken. Onbekend zonvermogen
+wist een lopende bevestigingsvertraging, met behoud van de laatst bevestigde
+zonnigheid; na herstel begint een nog niet bevestigde overgang opnieuw.

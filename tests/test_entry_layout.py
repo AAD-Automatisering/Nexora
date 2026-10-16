@@ -1,5 +1,6 @@
 """0.6.0 integration: central configuration + zone entries (VTherm-style)."""
 
+from datetime import timedelta
 from unittest.mock import patch
 
 from homeassistant.config_entries import ConfigEntryState
@@ -7,6 +8,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.zonentra import central_device_entry
@@ -33,7 +35,17 @@ def zone_options(zone_id, *units, **fields):
 def set_states(hass, zone_id, *units, temperature="21"):
     hass.states.async_set(f"sensor.{zone_id}_temperature", temperature, CELSIUS)
     for unit in units:
-        hass.states.async_set(unit, "off", {"hvac_action": "off"})
+        # These fixtures model units already off before configuration, not a
+        # freshly observed physical stop. Fresh-stop timing has dedicated tests.
+        if hass.states.get(unit) is None:
+            hass.states.async_set(
+                unit,
+                "off",
+                {"hvac_action": "off"},
+                timestamp=(dt_util.utcnow() - timedelta(hours=1)).timestamp(),
+            )
+        else:
+            hass.states.async_set(unit, "off", {"hvac_action": "off"})
 
 
 async def setup_central(hass):

@@ -21,6 +21,7 @@ from tests.test_entry_layout import (
     setup_central,
     zone_options,
 )
+from tests.test_thermostat_runtime import later
 
 UNIT = "climate.west_ac"
 
@@ -98,8 +99,10 @@ async def test_preset_pulse_without_override_and_restart_memory(hass):
     assert zone.state.name == "LOADED"
 
 
-async def test_wrong_manual_mode_is_corrected_and_automation_is_no_override(hass):
-    set_mode, _ = await mock_climate(hass)
+async def test_wrong_manual_mode_is_corrected_and_automation_is_no_override(
+    hass, freezer
+):
+    set_mode, turn_off = await mock_climate(hass)
     central, _ = await office(hass)
     runtime = central.runtime_data
     set_mode.clear()
@@ -109,7 +112,13 @@ async def test_wrong_manual_mode_is_corrected_and_automation_is_no_override(hass
     assert runtime.last_transitions["hvac_west_ac"][0] == "manual_on"
     assert "hvac_west_ac" in runtime.overrides
     assert set_mode == []  # Not immediately: people may still be adjusting.
-    await fire(hass, dt_util.utcnow() + timedelta(seconds=31))
+    await later(hass, freezer, seconds=31)
+    assert calls(set_mode) == []
+    await later(hass, freezer, seconds=570)
+    assert turn_off
+    hass.states.async_set(UNIT, "off")
+    await hass.async_block_till_done()
+    await later(hass, freezer, seconds=301)
     assert calls(set_mode) == [(UNIT, "heat")]
     hass.states.async_set(UNIT, "heat")  # The integration applies the correction.
     await hass.async_block_till_done()
@@ -126,7 +135,7 @@ async def test_wrong_manual_mode_is_corrected_and_automation_is_no_override(hass
 async def test_kill_switch_stops_commands_and_group_change_switches_units(
     hass, freezer
 ):
-    set_mode, _ = await mock_climate(hass)
+    set_mode, turn_off = await mock_climate(hass)
     central, _ = await office(hass)
     set_mode.clear()
     # Finish the first preset pulse: heat (ours), off after a few seconds.
@@ -150,7 +159,14 @@ async def test_kill_switch_stops_commands_and_group_change_switches_units(
         "switch", "turn_on", {"entity_id": switch_id(hass, central)}, blocking=True
     )
     await hass.async_block_till_done()
-    # The running unit is switched to the new group mode directly.
+    # A running unit is stopped, confirmed off, and waits before restarting.
+    assert set_mode == []
+    assert turn_off
+    hass.states.async_set(UNIT, "off")
+    await hass.async_block_till_done()
+    await later(hass, freezer, seconds=299)
+    assert set_mode == []
+    await later(hass, freezer, seconds=2)
     assert calls(set_mode) == [(UNIT, "cool")]
     log = central.runtime_data.command_log[-1]
     assert (log["reason"], log["result"]) == ("switch_running_unit", "sent")

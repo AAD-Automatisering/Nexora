@@ -766,6 +766,7 @@ class ScreenSensor(ZonentraDiagnosticSensor):
             "manual_until": _iso(runtime.screen_overrides.get(self.item.id)),
             "last_commands": [
                 {key: entry[key] for key in ("at", "value", "reason", "result")}
+                | {"confirmation": entry.get("confirmation")}
                 for entry in runtime.command_log
                 if entry["equipment_id"] == self.item.id
             ][-5:],
@@ -919,7 +920,7 @@ class UnitControlSensor(ZonentraDiagnosticSensor):
                     key: entry[key]
                     for key in ("at", "service", "hvac_mode", "temperature", "reason")
                 }
-                | {"result": entry["result"]}
+                | {"result": entry["result"], "confirmation": entry.get("confirmation")}
                 for entry in runtime.command_log
                 if entry["equipment_id"] == self.item.id
             ][-5:],
@@ -1015,6 +1016,7 @@ class GroupCoordinationSensor(ZonentraDiagnosticSensor):
                         "result",
                     )
                 }
+                | {"confirmation": entry.get("confirmation")}
                 for entry in runtime.command_log
                 if entry["group_id"] == self._group.id
             ][-10:],

@@ -446,6 +446,8 @@ eerder dan bij zacht weer; bij hitte kan koelen langer duren.
 - **Leren per ruimte en omstandigheden:** verwarmings- en koeltempo worden apart
   geleerd voor vorst (< 0 °C), koud (0–10), zacht (10–20), warm (20–30) en heet
   (≥ 30 °C). Een tempo uit het voorjaar wordt dus niet als wintertempo gebruikt.
+  Leren gebruikt alleen nieuwe, valide sensorrapporten met hun eigen tijdstip;
+  een timer maakt van een oude temperatuur geen nieuwe meting.
   De buitentemperatuur komt van de centrale buitensensor, of, als die niet is
   ingesteld, van de actuele temperatuur van de ingestelde weerentiteit.
 - **Begin zonder meetgeschiedenis:** standaard is het starttempo 0,05 °C/min,
@@ -600,8 +602,8 @@ binnenunits van een groep klaargezet in de gewenste groepsmodus:
 
 | Situatie | Wat Zonentra doet |
 |---|---|
-| Groepsmodus wisselt (na hysterese en minimale wisseltijd) | Lopende units krijgen direct de nieuwe stand; units die uit staan krijgen een korte puls (`set_hvac_mode` → 3 s → `turn_off`), zodat ze bij de volgende inschakeling in de juiste stand starten |
-| Iemand zet een unit aan in de verkeerde stand | Na 30 s zet Zonentra de stand terug naar de groepsmodus (niet vaker dan eens per 2 min per unit) |
+| Groepsmodus wisselt (na hysterese en minimale wisseltijd) | Lopende units stoppen eerst en wachten op de bevestigde uit-state en de omschakelpauze, daarna starten ze in de nieuwe stand; units die al uit stonden krijgen na hun minimale uit-tijd een korte puls (`set_hvac_mode` → 3 s → `turn_off`), zodat ze bij de volgende inschakeling in de juiste stand starten |
+| Iemand zet een unit aan in de verkeerde stand | Na de bedieningsvertraging (minstens 30 s) en minimale aan-tijd stopt Zonentra de unit; na uit-bevestiging en omschakelpauze volgt de groepsmodus |
 | Groepsmodus neutraal of onbekend (bijv. sensorfout) | Niets; de laatst gezette stand blijft |
 | Schakelaar **Actieve standregeling** uit | Geen HVAC- of lamelcommando's meer voor deze groep: ook ruimteregeling, setpoints, ventilatorstanden en openstaande pulsen stoppen; het plan blijft zichtbaar als simulatie |
 
@@ -615,14 +617,31 @@ De sensor **Gesimuleerde coördinatie** van de groep toont `active_mode_control`
 `mode_control_status`, `preset_mode`, `preset_changed_at` en de laatste commando's
 met resultaat. Statussen: `in_sync`, `group_mode_applied`, `corrected`,
 `minimum_switch_interval`, `neutral`, `no_group_mode`, `disabled`,
-`waiting_for_switch_state`, `climate_service_unavailable`.
+`waiting_for_switch_state`, `climate_service_unavailable`. Actieve timing is zichtbaar
+als `minimum_off_time`, `stopping_for_changeover`, `changeover_wait` of
+`changeover_unit_unavailable`.
 
 Een groepspreset wordt pas als toegepast opgeslagen nadat de moduscommando's
 voor alle betreffende units zijn geslaagd. Tijdens het versturen is de status
 `applying_preset`; bij een fout volgt `preset_retry`. Alleen de mislukte units
-krijgen na twee minuten een herpoging, ook zonder nieuwe sensorupdates. De
-uitschakelpuls wordt pas ingepland nadat het inschakelcommando is geslaagd; een
-mislukte uitschakelpuls wordt eveneens na twee minuten opnieuw beoordeeld.
+krijgen een herpoging, ook zonder nieuwe sensorupdates: eerst na twee minuten,
+bij herhaald falen met oplopende wachttijd tot maximaal dertig minuten. De
+uitschakelpuls wordt pas ingepland nadat het inschakelcommando is geslaagd. Een
+mislukte of onbevestigde uitschakelpuls wordt opnieuw beoordeeld.
+
+Serviceacceptatie en statebevestiging zijn apart zichtbaar: `result: sent` betekent
+dat HA de aanroep accepteerde; `confirmation` toont `pending`, `confirmed`,
+`timeout`, `not_sent` of `superseded`. HVAC-, setpoint-, ventilator- en lamelcommando’s
+krijgen een bevestigingsdeadline van 60 seconden; covers behouden 240 seconden en
+het bewegingsinterval van 15 minuten. Verlopen deadlines starten zelf een
+herbeoordeling. Alleen nog gewenste en toegestane commando’s worden opnieuw
+gepland. Dit bevestigt HA-states, geen fysieke compressorfeedback.
+
+De dispatcher controleert direct vóór verzending opnieuw de groepsstop,
+Ruimteregeling, FanControl, thermostaat-uit en handmatige override. Tijdens een
+handmatige apparaat-override pauzeert ook de ventilatorregeling en na afloop
+wordt de gewenste snelheid opnieuw beoordeeld. Een herstart van HA bewaart de
+laatste preset; een gewone centrale reload bewaart ook een lopende omschakelpauze.
 
 ### Gesimuleerde regeling en handmatige bediening (0.5)
 
@@ -776,7 +795,8 @@ custom_components/zonentra/
   runtime_bookings.py           agenda’s, adaptieve voorbereiding en opgeslagen leertempo’s
   bookings.py                   pure afspraakvensters en tempo-inschatting
   runtime_shading.py            zonwering, herstel na uitval en zonstandmelding
-  runtime_commands.py           service-uitvoering, laatste blokkadecontrole en commandolog
+  runtime_commands.py           service-uitvoering, bevestiging, back-off en commandolog
+  runtime_timing.py             actieve stop/wacht/start voor groepen en zelfstandige units
   runtime_helpers.py            gedeelde commandobevestiging en herkomst van events
   indoor.py                     binnenunitobservatie en afgeleide groepsmodus
   override.py                   Manual Override-detectie en command tracking

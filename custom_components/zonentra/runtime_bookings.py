@@ -207,7 +207,8 @@ class BookingRuntimeMixin:
             }
             mode = next(iter(modes)) if len(modes) == 1 else None
             eligible = (
-                self.regulated(zone.id)
+                mode in ("heating", "cooling")
+                and self.regulated(zone.id)
                 and self.thermostat(zone.id).hvac_mode != "off"
                 and self.windows.get(zone.id) not in ("open", "opening", "unknown")
                 and temperature.quality == "valid"
@@ -222,10 +223,27 @@ class BookingRuntimeMixin:
             band = outdoor_band(outside)
             by_band = self.thermal_rates.setdefault(zone.id, {})
             rates = by_band.get(band, ThermalRates())
+            context = (mode if eligible else None, band)
+            if self.thermal_context.get(zone.id) != context:
+                self.thermal_context[zone.id] = context
+                self.thermal_samples[zone.id] = None
+                self.thermal_reports.pop(zone.id, None)
+                self.thermal_started[zone.id] = now
+            reported = temperature.reported_at
+            if not eligible:
+                self.thermal_samples[zone.id] = None
+                continue
+            if reported is None or reported < self.thermal_started.get(zone.id, now):
+                continue
+            if reported <= self.thermal_reports.get(
+                zone.id, reported - timedelta(microseconds=1)
+            ):
+                continue
+            self.thermal_reports[zone.id] = reported
             learned, sample = learn_rate(
                 rates,
                 self.thermal_samples.get(zone.id),
-                now,
+                temperature.reported_at or now,
                 temperature.value if eligible else None,
                 mode,
                 outside,

@@ -93,11 +93,19 @@ async def test_retry_does_not_pulse_off_a_manually_started_unit(
     hass.states.async_set(UNIT, manual_mode, context=Context(user_id="review-user"))
     await hass.async_block_till_done()
     await later(hass, freezer, seconds=PRESET_RETRY_SECONDS + 1)
+    if manual_mode == "cool":
+        assert successful == []
+        await later(hass, freezer, seconds=480)
+        assert turn_off
+        hass.states.async_set(UNIT, "off")
+        await hass.async_block_till_done()
+        await later(hass, freezer, seconds=301)
     assert len(successful) == (0 if manual_mode == "heat" else 1)
     assert central.runtime_data.preset_memories["outdoor_1"].mode == "heat"
     assert central.runtime_data.pending_offs == []
+    stops = len(turn_off)
     await later(hass, freezer, seconds=4)
-    assert turn_off == []
+    assert len(turn_off) == stops  # A corrected manual start gets no pulse-off.
 
 
 async def test_failed_preset_stops_retrying_when_group_disabled(hass, freezer):

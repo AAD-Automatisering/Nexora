@@ -74,6 +74,9 @@ class ShadingRuntimeMixin:
                 expected = float(pending.expected_state)
                 if position is not None and abs(position - expected) < MIN_STEP:
                     self.cover_tracker.confirm(entity_id, pending.expected_state, now)
+                    self._cover_confirmation(
+                        entity_id, pending.expected_state, "confirmed"
+                    )
                     self.last_transitions[item.id] = ("zonentra_screen", now)
                     return
                 if position is None or (
@@ -84,6 +87,9 @@ class ShadingRuntimeMixin:
                     return
                 # 0.13.4: it came to rest away from our position (stopped or
                 # sent elsewhere): a person took over, room controller or HA.
+                self._cover_confirmation(
+                    entity_id, pending.expected_state, "superseded"
+                )
                 self.cover_tracker.cancel(entity_id)
             elif old is None or (
                 cover_position(old) == position and old.state == new.state
@@ -99,6 +105,11 @@ class ShadingRuntimeMixin:
     def _shading(self, sources, now) -> None:
         """Decide every screen; move it only with the room's screen regulation."""
         settings = self.building.settings
+        for pending in self.cover_tracker.pending:
+            if now > pending.deadline:
+                self._cover_confirmation(
+                    pending.entity_id, pending.expected_state, "timeout"
+                )
         checks = []
         self.sun_power = _power(sources.get(settings.sun_power_entity))
         if settings.sun_power_entity:
@@ -199,9 +210,11 @@ class ShadingRuntimeMixin:
             if runtime is None or runtime._closed:
                 return
             if success:
+                entry.setdefault("confirmation", "pending")
                 runtime.screen_last_move[item.id] = now
                 runtime.screen_retry_at.pop(item.id, None)
             else:
+                entry["confirmation"] = "not_sent"
                 runtime.cover_tracker.cancel(item.entity_id)
                 runtime.screen_retry_at[item.id] = dt_util.utcnow() + timedelta(
                     seconds=SCREEN_RETRY_SECONDS
@@ -209,6 +222,16 @@ class ShadingRuntimeMixin:
             self.hass.loop.call_soon(runtime.refresh)
 
         self.hass.async_create_task(send())
+
+    def _cover_confirmation(self, entity_id, expected, status):
+        for entry in reversed(self.command_log):
+            if (
+                entry["entity_id"] == entity_id
+                and entry["service"] == "set_cover_position"
+                and str(entry["value"]) == expected
+            ):
+                entry["confirmation"] = status
+                return
 
     def _screen_block(self) -> str | None:
         """Only a trustworthy off state releases a configured block."""
