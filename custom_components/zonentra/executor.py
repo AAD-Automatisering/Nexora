@@ -51,7 +51,7 @@ class ModeCommand:
     reason: str  # preset_pulse / switch_running_unit / correct_running_unit
     temperature: float | None = None  # set_temperature only (0.9 room regulation)
     fan_mode: str | None = None  # set_fan_mode only (0.9 room thermostat)
-    domain: str = "climate"  # 0.10 vane: select / number entities
+    domain: str = "climate"  # HA service domain, also used by dispatch.
     value: str | float | None = None  # 0.10 vane position
 
 

@@ -126,7 +126,7 @@ class BuildingSettings:
     sun_power_entity: str | None = None
     sun_power_threshold: float = 1000.0  # W
     sun_entity: str = "sun.sun"
-    screen_block_entity: str | None = None  # e.g. a wind alarm: no commands
+    screen_block_entity: str | None = None  # configured: only valid off allows moves
     screen_shade_position: float = 0.0  # % (100 = open)
     screen_override_minutes: float = 120.0
     # 0.12 weather forecast: the coming hours make a day warm/neutral/cold.

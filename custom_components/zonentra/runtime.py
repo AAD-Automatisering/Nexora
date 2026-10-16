@@ -5,7 +5,7 @@ from dataclasses import asdict, replace
 from datetime import timedelta
 
 from homeassistant.const import EVENT_STATE_CHANGED, UnitOfTemperature
-from homeassistant.core import Context, HomeAssistant, callback
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.entity_component import DATA_INSTANCES
@@ -63,16 +63,10 @@ from .roomstate import (
     vane_mode,
     window_state,
 )
-from .shading import (
-    MIN_STEP,
-    ScreenDecision,
-    ScreenMove,
-    SunMemory,
-    decide_screen,
-    plan_screen_move,
-    sun_on_facade,
-    sunny_state,
-)
+from .runtime_commands import CommandRuntimeMixin
+from .runtime_helpers import _origin, _setpoint
+from .runtime_shading import ShadingRuntimeMixin
+from .shading import ScreenDecision, ScreenMove, SunMemory
 from .temperature import convert_temperature
 from .thermostat import (
     CLEAR_MANUAL,
@@ -102,49 +96,7 @@ ZONE_LIMIT_KEYS = (
 )
 
 
-def _cover_position(state) -> float | None:
-    """A cover's position: 100 open, 0 closed (state only as a fallback)."""
-    if state is None:
-        return None
-    position = state.attributes.get("current_position")
-    if isinstance(position, (int, float)) and not isinstance(position, bool):
-        return float(position)
-    return {"open": 100.0, "closed": 0.0}.get(state.state)
-
-
-def _power(source) -> float | None:
-    """Solar power in W (kW is converted); None when not usable."""
-    if source is None or not source.trustworthy:
-        return None
-    try:
-        value = float(source.state)
-    except TypeError, ValueError:
-        return None
-    return value * 1000 if source.unit == "kW" else value
-
-
-def _setpoint(value) -> str | None:
-    try:
-        return f"{float(value):.1f}"
-    except TypeError, ValueError:
-        return None
-
-
-def _origin(event) -> str:
-    """Who caused a state change, as far as Home Assistant can tell.
-
-    A KNX room controller produces a bare context; a service call from an
-    automation or script carries a parent context; the HA UI carries a user.
-    """
-    context = getattr(event, "context", None)
-    if context is not None and context.user_id:
-        return "ha_user"
-    if context is not None and context.parent_id:
-        return "automation"
-    return "device"
-
-
-class BuildingRuntime:
+class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
     """Observe one building, evaluate its plans and dispatch enabled controls."""
 
     def __init__(
@@ -208,6 +160,7 @@ class BuildingRuntime:
         self.screen_moves: dict[str, ScreenMove] = {}
         self.screen_overrides: dict = {}  # equipment -> until
         self.screen_last_move: dict = {}
+        self.screen_retry_at: dict = {}
         self.cover_tracker = CommandTracker(confirmation_seconds=240)
         self._screen_checks: list = []
         # 0.12 weather forecast of the coming hours: warm / neutral / cold day.
@@ -610,6 +563,7 @@ class BuildingRuntime:
         "sunny",
         "screen_overrides",
         "screen_last_move",
+        "screen_retry_at",
         "screen_decisions",
         "forecast",
         "forecast_error",
@@ -942,7 +896,7 @@ class BuildingRuntime:
             if not self.hass.services.has_service(domain, service):
                 continue
             self.vane_applied[zone.id] = mode
-            entry = self._log(
+            self._execute(
                 ModeCommand(
                     units[0].id if units else zone.id,
                     zone.vane_entity,
@@ -954,144 +908,7 @@ class BuildingRuntime:
                     value=data.get("option", data.get("value", service)),
                 ),
                 now,
-                "sending",
             )
-            self.hass.async_create_task(self._call(service, data, entry, domain))
-
-    # --- Screens (0.11) ---------------------------------------------------------
-
-    def _screen_transition(self, entity_id, old, new, event, now) -> None:
-        """A screen moved by a person (HA or room controller) is respected."""
-        for item in self.building.equipment:
-            if item.kind != "shading" or item.entity_id != entity_id:
-                continue
-            if new is None or new.state in ("opening", "closing", "unavailable"):
-                return  # Wait for the end position.
-            position = _cover_position(new)
-            pending = next(
-                (p for p in self.cover_tracker.pending if p.entity_id == entity_id),
-                None,
-            )
-            if pending is not None and self.cover_tracker.is_pending(entity_id, now):
-                expected = float(pending.expected_state)
-                if position is not None and abs(position - expected) < MIN_STEP:
-                    self.cover_tracker.confirm(entity_id, pending.expected_state, now)
-                    self.last_transitions[item.id] = ("zonentra_screen", now)
-                    return
-                if position is None or (
-                    old is not None
-                    and _cover_position(old) == position
-                    and old.state == new.state
-                ):
-                    return
-                # 0.13.4: it came to rest away from our position (stopped or
-                # sent elsewhere): a person took over, room controller or HA.
-                self.cover_tracker.cancel(entity_id)
-            elif old is None or (
-                _cover_position(old) == position and old.state == new.state
-            ):
-                return
-            if _origin(event) == "automation":
-                self.last_transitions[item.id] = ("automation_screen", now)
-                return
-            minutes = self.building.settings.screen_override_minutes
-            self.screen_overrides[item.id] = now + timedelta(minutes=minutes)
-            self.last_transitions[item.id] = ("manual_screen", now)
-
-    def _shading(self, sources, now) -> None:
-        """Decide every screen; move it only with the room's screen regulation."""
-        settings = self.building.settings
-        checks = []
-        self.sun_power = _power(sources.get(settings.sun_power_entity))
-        if settings.sun_power_entity:
-            self.sunny, self.sun_memory, check = sunny_state(
-                self.sun_power, settings.sun_power_threshold, self.sun_memory, now
-            )
-            if check:
-                checks.append(check)
-        else:
-            self.sunny = None
-        sun = self.hass.states.get(settings.sun_entity)
-        attributes = sun.attributes if sun else {}
-        azimuth, elevation = attributes.get("azimuth"), attributes.get("elevation")
-        block = sources.get(settings.screen_block_entity)
-        blocked = block is not None and block.state == "on"
-        available = self.hass.services.has_service("cover", "set_cover_position")
-        zones = {zone.id: zone for zone in self.building.zones}
-        decisions, moves = {}, {}
-        for item in self.building.equipment:
-            if item.kind != "shading":
-                continue
-            zone = zones[item.zone_id]
-            snapshot = self.zone_snapshots[zone.id]
-            previous = self.screen_decisions.get(item.id)
-            decision = decide_screen(
-                elevation=elevation,
-                sunny=self.sunny,
-                on_facade=sun_on_facade(azimuth, elevation, zone.facade),
-                demand=self.zone_demands[zone.id].demand,
-                room_temperature=snapshot.temperature.value
-                if snapshot.temperature.quality == "valid"
-                else None,
-                heating_limit=snapshot.heating_limit.value,
-                cooling_limit=snapshot.cooling_limit.value,
-                shade_position=round(settings.screen_shade_position),
-                previous=previous.target if previous else None,
-                day=self.day_type,
-                occupied=self.zone_bands[zone.id][0] == "comfort"
-                or self.thermostat(zone.id).manual,
-            )
-            override = self.screen_overrides.get(item.id)
-            if override is not None and now >= override:
-                del self.screen_overrides[item.id]  # Manual time is over.
-                override = None
-            state = self.hass.states.get(item.entity_id)
-            move = plan_screen_move(
-                decision,
-                _cover_position(state) if state else None,
-                self.screen_last_move.get(item.id),
-                now,
-                enabled=self.active_capable
-                and self.thermostat(zone.id).screen_regulation,
-                blocked=blocked,
-                override_until=override,
-                busy=self.cover_tracker.is_pending(item.entity_id, now),
-            )
-            if move.status == "move" and not available:
-                move = ScreenMove("cover_service_unavailable")
-            if move.status == "move":
-                self._move_screen(item, move.position, decision.reason, now)
-            if move.next_check:
-                checks.append(move.next_check)
-            decisions[item.id], moves[item.id] = decision, move
-        self.screen_decisions, self.screen_moves = decisions, moves
-        self._screen_checks = checks
-
-    def _move_screen(self, item, position, reason, now) -> None:
-        self.screen_last_move[item.id] = now
-        self.cover_tracker.register(item.entity_id, str(position), now)
-        entry = self._log(
-            ModeCommand(
-                item.id,
-                item.entity_id,
-                "set_cover_position",
-                None,
-                0,
-                f"screen_{reason}",
-                domain="cover",
-                value=position,
-            ),
-            now,
-            "sending",
-        )
-        self.hass.async_create_task(
-            self._call(
-                "set_cover_position",
-                {"entity_id": item.entity_id, "position": position},
-                entry,
-                "cover",
-            )
-        )
 
     def _preview_auto_fans(self) -> None:
         """The speed the automatic fan would choose now, for every room with
@@ -1620,147 +1437,6 @@ class BuildingRuntime:
         if not runtime._closed:
             runtime.refresh()
 
-    def _execute(self, command, now, *, on_result=None) -> None:
-        data = {"entity_id": command.entity_id}
-        if command.service == "set_fan_mode":
-            data["fan_mode"] = command.fan_mode  # An attribute: nothing to track.
-        elif command.service == "set_temperature":
-            # HA interprets service temperatures in the configured system unit.
-            temperature = convert_temperature(
-                command.temperature,
-                UnitOfTemperature.CELSIUS,
-                self.hass.config.units.temperature_unit,
-            )
-            if temperature is None:
-                self._log(command, now, "blocked: invalid_temperature")
-                if on_result is not None:
-                    self.hass.loop.call_soon(on_result, False)
-                return
-            entity = self._climate_entity(command.entity_id)
-            if entity is not None:
-                # Quantize and clamp in native units before the service's own
-                # conversion. Rounding a converted boundary can fall just outside
-                # the device's strict min/max checks.
-                native = convert_temperature(
-                    command.temperature,
-                    UnitOfTemperature.CELSIUS,
-                    entity.temperature_unit,
-                )
-                if native is not None:
-                    step = convert_temperature(
-                        entity.target_temperature_step,
-                        entity.temperature_unit,
-                        entity.temperature_unit,
-                        interval=True,
-                    )
-                    if step is not None and step > 0:
-                        native = round(native / step) * step
-                    native = min(entity.max_temp, max(entity.min_temp, native))
-                    temperature = convert_temperature(
-                        native,
-                        entity.temperature_unit,
-                        self.hass.config.units.temperature_unit,
-                    )
-            data["temperature"] = (
-                temperature if entity is not None else round(temperature, 6)
-            )
-            shown = (
-                display_temp(
-                    self.hass,
-                    data["temperature"],
-                    self.hass.config.units.temperature_unit,
-                    entity.precision,
-                )
-                if entity is not None
-                else data["temperature"]
-            )
-            expected = _setpoint(shown)
-            self.setpoint_tracker.register(command.entity_id, expected, now)
-        else:
-            expected = (
-                command.hvac_mode if command.service == "set_hvac_mode" else "off"
-            )
-            self.command_tracker.register(command.entity_id, expected, now)
-        if command.hvac_mode:
-            data["hvac_mode"] = command.hvac_mode
-        entry = self._log(command, now, "sending")
-
-        async def send():
-            success = await self._call(command.service, data, entry)
-            if on_result is not None:
-                self.hass.loop.call_soon(on_result, success)
-
-        self.hass.async_create_task(send())
-
-    async def _call(self, service, data, entry, domain="climate") -> bool:
-        runtime = self._current_runtime()
-        group_ids = {entry.get("group_id")}
-        item = next(
-            (
-                item
-                for item in runtime.building.equipment
-                if item.id == entry.get("equipment_id")
-            ),
-            None,
-        )
-        if item is None:
-            entry["result"] = "blocked: equipment_removed"
-            return False
-        group_ids.add(item.group_id)
-        if entry.get("reason", "").startswith("vane_"):
-            group_ids.update(
-                unit.group_id
-                for unit in runtime.building.equipment
-                if unit.kind == "hvac" and unit.zone_id == item.zone_id
-            )
-        blocked = next(
-            (
-                reason
-                for group_id in group_ids
-                if (reason := runtime._group_block(group_id))
-            ),
-            None,
-        )
-        if blocked or runtime._closed:
-            entry["result"] = f"blocked: {blocked or 'runtime_unloaded'}"
-            return False
-        try:
-            await self.hass.services.async_call(
-                domain, service, data, blocking=True, context=Context()
-            )
-        except Exception as err:  # noqa: BLE001 - report, never crash the runtime
-            entry["result"] = f"failed: {type(err).__name__}"
-            _LOGGER.warning("Zonentra %s on %s failed: %s", service, data, err)
-            return False
-        else:
-            entry["result"] = "sent"
-            return True
-
-    def _log(self, command, now, result) -> dict:
-        entry = {
-            "at": now.isoformat(),
-            "group_id": next(
-                (
-                    item.group_id
-                    for item in self.building.equipment
-                    if item.id == command.equipment_id
-                ),
-                None,
-            ),
-            "equipment_id": command.equipment_id,
-            "entity_id": command.entity_id,
-            "service": command.service,
-            "hvac_mode": command.hvac_mode,
-            "temperature": command.temperature,
-            "fan_mode": command.fan_mode,
-            "value": command.value,
-            "reason": command.reason,
-            "result": result,
-        }
-        self.command_log = [*self.command_log, entry][-30:]
-        _LOGGER.info("Zonentra mode control: %s", entry)
-        return entry
-
     def _save_presets(self) -> None:
         if self.mode_store is None:
             return
@@ -1893,6 +1569,7 @@ class BuildingRuntime:
     def close(self):
         """Cancel the single next-deadline timer on unload."""
         self._closed = True
+        self._clear_sun_issue()
         if self._cancel_deadline:
             self._cancel_deadline()
             self._cancel_deadline = None

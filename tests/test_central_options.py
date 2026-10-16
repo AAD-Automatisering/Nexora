@@ -92,3 +92,31 @@ async def test_new_central_configuration_asks_only_name_and_outdoor(hass):
     # Defaults are stored, so the sections show them.
     assert building["heating_limit"] == 21.0
     assert building["screen_override_minutes"] == 120.0
+
+
+async def test_screen_sun_entity_is_saved_and_followed(hass):
+    from tests.test_shading_runtime import office
+
+    central, _ = await office(hass)
+    hass.states.async_set(
+        "sun.local_sun", "below_horizon", {"azimuth": 300, "elevation": -5}
+    )
+    flow = await open_section(hass, central, "screens")
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"],
+        {"sun_entity": "sun.local_sun", "sun_power_entity": "sensor.solar_power"},
+    )
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"next_step_id": "finish"}
+    )
+    assert flow["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    runtime = central.runtime_data
+    assert runtime.building.settings.sun_entity == "sun.local_sun"
+    assert "sun.local_sun" in runtime.building.entity_ids
+    assert runtime.screen_decisions["shade_west_screen"].reason == "night"
+    hass.states.async_set(
+        "sun.local_sun", "above_horizon", {"azimuth": 180, "elevation": 50}
+    )
+    await hass.async_block_till_done()
+    assert runtime.screen_decisions["shade_west_screen"].reason == "no_sun"

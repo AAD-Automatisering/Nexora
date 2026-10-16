@@ -1,0 +1,290 @@
+"""Screen observation, recovery and enabled movement for a building runtime."""
+
+import math
+from datetime import timedelta
+
+from homeassistant.helpers import issue_registry as ir
+from homeassistant.util import dt as dt_util
+
+from .const import DOMAIN
+from .executor import ModeCommand
+from .observations import cover_position
+from .runtime_helpers import _origin
+from .shading import (
+    MIN_STEP,
+    ScreenMove,
+    decide_screen,
+    plan_screen_move,
+    sun_on_facade,
+    sunny_state,
+)
+
+SCREEN_RETRY_SECONDS = 120
+
+
+def _power(source) -> float | None:
+    """Solar power in W, or None when not usable."""
+    if source is None or not source.trustworthy:
+        return None
+    try:
+        value = float(source.state)
+    except TypeError, ValueError:
+        return None
+    if not math.isfinite(value):
+        return None
+    return value * 1000 if source.unit == "kW" else value
+
+
+class ShadingRuntimeMixin:
+    """Plan screens independently, sharing lifecycle and dispatch with the runtime."""
+
+    # --- Screens (0.11) ---------------------------------------------------------
+
+    def _screen_transition(self, entity_id, old, new, event, now) -> None:
+        """A screen moved by a person (HA or room controller) is respected."""
+        for item in self.building.equipment:
+            if item.kind != "shading" or item.entity_id != entity_id:
+                continue
+            if new is None or new.state in (
+                "opening",
+                "closing",
+                "unknown",
+                "unavailable",
+            ):
+                return  # Wait for the end position.
+            if new.attributes.get("restored") or new.attributes.get("assumed_state"):
+                return
+            if (
+                old is None
+                or old.state in ("unknown", "unavailable")
+                or (
+                    old.attributes.get("restored")
+                    or old.attributes.get("assumed_state")
+                )
+            ):
+                # Recovery is a fresh observation, not evidence of a person.
+                self.cover_tracker.cancel(entity_id)
+                return
+            position = cover_position(new)
+            pending = next(
+                (p for p in self.cover_tracker.pending if p.entity_id == entity_id),
+                None,
+            )
+            if pending is not None and self.cover_tracker.is_pending(entity_id, now):
+                expected = float(pending.expected_state)
+                if position is not None and abs(position - expected) < MIN_STEP:
+                    self.cover_tracker.confirm(entity_id, pending.expected_state, now)
+                    self.last_transitions[item.id] = ("zonentra_screen", now)
+                    return
+                if position is None or (
+                    old is not None
+                    and cover_position(old) == position
+                    and old.state == new.state
+                ):
+                    return
+                # 0.13.4: it came to rest away from our position (stopped or
+                # sent elsewhere): a person took over, room controller or HA.
+                self.cover_tracker.cancel(entity_id)
+            elif old is None or (
+                cover_position(old) == position and old.state == new.state
+            ):
+                return
+            if _origin(event) == "automation":
+                self.last_transitions[item.id] = ("automation_screen", now)
+                return
+            minutes = self.building.settings.screen_override_minutes
+            self.screen_overrides[item.id] = now + timedelta(minutes=minutes)
+            self.last_transitions[item.id] = ("manual_screen", now)
+
+    def _shading(self, sources, now) -> None:
+        """Decide every screen; move it only with the room's screen regulation."""
+        settings = self.building.settings
+        checks = []
+        self.sun_power = _power(sources.get(settings.sun_power_entity))
+        if settings.sun_power_entity:
+            self.sunny, self.sun_memory, check = sunny_state(
+                self.sun_power, settings.sun_power_threshold, self.sun_memory, now
+            )
+            if check:
+                checks.append(check)
+        else:
+            self.sunny = None
+        azimuth, elevation = self._sun_position()
+        block = self._screen_block()
+        blocked = block is not None
+        available = self.hass.services.has_service("cover", "set_cover_position")
+        zones = {zone.id: zone for zone in self.building.zones}
+        decisions, moves = {}, {}
+        for item in self.building.equipment:
+            if item.kind != "shading":
+                continue
+            zone = zones[item.zone_id]
+            snapshot = self.zone_snapshots[zone.id]
+            previous = self.screen_decisions.get(item.id)
+            decision = decide_screen(
+                elevation=elevation,
+                sunny=self.sunny,
+                on_facade=sun_on_facade(azimuth, elevation, zone.facade),
+                demand=self.zone_demands[zone.id].demand,
+                room_temperature=snapshot.temperature.value
+                if snapshot.temperature.quality == "valid"
+                else None,
+                heating_limit=snapshot.heating_limit.value,
+                cooling_limit=snapshot.cooling_limit.value,
+                shade_position=round(settings.screen_shade_position),
+                previous=previous.target if previous else None,
+                day=self.day_type,
+                occupied=self.zone_bands[zone.id][0] == "comfort"
+                or self.thermostat(zone.id).manual,
+            )
+            override = self.screen_overrides.get(item.id)
+            if override is not None and now >= override:
+                del self.screen_overrides[item.id]  # Manual time is over.
+                override = None
+            state = self.hass.states.get(item.entity_id)
+            move = plan_screen_move(
+                decision,
+                cover_position(state) if state else None,
+                self.screen_last_move.get(item.id),
+                now,
+                enabled=self.active_capable
+                and self.thermostat(zone.id).screen_regulation,
+                blocked=blocked,
+                override_until=override,
+                busy=self.cover_tracker.is_pending(item.entity_id, now),
+            )
+            retry_at = self.screen_retry_at.get(item.id)
+            if move.status == "move" and retry_at and now < retry_at:
+                move = ScreenMove("retry", next_check=retry_at)
+            if move.status == "move" and (guard := self._screen_guard(item)):
+                move = ScreenMove(guard)
+            if move.status == "blocked" and block:
+                move = ScreenMove(block)
+            if move.status == "move" and not available:
+                move = ScreenMove("cover_service_unavailable")
+            if move.status == "move":
+                self._move_screen(item, move.position, decision.reason, now)
+            if move.next_check:
+                checks.append(move.next_check)
+            decisions[item.id], moves[item.id] = decision, move
+        self.screen_decisions, self.screen_moves = decisions, moves
+        self._screen_checks = checks
+
+    def _move_screen(self, item, position, reason, now) -> None:
+        entry = self._log(
+            ModeCommand(
+                item.id,
+                item.entity_id,
+                "set_cover_position",
+                None,
+                0,
+                f"screen_{reason}",
+                domain="cover",
+                value=position,
+            ),
+            now,
+            "sending",
+        )
+
+        async def send():
+            # Register before the service can publish its confirmation state.
+            self.cover_tracker.register(item.entity_id, str(position), now)
+            success = await self._call(
+                "set_cover_position",
+                {"entity_id": item.entity_id, "position": position},
+                entry,
+                "cover",
+            )
+            runtime = self._current_runtime()
+            if runtime is None or runtime._closed:
+                return
+            if success:
+                runtime.screen_last_move[item.id] = now
+                runtime.screen_retry_at.pop(item.id, None)
+            else:
+                runtime.cover_tracker.cancel(item.entity_id)
+                runtime.screen_retry_at[item.id] = dt_util.utcnow() + timedelta(
+                    seconds=SCREEN_RETRY_SECONDS
+                )
+            self.hass.loop.call_soon(runtime.refresh)
+
+        self.hass.async_create_task(send())
+
+    def _screen_block(self) -> str | None:
+        """Only a trustworthy off state releases a configured block."""
+        entity_id = self.building.settings.screen_block_entity
+        if not entity_id:
+            return None
+        state = self.hass.states.get(entity_id)
+        if (
+            state is None
+            or state.state not in ("on", "off")
+            or (
+                state.attributes.get("restored")
+                or state.attributes.get("assumed_state")
+            )
+        ):
+            return "block_unknown"
+        return "blocked" if state.state == "on" else None
+
+    def _screen_guard(self, item) -> str | None:
+        """Recheck live inputs immediately before dispatching a movement."""
+        if (
+            not self.active_capable
+            or not self.thermostat(item.zone_id).screen_regulation
+        ):
+            return "screen_disabled"
+        if block := self._screen_block():
+            return block
+        state = self.hass.states.get(item.entity_id)
+        if (
+            state is None
+            or state.state not in ("open", "closed", "opening", "closing")
+            or (
+                state.attributes.get("restored")
+                or state.attributes.get("assumed_state")
+            )
+        ):
+            return "cover_unavailable"
+        return None
+
+    def _clear_sun_issue(self):
+        ir.async_delete_issue(self.hass, DOMAIN, f"sun_unavailable_{self.building.id}")
+
+    def _sun_position(self):
+        """Expose missing solar input through Repairs, and hold until recovery."""
+        settings = self.building.settings
+        sun = self.hass.states.get(settings.sun_entity)
+        values = tuple(
+            sun.attributes.get(key) if sun else None for key in ("azimuth", "elevation")
+        )
+        valid = (
+            sun is not None
+            and sun.state not in ("unknown", "unavailable")
+            and not (
+                sun.attributes.get("restored") or sun.attributes.get("assumed_state")
+            )
+            and all(
+                isinstance(v, (int, float))
+                and not isinstance(v, bool)
+                and math.isfinite(v)
+                for v in values
+            )
+        )
+        valid = valid and 0 <= values[0] <= 360 and -90 <= values[1] <= 90
+        if valid or not any(item.kind == "shading" for item in self.building.equipment):
+            self._clear_sun_issue()
+        else:
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                f"sun_unavailable_{self.building.id}",
+                is_fixable=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="sun_unavailable",
+                translation_placeholders={
+                    "building": self.building.name,
+                    "entity": settings.sun_entity,
+                },
+            )
+        return values if valid else (None, None)

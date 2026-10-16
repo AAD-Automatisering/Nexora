@@ -104,6 +104,7 @@ def building_fields(limits: bool = True) -> dict:
         vol.Optional("window_delay_seconds"): numeric(0, 3600, 1, "s"),
         vol.Optional("auto_fan_step"): numeric(0.2, 2, unit="°C"),
         # Screens (0.11): sunshine from solar power; wind alarm blocks.
+        vol.Optional("sun_entity"): entity_selector("sun"),
         vol.Optional("sun_power_entity"): entity_selector("sensor"),
         vol.Optional("sun_power_threshold"): numeric(0, 1_000_000, 1, "W"),
         vol.Optional("screen_block_entity"): entity_selector(
@@ -152,6 +153,7 @@ CENTRAL_SECTIONS = {
         "auto_fan_step",
     ),
     "screens": (
+        "sun_entity",
         "sun_power_entity",
         "sun_power_threshold",
         "screen_block_entity",

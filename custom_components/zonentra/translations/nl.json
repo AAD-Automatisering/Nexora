@@ -139,9 +139,10 @@
         "data": {
           "sun_power_entity": "Vermogen zonnepanelen (zon schijnt)",
           "sun_power_threshold": "Vermogen waarboven de zon schijnt (W)",
-          "screen_block_entity": "Blokkeer-entiteit, bijv. windalarm (optioneel; aan = geen commando's)",
+          "screen_block_entity": "Blokkeer-entiteit, bijv. windalarm (optioneel; alleen uit staat beweging toe)",
           "screen_shade_position": "Stand bij zonwering (%; 100 = open)",
-          "screen_override_minutes": "Handmatige bediening respecteren (minuten)"
+          "screen_override_minutes": "Handmatige bediening respecteren (minuten)",
+          "sun_entity": "Zonstand-entiteit (standaard sun.sun)"
         }
       },
       "forecast": {
@@ -248,11 +249,12 @@
           "window_delay_seconds": "Raam open: vertraging voordat de ruimte stopt (seconden)",
           "sun_power_entity": "Zonwering: vermogen zonnepanelen (zon schijnt)",
           "sun_power_threshold": "Zonwering: vermogen waarboven de zon schijnt (W)",
-          "screen_block_entity": "Zonwering: blokkeer-entiteit, bijv. windalarm (optioneel; aan = geen commando's)",
+          "screen_block_entity": "Blokkeer-entiteit, bijv. windalarm (optioneel; alleen uit staat beweging toe)",
           "screen_shade_position": "Zonwering: stand bij zonwering (%; 100 = open)",
           "screen_override_minutes": "Zonwering: handmatige bediening respecteren (minuten)",
           "weather_entity": "Weersverwachting (optioneel; warme/koude dagen voor zonwering en minder omschakelen tussen verwarmen en koelen)",
-          "auto_fan_step": "Automatische ventilator: graden van het doel per ventilatorstand"
+          "auto_fan_step": "Automatische ventilator: graden van het doel per ventilatorstand",
+          "sun_entity": "Zonstand-entiteit (standaard sun.sun)"
         }
       },
       "zone_settings": {
@@ -548,6 +550,10 @@
     "legacy_configuration": {
       "title": "Zonentra opnieuw aanmaken als centrale configuratie en ruimtes",
       "description": "Het Zonentra-item \"{name}\" gebruikt de indeling van vóór 0.6 met één item. Het blijft voorlopig werken, maar is verouderd. Verwijder het en voeg Zonentra opnieuw toe: eerst de centrale configuratie, daarna iedere ruimte. Entity-ID's veranderen."
+    },
+    "sun_unavailable": {
+      "title": "Zonstand ontbreekt voor zonwering",
+      "description": "Voor {building} is geen geldige zonstand beschikbaar via {entity}. Zonentra houdt de zonwering stil. Schakel de Sun-integratie in en controleer de zonstand-entiteit bij de centrale zonweringsinstellingen. De melding verdwijnt zodra de zonstand beschikbaar is."
     }
   },
   "exceptions": {

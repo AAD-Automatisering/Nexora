@@ -1,6 +1,6 @@
 **Review Zonentra 0.13.6 — 15 oktober 2026**
 
-Onderzocht: alle 25 Python-modules van de integratie, configuratie en migratie, entiteiten, actieve aansturing, pure rekenlogica, zonwering, aanwezigheid, weersverwachting, diagnostiek, vertalingen, documentatie en de bestaande tests. Basis: commit `ac8f9f9`; de werkboom was bij aanvang schoon. De integratiecode is niet gewijzigd.
+Onderzocht: alle 25 Python-modules van de integratie, configuratie en migratie, entiteiten, actieve aansturing, pure rekenlogica, zonwering, aanwezigheid, weersverwachting, diagnostiek, vertalingen, documentatie en de bestaande tests. Basis: commit `ac8f9f9`; de werkboom was bij aanvang schoon. Tijdens de oorspronkelijke review is de integratiecode niet gewijzigd; de vervolgsecties beschrijven de latere reparaties.
 
 **Vervolg: punt 1 hersteld.** Het uitschakelen van een zone herbouwt nu de centrale regeling zonder die zone; uitgestelde pulscommando’s voor weggevallen apparatuur worden verwijderd. Opnieuw inschakelen herstelt de opgeslagen ruimteregeling en gewone zone-reloads behouden de centrale runtime. Drie nieuwe regressietests toegevoegd; de volledige suite slaagt met 1.054 tests. De onderstaande review beschrijft de oorspronkelijke bevindingen.
 
@@ -11,6 +11,8 @@ Onderzocht: alle 25 Python-modules van de integratie, configuratie en migratie, 
 **Vervolg: punt 4 hersteld.** Het lokale parameterformulier vervangt nu de zichtbare velden in plaats van nieuwe waarden over oude koppelingen heen te leggen. Leegmaken verwijdert daardoor de lokale grensentiteiten uit de configuratie en uit de bronnen van de runtime. Verborgen lokale grensinstellingen en parameters blijven bewaard. Dezelfde afhandeling geldt bij aanmaken, aanpassen en opnieuw indienen na een validatiefout. Vier volledige flow-regressietests toegevoegd; de volledige suite slaagt met 1.074 tests.
 
 **Vervolg: punten 5, 6 en 7 hersteld.** Weersverwachtingen worden met de eenheid van de weerentiteit naar Celsius omgerekend; zonder expliciete eenheid geldt de HA-systeemeenheid. Ongeldige eenheden en niet-eindige waarden worden niet gebruikt voor het dagtype. De setpointplanner rekent in Celsius en zet native stapgroottes als temperatuurverschil om, met behoud van het native afrondingsraster. Uitgaande climate-services volgen de HA-systeemeenheid en worden in de native apparaateenheid afgerond en begrensd. De bevestiging van eigen commando’s houdt rekening met de precisie van HA-states. Alle bronvelden uit BuildingSettings worden nu systematisch geredigeerd; de ruimte-export gebruikt een lijst met geredigeerde equipment_id-velden in plaats van apparaat-ID’s als woordenboeksleutel. Er zijn 22 regressietests toegevoegd, waaronder tien routes via echte HA-climate-services voor gemengde eenheden en grenzen. De volledige suite slaagt met 1.096 tests. Alle zeven genummerde reviewbevindingen zijn hiermee hersteld; de oorspronkelijke bevindingen hieronder blijven als geschiedenis staan.
+
+**Vervolg: overige code- en omgevingspunten opgepakt — 16 oktober 2026.** Onbeschikbare, onbekende en herstelde/aangenomen cover-states blokkeren beweging; terugkeer van de bron start geen handmatige override. Alleen een betrouwbare `off`-state geeft een ingestelde wind-/regenblokkade vrij. De dispatcher controleert dit opnieuw vlak voor verzending. Een mislukte cover-service telt niet als geslaagde beweging en krijgt na twee minuten een herbeoordeling, met behoud van de retry bij centrale reloads. De zonstand-entiteit is nu instelbaar; ontbrekende of ongeldige zonstand geeft een Reparaties-melding die bij herstel of verwijderen van de screens verdwijnt. De drie ongebruikte constanten zijn verwijderd, de coverpositie-interpretatie is gedeeld en zonwering en commando-uitvoering staan in eigen runtime-modules. `ModeCommand.domain` wordt nu door de gedeelde dispatcher gebruikt, ook voor lamellen. De lokale `.venv` werkt met Python 3.14.8 vanuit een eigen runtime onder `.venv`, zonder tijdelijke interpreterverwijzing. Validatie: **1.131 tests geslaagd**, inclusief 30 nieuwe bronherstel-/blokkadegevallen en één volledige configuratieflow voor een alternatieve zonentiteit; daarnaast slagen alle negen reviewprobes en Ruff. Alleen de praktijktest en afstemming met echte apparatuur blijven open.
 
 **Bevestigde bevindingen, in volgorde van belang**
 
@@ -84,29 +86,35 @@ Onderzocht: alle 25 Python-modules van de integratie, configuratie en migratie, 
 
    Herstel: voeg alle bronvelden toe aan de redactielijst en toets bronvelden systematisch tegen het model. Zone-diagnostiek bevat daarnaast apparaat-ID's als dictsleutel bij `room_regulation`; beoordeel die ook bij dezelfde opschoning.
 
-**Ongebruikte code en onderhoud**
+**Ongebruikte code en onderhoud — bijgewerkt 16 oktober**
 
-- Werkelijk zonder gevonden referenties in integratie én tests: `const.VERSION` (staat bovendien nog op 0.11.0), `forecast.DAY_TYPES` en `shading.TARGETS`. Verwijder ze of maak ze de centrale bron voor de bijbehorende opties; de werkelijke releaseversie staat nu in manifest en pyproject.
-- `control.PHASES` en `roomstate.WINDOW_STATES` worden alleen door tests gebruikt om de sensoropties te vergelijken. Dat zijn dus geen volledig ongebruikte symbolen. Eventueel kan de productcode deze lijsten ook direct gebruiken.
-- De legacy-configuratie, `decision.py`, `control.py` en de override-tracker worden nog aangeroepen. Verwijderen op basis van oude versienummers of het woord 'simulation' zou functionaliteit of compatibiliteit breken.
-- Er zijn geen ongebruikte imports of ongedefinieerde namen gevonden door Ruff.
-- Opgeschoond: module-/classdocstrings, projectbeschrijving, README, architectuur, algoritme, roadmap en configuratiehulp beschrijven nu de actieve aansturing en de rol van pure plannen. Legacy-configuratie en historische fases zijn expliciet afgebakend. De bestaande `read_only`-statusvelden blijven compatibel en worden als aanduidingen van de observatielaag toegelicht. De oude algemene uitspraak over automations die een override starten is vervangen door de contextafhankelijke herkenning.
-- De centrale uitvoer-, lifecycle-, opslag- en waarnemingslogica zit grotendeels in één runtime-module van 1.578 regels. Opsplitsen per regeling is een onderhoudsverbetering; begin met de bevestigde fouten en gedeelde commandobevestiging, zodat de opsplitsing geen bestaande divergentie vastlegt.
-- `_cover_position()` en `_screen_position()` dupliceren vrijwel dezelfde interpretatie van coverposities.
-- `ModeCommand.domain` wordt gevuld maar stuurt `_execute()` niet aan; cover- en lamelcommando's lopen via aparte `_call()`-paden. Dat veld is momenteel beschrijvend/inert, geen betrouwbare generieke uitvoerinterface.
+- Verwijderd: `const.VERSION`, `forecast.DAY_TYPES` en `shading.TARGETS`. De releaseversie staat in manifest en pyproject.
+- `control.PHASES` en `roomstate.WINDOW_STATES` worden door tests gebruikt om de sensoropties te vergelijken; behouden.
+- Legacy-configuratie, `decision.py`, `control.py` en de override-tracker worden nog aangeroepen en blijven behouden.
+- Ruff vindt geen ongebruikte imports of ongedefinieerde namen.
+- Beschrijvingen van actieve aansturing en pure plannen zijn bijgewerkt. Historische `read_only`-statusvelden blijven compatibel en beschrijven de observatielaag.
+- `runtime_shading.py` bevat screenobservatie, blokkades, herstel en de zonstandmelding. `runtime_commands.py` bevat service-uitvoering, de laatste blokkadecontrole en commandolog. Beide delen via mixins de bestaande lifecycle en het geheugen van `BuildingRuntime`; gedeelde bevestigings-/eventhelpers staan in `runtime_helpers.py`.
+- `observations.cover_position()` wordt gebruikt door regeling en diagnostiek; de dubbele coverpositie-interpreter is verwijderd.
+- `ModeCommand.domain` bepaalt nu bij `_execute()` het HA-servicedomein; lamellen gebruiken ook deze dispatcher. Coverbewegingen houden hun eigen bevestigings- en retrygeheugen.
 
-**Zonwering en eerdere vraag over sun.sun**
+**Zonwering en eerdere vraag over sun.sun — bijgewerkt 16 oktober**
 
-`sun_entity` is geen dode instelling: standaard `sun.sun`, gevolgd als bron zodra er screens zijn, en gebruikt voor actuele azimut en elevatie. Een selectieveld ontbreekt en het manifest declareert geen Sun-dependency. Bij ontbrekende zonstand ontstaat `sun_unknown`; overweeg een duidelijke configuratiecontrole of melding als screens worden toegevoegd. De forecast voorspelt temperaturen voor de komende twaalf uur; toekomstige zonstanden en bewolking worden niet in een instralingsvoorspelling gecombineerd.
+`sun_entity` wordt gebruikt voor actuele azimut en elevatie, standaard via `sun.sun`. Het veld is instelbaar in de centrale zonweringssectie. Bij screens zonder geldige zonstand blijft het besluit `sun_unknown` en toont Reparaties een melding. Herstel wist die melding. Er is bewust geen verplichte Sun-dependency voor installaties zonder screens; de melding geeft aan hoe de bron te herstellen.
 
-Een extra probe bevestigt dat ook bij een cover-state `unavailable` een verplaatsingscommando kan worden verstuurd. Dit staat hier als robuustheidspunt, niet als afzonderlijke bewezen bewegingsfout: de onderliggende cover-integratie bepaalt de afhandeling. Controleer beschikbaarheid voordat een beweging als verzonden wordt bijgehouden en plan expliciet hoe na herstel opnieuw beoordeeld wordt. Voor de wind-/regenblokkade geldt nu alleen state `on` als blokkade; gedrag bij onbekende blokkade is een nog expliciet te kiezen beleid.
+De forecast gebruikt temperatuur voor het dagtype. Toekomstige zonstanden en bewolking worden niet gecombineerd tot een instralingsvoorspelling; dat is een mogelijke uitbreiding, geen onopgeloste reviewfout.
+
+De cover-robuustheidsprobe controleert nu dat een onbeschikbare cover geen commando krijgt. Een ingestelde wind-/regenbron staat alleen bij een betrouwbare `off` beweging toe. Ontbrekende, onbekende, onbeschikbare, herstelde en aangenomen states blokkeren. Herstel wordt via bron-events opnieuw beoordeeld. KNX blijft verantwoordelijk voor de fysieke wind-/regenbeveiliging.
+
+**Nog open**
+
+Praktijktest met de echte KNX/Intesis-apparatuur, covers en weersprovider, inclusief afstemmen van zonvermogendrempel, vertragingen en screenpositie. De geautomatiseerde tests bewijzen de planning, lifecycle en HA-serviceafhandeling; ze bewijzen geen fysieke uitvoering door apparaten.
 
 **Validatie en reproduceerbaarheid**
 
 - Bestaande testset: **1.051 passed in 9,97 s**.
 - Ruff lint: geslaagd. Ruff format: alle 59 oorspronkelijke Python-bestanden correct geformatteerd.
-- [review_probes.py](/Users/pauldeelen/Documents/GitHub/Zonentra/tests/review_probes.py): negen gerichte probes. Na herstel van alle zeven punten controleren de betreffende probes het juiste gedrag; daarnaast blijven het cover-robuustheidspunt en één negatieve controle aanwezig: lokale entiteitgrenzen werken bij nieuwe configuratie wel correct.
-- De probes toetsen bewust de waargenomen huidige werking, ook waar die fout is. Dat ze slagen betekent dat de reviewbevinding is gereproduceerd; dit zijn geen regressietests die goed gedrag afdwingen. Bij reparatie moeten de relevante verwachtingen worden omgedraaid.
+- [review_probes.py](/Users/pauldeelen/Documents/GitHub/Zonentra/tests/review_probes.py): negen gerichte probes die inmiddels het herstelde gedrag controleren, inclusief het blokkeren van een onbeschikbare cover. De controle op werkende lokale entiteitgrenzen is behouden.
+- De oorspronkelijke probes legden fouten vast. Hun verwachtingen zijn bij reparatie omgedraaid; ze toetsen nu het gewenste gedrag.
 - Uitvoeren met een werkende projectomgeving: `python -m pytest -q tests/review_probes.py`. De bestaande suite blijft `python -m pytest -q`.
-- De oorspronkelijke `.venv/bin/python` verwijst naar een verdwenen `/private/tmp/nexora-python`-installatie. Voor deze review is Python 3.14.8 tijdelijk onder `/private/tmp/zonentra-review-python` geïnstalleerd en zijn de bestaande site-packages via `PYTHONPATH` gebruikt. De projectomgeving is niet aangepast.
-- Geen fysieke apparaten aangestuurd, geen productie-HA onderzocht en geen wijzigingen aan de integratiecode aangebracht. Serviceaanroepen in de tests zijn mocks. De review kan geen werking van echte KNX/Intesis-apparaten of weersproviders aantonen.
+- De oorspronkelijke `.venv/bin/python` verwees naar een verdwenen tijdelijke interpreter. Op 16 oktober is de omgeving hersteld met een eigen Python 3.14.8-runtime onder de genegeerde `.venv`-map. Tests draaien nu rechtstreeks via `.venv/bin/python -m pytest -q`; een afzonderlijke `PYTHONPATH` is niet nodig. De README beschrijft het aanmaken van een nieuwe omgeving met een interpreter op een vaste locatie.
+- Geen fysieke apparaten aangestuurd en geen productie-HA onderzocht. De integratiecode is in de vervolgstappen wel aangepast. Serviceaanroepen in de tests worden gesimuleerd. De review kan geen werking van echte KNX/Intesis-apparaten of weersproviders aantonen.

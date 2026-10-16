@@ -42,7 +42,6 @@ MOVE_INTERVAL_SECONDS = 900.0  # At most one move per screen per 15 min.
 MIN_STEP = 10  # Ignore position differences below 10 %.
 OPEN_POSITION = 100
 WARM_HYSTERESIS = 0.5  # °C around the middle of the band.
-TARGETS = ("open", "shade", "hold")
 
 
 @dataclass(frozen=True)

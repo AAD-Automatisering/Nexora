@@ -413,7 +413,17 @@ Per zonwering (een `cover` met positie) beslist Zonentra, in deze volgorde:
   roomcontroller, wordt 2 uur gerespecteerd (centraal instelbaar). Een automation
   telt niet als bediening.
 - **Wind en regen** regelt KNX zelf. Geef je centraal een blokkeer-entiteit op
-  (bijvoorbeeld het windalarm), dan stuurt Zonentra niets zolang die aan staat.
+  (bijvoorbeeld het windalarm), dan staat alleen een geldige `off`-state beweging
+  toe. Bij `on`, ontbrekende, onbekende of onbeschikbare states blijft de zonwering
+  stil (`blocked` of `block_unknown`).
+- **Ontbrekende bronnen:** onbeschikbare covers krijgen geen commando
+  (`cover_unavailable`). Zodra de cover terugkomt, beoordeelt Zonentra de beweging
+  opnieuw; herstel telt niet als handmatige bediening. Mislukte serviceaanroepen
+  worden na twee minuten opnieuw beoordeeld en tellen niet als geslaagde beweging.
+- **Zonstand:** centraal onder Zonwering kies je de zonstand-entiteit (standaard
+  `sun.sun`). Zonder geldige azimut en elevatie houdt Zonentra de schermen stil en
+  verschijnt een melding bij **Instellingen → Systeem → Reparaties**. Die verdwijnt
+  zodra de bron herstelt. Schakel hiervoor de Sun-integratie in.
 - **Ruimteapparaat:** per zonwering een sensor **Zonwering gewenst** (omhoog / omlaag /
   ongewijzigd): wat Zonentra wil, niet de stand van de zonwering zelf (die staat in
   het attribuut `current_position`). Verder reden, beoogde stand, status, gevel, zon en
@@ -712,7 +722,10 @@ custom_components/zonentra/
   demand.py                     ruimtesnapshots en klimaatvraag
   engine.py                     gewogen groepsarbitrage en verklaringen
   decision.py                   pure read-only simulator
-  runtime.py                    HA-observatie en update-dispatch
+  runtime.py                    HA-observatie, lifecycle en klimaatcoördinatie
+  runtime_shading.py            zonwering, herstel na uitval en zonstandmelding
+  runtime_commands.py           service-uitvoering, laatste blokkadecontrole en commandolog
+  runtime_helpers.py            gedeelde commandobevestiging en herkomst van events
   indoor.py                     binnenunitobservatie en afgeleide groepsmodus
   override.py                   Manual Override-detectie en command tracking
   control.py                    groepscoördinatie en gesimuleerde acties per unit
@@ -722,6 +735,7 @@ custom_components/zonentra/
   thermostat.py                 ruimtethermostaat, band, ruimteregeling en zelfregulerend setpoint
   roomstate.py                  raam, veiligheid, temperatuurtrend, automatische ventilator, lamel
   shading.py                    zonwering: zon, gevel, klimaat en bewegen
+  temperature.py                temperatuur- en stapgrootteconversie
   entity.py                     gedeelde basis voor bedieningsentiteiten op het ruimteapparaat
   climate.py                    Zonentra-thermostaat per ruimte
   number.py                     comfortband als instellingen op het ruimteapparaat
@@ -740,3 +754,16 @@ pyproject.toml                  Python-, pytest- en Ruff-configuratie
 Zie [ARCHITECTURE.md](ARCHITECTURE.md) en [ROADMAP.md](ROADMAP.md) voor vervolgwerk.
 Zonentra gebruikt MIT als projectlicentie. VTherm is als MIT-gelicentieerde referentie
 onderzocht; er is geen VTherm-code gekopieerd en er is geen forkafhankelijkheid.
+
+### Lokale ontwikkelomgeving
+
+Gebruik Python 3.14.2 of nieuwer en maak de omgeving met een interpreter op een
+vaste locatie; een verwijzing naar een interpreter in `/private/tmp` kan verdwijnen.
+
+```sh
+python3.14 -m venv .venv
+.venv/bin/python -m pip install -r requirements-test.txt
+.venv/bin/python -m pytest -q
+.venv/bin/ruff check .
+.venv/bin/ruff format --check .
+```

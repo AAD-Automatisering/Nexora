@@ -15,7 +15,7 @@ from . import ZonentraConfigEntry, central_presence, entry_type
 from .const import DOMAIN
 from .entity import zone_context
 from .models import Equipment, Zone
-from .observations import describe
+from .observations import cover_position, describe
 from .topology import ZONE, zone_equipment
 
 
@@ -696,7 +696,9 @@ class ScreenSensor(ZonentraDiagnosticSensor):
             "screen_regulation": active,
             "reason": decision.reason,
             "target_position": decision.position,
-            "current_position": _screen_position(self.hass, self.item.entity_id),
+            "current_position": cover_position(
+                self.hass.states.get(self.item.entity_id)
+            ),
             "status": move.status if move else None,
             "facade": zone.facade,
             "sunny": runtime.sunny,
@@ -772,16 +774,6 @@ class DayTypeSensor(ZonentraDiagnosticSensor):
             if self.runtime.day_type == "cold"
             else 0.0,
         }
-
-
-def _screen_position(hass, entity_id):
-    state = hass.states.get(entity_id)
-    if state is None:
-        return None
-    position = state.attributes.get("current_position")
-    if isinstance(position, (int, float)) and not isinstance(position, bool):
-        return position
-    return {"open": 100, "closed": 0}.get(state.state)
 
 
 def _iso(value):

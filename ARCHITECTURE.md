@@ -140,7 +140,12 @@ en met commandolog.
 
 ## Zonwering en weersverwachting (0.11, 0.12)
 
-`shading.py` en `forecast.py` zijn puur. De zonwering is het derde domein
+`shading.py` en `forecast.py` zijn puur. `runtime_shading.py` bevat als mixin de
+screenobservatie, blokkades, bronherstel en zonstandmelding. `runtime_commands.py`
+bevat de gedeelde service-dispatcher en het commandolog; `ModeCommand.domain`
+bepaalt het gebruikte servicedomein, ook voor lamellen. Beide delen de lifecycle
+en het geheugen van `BuildingRuntime`. `observations.cover_position` interpreteert
+coverposities voor zowel de regeling als diagnostiek. De zonwering is het derde domein
 (`cover.set_cover_position`), met een eigen CommandTracker. De weersverwachting is
 geen state-input: de centrale entry vraagt `weather.get_forecasts` (uurverwachting)
 elke 30 minuten op met `async_track_time_interval`, bewaart alleen het maximum en

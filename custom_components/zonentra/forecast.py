@@ -25,7 +25,6 @@ FORECAST_HOURS = 12  # Look this far ahead.
 REFRESH_MINUTES = 30  # Ask the weather entity this often.
 RETRY_SECONDS = 120  # Retry this soon while there is no forecast at all.
 MAX_AGE_HOURS = 3  # Older forecasts are not used.
-DAY_TYPES = ("warm", "neutral", "cold", "unknown")
 
 
 @dataclass(frozen=True)

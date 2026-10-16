@@ -569,7 +569,19 @@ Zonweringregeling: niet bij blokkering, niet tijdens handmatige bediening
 (`screen_override_minutes`, standaard 120), niet bij < 10 % verschil, hooguit eens
 per 900 s; `cover.set_cover_position`, bevestigd via een eigen CommandTracker
 (240 s). Een standwijziging die niet van Zonentra komt en geen automation is,
-start de handmatige periode.
+start de handmatige periode. Herstel vanuit `unknown`, `unavailable` of een
+herstelde/aangenomen state telt niet als bediening.
+
+`runtime_shading.py` blokkeert bij ontbrekende of onbeschikbare covers. Bij een
+ingestelde blokkeerbron staat alleen een betrouwbare `off` beweging toe; ontbrekend,
+`unknown`, `unavailable`, hersteld of aangenomen geeft `block_unknown`. De dispatcher
+controleert dit vlak voor de serviceaanroep opnieuw. Alleen een geslaagde aanroep
+zet het tijdstip van de laatste beweging; een fout annuleert de commandotracker en
+plant een herbeoordeling na 120 s. De retry blijft bij centrale reloads behouden.
+
+De zonstand-entiteit is instelbaar (standaard `sun.sun`). Ongeldige azimut/elevatie
+of een onbeschikbare bron geeft `sun_unknown` en een Reparaties-melding, die na
+herstel of bij verwijderen van de screens verdwijnt.
 
 ## Weersverwachting (0.12)
 

@@ -139,9 +139,10 @@
         "data": {
           "sun_power_entity": "Solar power sensor (sunshine)",
           "sun_power_threshold": "Solar power above which the sun shines (W)",
-          "screen_block_entity": "Block entity, e.g. wind alarm (optional; on = no commands)",
+          "screen_block_entity": "Block entity, e.g. wind alarm (optional; only off allows movement)",
           "screen_shade_position": "Position when shading (%; 100 = open)",
-          "screen_override_minutes": "Respect manual operation for (minutes)"
+          "screen_override_minutes": "Respect manual operation for (minutes)",
+          "sun_entity": "Sun position entity (default sun.sun)"
         }
       },
       "forecast": {
@@ -248,11 +249,12 @@
           "window_delay_seconds": "Open window: delay before the room stops (seconds)",
           "sun_power_entity": "Screens: solar power sensor (sunshine)",
           "sun_power_threshold": "Screens: solar power above which the sun shines (W)",
-          "screen_block_entity": "Screens: block entity, e.g. wind alarm (optional; on = no commands)",
+          "screen_block_entity": "Block entity, e.g. wind alarm (optional; only off allows movement)",
           "screen_shade_position": "Screens: position when shading (%; 100 = open)",
           "screen_override_minutes": "Screens: respect manual operation for (minutes)",
           "weather_entity": "Weather forecast (optional; warm/cold days for screens and fewer heat/cool changeovers)",
-          "auto_fan_step": "Automatic fan: °C from the target per fan speed step"
+          "auto_fan_step": "Automatic fan: °C from the target per fan speed step",
+          "sun_entity": "Sun position entity (default sun.sun)"
         }
       },
       "zone_settings": {
@@ -548,6 +550,10 @@
     "legacy_configuration": {
       "title": "Recreate Zonentra as central configuration and zones",
       "description": "The Zonentra entry \"{name}\" uses the pre-0.6 single-entry layout. It keeps working for now, but is deprecated. Remove it and add Zonentra again: first the central configuration, then each zone. Entity IDs will change."
+    },
+    "sun_unavailable": {
+      "title": "Sun position missing for shading",
+      "description": "No valid sun position is available for {building} from {entity}. Zonentra holds the screens. Enable the Sun integration and check the sun position entity in the central screen settings. This issue clears when the sun position becomes available."
     }
   },
   "exceptions": {

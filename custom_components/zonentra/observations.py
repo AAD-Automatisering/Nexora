@@ -159,3 +159,20 @@ def configured_limit(value: float | None) -> Reading:
     if value is None:
         return Reading(None, "missing", reason="not_configured")
     return Reading(value, "valid")
+
+
+def cover_position(state) -> float | None:
+    """A usable HA cover position: 100 open, 0 closed, None if unknown."""
+    if state is None or state.state in ("unknown", "unavailable"):
+        return None
+    if state.attributes.get("restored") or state.attributes.get("assumed_state"):
+        return None
+    position = state.attributes.get("current_position")
+    if (
+        isinstance(position, (int, float))
+        and not isinstance(position, bool)
+        and math.isfinite(position)
+        and 0 <= position <= 100
+    ):
+        return float(position)
+    return {"open": 100.0, "closed": 0.0}.get(state.state)

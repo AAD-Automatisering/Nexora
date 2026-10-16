@@ -1,4 +1,4 @@
-"""Temporary review probes: assert observed defects to verify the review."""
+"""Review regressions: verify corrected behavior and the original controls."""
 
 from homeassistant.config_entries import ConfigEntryDisabler
 from homeassistant.exceptions import HomeAssistantError
@@ -115,7 +115,7 @@ async def test_review_control_local_limit_entities_work(hass):
     assert central.runtime_data.zone_snapshots["west"].heating_limit.value == 18
 
 
-async def test_review_unavailable_cover_is_still_commanded(hass):
+async def test_review_unavailable_cover_is_not_commanded(hass):
     moves = async_mock_service(hass, "cover", "set_cover_position")
     from tests.test_shading_runtime import SCREEN
     from tests.test_shading_runtime import office as screen_office
@@ -124,7 +124,11 @@ async def test_review_unavailable_cover_is_still_commanded(hass):
     hass.states.async_set(SCREEN, "unavailable")
     central.runtime_data.set_thermostat("west", screen_regulation=True)
     await hass.async_block_till_done()
-    assert len(moves) == 1
+    assert not moves
+    assert (
+        central.runtime_data.screen_moves["shade_west_screen"].status
+        == "cover_unavailable"
+    )
 
 
 async def test_review_fahrenheit_forecast_is_converted_to_celsius(hass):
