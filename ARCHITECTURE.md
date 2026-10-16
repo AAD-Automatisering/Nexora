@@ -433,3 +433,21 @@ de geïnstalleerde HA-broncode. Geen nieuwe installatie getest met oudere HA-ver
 - [Diagnostics](https://developers.home-assistant.io/docs/core/integration/diagnostics/)
 - [Manifest](https://developers.home-assistant.io/docs/creating_integration_manifest/)
 - [Tests](https://developers.home-assistant.io/docs/development_testing/)
+
+## Agenda en adaptieve meeting room-voorbereiding
+
+De optionele ruimteagenda is een bron van comfortvraag. `bookings.py` bevat pure
+normalisatie van afspraakintervallen, de begrensde tijdschatting en het leren van
+verwarmings-/koeltempo per buitenklasse. `runtime_bookings.py` haalt agenda’s op,
+combineert dit met de bestaande occupancy en houdt timing en leerprofielen bij.
+De bestaande demand-, groeps- en HVAC-planners voeren de uiteindelijke regeling uit.
+Een afspraak schakelt geen bediening of beveiliging in.
+
+De centrale entry beheert de vijfminutentimer, initialisatie en opslag van de
+leerprofielen (`zonentra.<entry_id>.thermal_rates`). Agenda-events en voorbereidingsstatus
+blijven bij een centrale reload behouden; een verwijderde of gewijzigde bron wordt
+opgeschoond. Lopende metingen worden opnieuw gestart. De async agenda-opvraag
+gebruikt per bron een timeout van 30 seconden en ververst een gesloten runtime niet.
+Een fout of response ouder dan tien minuten maakt de planning onbekend; de normale
+aanwezigheidsregeling blijft beschikbaar. Alleen tijden worden in het geheugen
+opgenomen; afspraakinhoud wordt niet opgeslagen of in diagnostiek geëxporteerd.

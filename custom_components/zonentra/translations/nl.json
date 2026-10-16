@@ -39,7 +39,12 @@
           "vane_entity": "Lamel (optioneel; select-, number- of schakelaar-entiteit van de binnenunit)",
           "vane_cool_value": "Lamel bij koelen (omhoog): keuze, getal, of on/off bij een schakelaar",
           "vane_heat_value": "Lamel bij verwarmen (omlaag): keuze, getal, of on/off bij een schakelaar",
-          "facade": "Gevel van de zonwering (optioneel)"
+          "facade": "Gevel van de zonwering (optioneel)",
+          "calendar_entity": "Ruimteagenda (optioneel; adaptief verwarmen/koelen vóór afspraken)",
+          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
+          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
+          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
         }
       },
       "zone_parameters": {
@@ -179,7 +184,12 @@
           "max_age_seconds": "Maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)",
           "group_id": "Buitenunitgroep (optioneel)",
           "use_building_limits": "Gebruik gebouwinstellingen voor klimaatgrenzen",
-          "use_building_parameters": "Gebruik gebouwinstellingen voor regelparameters"
+          "use_building_parameters": "Gebruik gebouwinstellingen voor regelparameters",
+          "calendar_entity": "Ruimteagenda (optioneel; adaptief verwarmen/koelen vóór afspraken)",
+          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
+          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
+          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
         }
       },
       "group": {
@@ -278,7 +288,12 @@
           "vane_entity": "Lamel (optioneel; select-, number- of schakelaar-entiteit van de binnenunit)",
           "vane_cool_value": "Lamel bij koelen (omhoog): keuze, getal, of on/off bij een schakelaar",
           "vane_heat_value": "Lamel bij verwarmen (omlaag): keuze, getal, of on/off bij een schakelaar",
-          "facade": "Gevel van de zonwering (optioneel)"
+          "facade": "Gevel van de zonwering (optioneel)",
+          "calendar_entity": "Ruimteagenda (optioneel; adaptief verwarmen/koelen vóór afspraken)",
+          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
+          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
+          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
         }
       },
       "zone_parameters": {
@@ -456,6 +471,17 @@
           "warm": "Warm",
           "neutral": "Neutraal",
           "cold": "Koud"
+        }
+      },
+      "booking": {
+        "name": "Afspraakvoorbereiding",
+        "state": {
+          "not_configured": "Niet ingesteld",
+          "unknown": "Onbekend",
+          "idle": "Geen afspraak",
+          "scheduled": "Gepland",
+          "preparing": "Voorbereiden",
+          "meeting": "Afspraak bezig"
         }
       }
     },

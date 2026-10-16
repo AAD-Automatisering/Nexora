@@ -430,6 +430,56 @@ Per zonwering (een `cover` met positie) beslist Zonentra, in deze volgorde:
   de laatste commando's; de schakelaar **Zonweringregeling** (standaard uit =
   simulatie: de zonwering beweegt dan niet, de sensor geeft alleen advies).
 
+### Meeting rooms voorbereiden met een agenda
+
+Koppel bij **Configureren** van elke meeting room de eigen **Ruimteagenda**
+(`calendar`-entiteit). Zet **Ruimteregeling** voor die ruimte aan en laat de
+thermostaat verwarmen en/of koelen toestaan. De voorbereiding gebruikt de
+comfortband die al voor die ruimte geldt; je hoeft geen losse HA-automation te maken.
+
+Zonentra leest de afspraken voor de komende 24 uur en bepaalt per ruimte wanneer
+het verwarmen of koelen moet beginnen. De schatting gebruikt het verschil tussen
+de gemeten ruimtetemperatuur en de comfortband, het opwarm-/afkoeltempo en een
+veiligheidsmarge. De buitentemperatuur telt mee: bij winterkou begint verwarmen
+eerder dan bij zacht weer; bij hitte kan koelen langer duren.
+
+- **Leren per ruimte en omstandigheden:** verwarmings- en koeltempo worden apart
+  geleerd voor vorst (< 0 °C), koud (0–10), zacht (10–20), warm (20–30) en heet
+  (≥ 30 °C). Een tempo uit het voorjaar wordt dus niet als wintertempo gebruikt.
+  De buitentemperatuur komt van de centrale buitensensor, of, als die niet is
+  ingesteld, van de actuele temperatuur van de ingestelde weerentiteit.
+- **Begin zonder meetgeschiedenis:** standaard is het starttempo 0,05 °C/min,
+  aangepast voor buitenomstandigheden en conservatiever bij onbekende
+  buitentemperatuur. Dit is een beginschatting, geen gemeten capaciteit. Na twee
+  bruikbare meetintervallen gebruikt Zonentra het geleerde tempo voor die
+  buitenconditie. Het leert tijdens actieve ruimteregeling uit intervallen van
+  5–30 minuten, zonder open raam, handmatige apparaat-override of groepsblokkade.
+  Geleerde tempo’s blijven bewaard na een HA-herstart.
+- **Grenzen:** standaard 10 minuten marge en maximaal 180 minuten voorbereiding,
+  per ruimte instelbaar. Voorbeeld: 2,3 °C opwarming met een geleerd wintertempo
+  van 0,025 °C/min vraagt ongeveer 102 minuten inclusief marge; bij 0,1 °C/min
+  in zacht weer ongeveer 33 minuten. De maximale voorbereiding begrenst dit.
+- **Voorbereiding en afspraak:** de comfortband geldt ook als de gebouw-aanwezigheid
+  nog afwezig meldt. Na afloop volgt de ruimte weer aanwezigheid en beweging.
+  Zonder bewegingssensor gebruikt een ruimte met agenda tussen afspraken eco
+  (of afwezig als het gebouw afwezig is). Met beweging blijft ook ongepland
+  gebruik mogelijk.
+- **Actualiseren:** agenda’s worden elke vijf minuten en bij een agenda-statewijziging
+  opnieuw gelezen. Voorbereidingsstart, afspraakstart en einde krijgen daarnaast
+  een timer. Annuleringen en verschuivingen tellen bij de volgende agenda-update
+  mee. Overlappende afspraken houden comfort aaneengesloten; afspraken voor een
+  hele dag worden genegeerd. Titels, beschrijvingen en locaties worden niet bewaard.
+- **Bediening en blokkades:** een uitgeschakelde ruimteregeling, thermostaat of
+  groepsstop wordt door de agenda niet ingeschakeld. Raambeveiliging,
+  herstartvertragingen en de gezamenlijke buitenunitmodus blijven gelden. Bij een
+  niet bruikbare agenda valt de ruimte terug op de gewone aanwezigheidsregeling.
+
+De sensor **Afspraakvoorbereiding** op het ruimteapparaat toont de status, de
+volgende afspraak, berekende voorbereidingsstart, voorbereidingstijd en of het
+tempo geleerd is. Het blijft een schatting: controleer tijdens de eerste
+praktijkperiode of de ruimtes bij aanvang de gewenste comfortband halen en pas
+zo nodig de marge of maximale voorbereiding aan.
+
 ### Ruimtesensoren, raam, ventilator en lamel (0.10)
 
 | Entiteit op het ruimteapparaat | Betekenis |
@@ -723,6 +773,8 @@ custom_components/zonentra/
   engine.py                     gewogen groepsarbitrage en verklaringen
   decision.py                   pure read-only simulator
   runtime.py                    HA-observatie, lifecycle en klimaatcoördinatie
+  runtime_bookings.py           agenda’s, adaptieve voorbereiding en opgeslagen leertempo’s
+  bookings.py                   pure afspraakvensters en tempo-inschatting
   runtime_shading.py            zonwering, herstel na uitval en zonstandmelding
   runtime_commands.py           service-uitvoering, laatste blokkadecontrole en commandolog
   runtime_helpers.py            gedeelde commandobevestiging en herkomst van events

@@ -209,6 +209,10 @@ def multi(domain):
 
 
 ZONE_DEFAULTS = {
+    "preconditioning_max_minutes": 180,
+    "preconditioning_buffer_minutes": 10,
+    "preconditioning_heating_rate": 0.05,
+    "preconditioning_cooling_rate": 0.05,
     "weight": 1.0,
     "use_building_limits": True,
     "use_building_parameters": True,
@@ -232,6 +236,15 @@ def zone_fields(groups: list[dict]) -> dict:
         vol.Optional("use_building_limits"): selector.BooleanSelector(),
         vol.Optional("use_building_parameters"): selector.BooleanSelector(),
         vol.Optional("occupancy_entity"): entity_selector("binary_sensor"),
+        vol.Optional("calendar_entity"): entity_selector("calendar"),
+        vol.Optional("preconditioning_max_minutes"): numeric(0, 360, 1, "min"),
+        vol.Optional("preconditioning_buffer_minutes"): numeric(0, 60, 1, "min"),
+        vol.Optional("preconditioning_heating_rate"): numeric(
+            0.005, 0.5, 0.005, "°C/min"
+        ),
+        vol.Optional("preconditioning_cooling_rate"): numeric(
+            0.005, 0.5, 0.005, "°C/min"
+        ),
         vol.Optional("humidity_entity"): entity_selector("sensor"),
         vol.Optional("co2_entity"): entity_selector("sensor"),
         vol.Optional("contact_entities"): multi("binary_sensor"),
@@ -642,6 +655,19 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                     vol.Optional("use_building_limits"): selector.BooleanSelector(),
                     vol.Optional("use_building_parameters"): selector.BooleanSelector(),
                     vol.Optional("occupancy_entity"): entity_selector("binary_sensor"),
+                    vol.Optional("calendar_entity"): entity_selector("calendar"),
+                    vol.Optional("preconditioning_max_minutes"): numeric(
+                        0, 360, 1, "min"
+                    ),
+                    vol.Optional("preconditioning_buffer_minutes"): numeric(
+                        0, 60, 1, "min"
+                    ),
+                    vol.Optional("preconditioning_heating_rate"): numeric(
+                        0.005, 0.5, 0.005, "°C/min"
+                    ),
+                    vol.Optional("preconditioning_cooling_rate"): numeric(
+                        0.005, 0.5, 0.005, "°C/min"
+                    ),
                     vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
                     vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
                     vol.Optional("heating_limit_entity"): entity_selector(

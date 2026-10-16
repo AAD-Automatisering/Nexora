@@ -7,6 +7,8 @@ pre-0.6 single entry ("legacy") keeps working, is deprecated and raises a
 repair issue asking to recreate it as central configuration plus zones.
 """
 
+from datetime import timedelta
+
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import EVENT_STATE_REPORTED, Platform
 from homeassistant.core import HomeAssistant, callback
@@ -24,6 +26,7 @@ from .const import DOMAIN
 from .migration import migrate_options
 from .models import build_model
 from .runtime import BuildingRuntime
+from .runtime_bookings import CALENDAR_REFRESH_MINUTES
 from .topology import CENTRAL, ENTRY_TYPE, ZONE, assemble
 
 ZonentraConfigEntry = ConfigEntry[BuildingRuntime]
@@ -155,6 +158,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
         store, cache = await _thermostat_state(hass, entry)
         runtime.thermostat_store, runtime.thermostat_cache = store, cache
         runtime.load_thermostats({"zones": cache})
+        runtime.thermal_store = Store(
+            hass, 1, f"{DOMAIN}.{entry.entry_id}.thermal_rates"
+        )
+        runtime.load_thermal_rates(await runtime.thermal_store.async_load())
         # A reload (options, zones) continues where the old runtime was.
         previous = hass.data.setdefault(DOMAIN, {}).setdefault("runtimes", {})
         if old := previous.pop(entry.entry_id, None):
@@ -211,6 +218,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> 
         )
         entry.async_create_task(
             hass, runtime.async_update_forecast(), "zonentra_forecast"
+        )
+    if kind == CENTRAL and any(zone.calendar_entity for zone in building.zones):
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass,
+                runtime.async_update_bookings,
+                timedelta(minutes=CALENDAR_REFRESH_MINUTES),
+            )
+        )
+        entry.async_create_task(
+            hass, runtime.async_update_bookings(), "zonentra_bookings"
         )
     await hass.config_entries.async_forward_entry_setups(entry, platforms(entry))
     return True

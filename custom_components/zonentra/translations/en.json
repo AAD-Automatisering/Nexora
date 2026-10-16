@@ -39,7 +39,12 @@
           "vane_entity": "Vane (optional; select, number or switch entity of the indoor unit)",
           "vane_cool_value": "Vane when cooling (up): option, number, or on/off for a switch",
           "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch",
-          "facade": "Facade of the screens (optional)"
+          "facade": "Facade of the screens (optional)",
+          "calendar_entity": "Room calendar (optional; adaptive heating/cooling before meetings)",
+          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
+          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
+          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
         }
       },
       "zone_parameters": {
@@ -179,7 +184,12 @@
           "max_age_seconds": "Maximum update age for update_based (seconds; ignored by state_based)",
           "group_id": "Outdoor unit group (optional)",
           "use_building_limits": "Use building climate limits",
-          "use_building_parameters": "Use building regulation parameters"
+          "use_building_parameters": "Use building regulation parameters",
+          "calendar_entity": "Room calendar (optional; adaptive heating/cooling before meetings)",
+          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
+          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
+          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
         }
       },
       "group": {
@@ -278,7 +288,12 @@
           "vane_entity": "Vane (optional; select, number or switch entity of the indoor unit)",
           "vane_cool_value": "Vane when cooling (up): option, number, or on/off for a switch",
           "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch",
-          "facade": "Facade of the screens (optional)"
+          "facade": "Facade of the screens (optional)",
+          "calendar_entity": "Room calendar (optional; adaptive heating/cooling before meetings)",
+          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
+          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
+          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
         }
       },
       "zone_parameters": {
@@ -456,6 +471,17 @@
           "warm": "Warm",
           "neutral": "Neutral",
           "cold": "Cold"
+        }
+      },
+      "booking": {
+        "name": "Meeting preparation",
+        "state": {
+          "not_configured": "Not configured",
+          "unknown": "Unknown",
+          "idle": "No booking",
+          "scheduled": "Scheduled",
+          "preparing": "Preparing",
+          "meeting": "Meeting in progress"
         }
       }
     },

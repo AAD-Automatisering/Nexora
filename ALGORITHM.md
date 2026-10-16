@@ -618,3 +618,38 @@ Bij unload worden zowel bronlisteners als de timer verwijderd.
 De beslisengine importeert geen Home Assistant en heeft geen uitvoerinterface.
 Elke fysieke apparatuurvermelding blijft daarnaast een hold-beslissing behouden
 in de bestaande Status-sensor, ook als de nieuwe groepssensor een mode voorstelt.
+
+## Adaptieve afspraakvoorbereiding
+
+Een optionele `calendar_entity` per zone vraagt via `calendar.get_events` de
+volgende 24 uur op. `runtime_bookings.py` actualiseert elke vijf minuten en bij
+agenda-statewijzigingen. Alleen start- en eindtijden worden behouden; hele-dagitems
+worden genegeerd, overlappende en aaneengesloten intervallen samengevoegd. Een
+response ouder dan tien minuten of een onbetrouwbare kalenderbron geeft `unknown`
+en valt terug op de gewone aanwezigheidsregeling.
+
+`bookings.plan_booking` schat de tijd tot de comfortband uit de temperatuurafstand
+(tot verwarmingsgrens + hysterese of koelgrens − hysterese), gedeeld door het
+verwarmings- of koeltempo, plus de ingestelde marge. Standaard zijn tempo’s
+0,05 °C/min, de marge 10 min en het maximum 180 min. Voor onbekende of nog niet
+ingeleerde buitencondities geldt een conservatieve beginschatting:
+verwarmen `basis / (1 + 0,03 × max(0, 10 − buiten))`, koelen
+`basis / (1 + 0,03 × max(0, buiten − 25))`. Bij onbekende buitentemperatuur is
+de deler 1,3. Dit is een begrensde startheuristiek, geen fysisch capaciteitsmodel.
+
+Tijdens actieve, ongeblokkeerde ruimteregeling worden geldige temperatuurverschillen
+uit intervallen van 5–30 minuten gebruikt voor een EMA (α = 0,25). Alleen een tempo
+van 0,005–0,5 °C/min in de actieve richting telt mee. Verwarmen en koelen hebben
+ieder een eigen tempo per buitenklasse (< 0, 0–10, 10–20, 20–30, ≥ 30 °C, onbekend).
+Na twee samples wordt het betreffende geleerde tempo gebruikt. Een mode- of
+buitenklassewisseling start een nieuw meetinterval. Geleerde profielen worden
+opgeslagen; lopende meetankers beginnen na een reload opnieuw.
+
+Tijdens `preparing` en `meeting` vraagt de agenda comfort, ook vóórdat gebouwpresentie
+actief wordt. Een gestart voorbereidingsvenster blijft tot het einde actief als de
+ruimte zijn temperatuur al bereikt; een aangepaste maximumtijd blijft begrenzen.
+De forecast-startmarges worden voor een actieve afspraak niet toegepast. Expliciete
+thermostaatinstellingen en alle bestaande apparaat-/groepsblokkades blijven leidend.
+Zonder beweging gebruikt een ongereserveerde ruimte met bruikbare agenda eco;
+gebouwafwezigheid blijft dan away. Timers evalueren start en einde zonder nieuw
+sensorevent. `BookingSensor` toont alleen planning en schatting, geen afspraakinhoud.

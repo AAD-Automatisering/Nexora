@@ -15,6 +15,7 @@ from .shading import FACADES
 ZONE_ENTITY_FIELDS = (
     "temperature_entity",
     "occupancy_entity",
+    "calendar_entity",
     "heating_limit_entity",
     "cooling_limit_entity",
     "humidity_entity",
@@ -37,6 +38,11 @@ class Zone:
     name: str
     temperature_entity: str | None = None
     occupancy_entity: str | None = None
+    calendar_entity: str | None = None
+    preconditioning_max_minutes: float = 180.0
+    preconditioning_buffer_minutes: float = 10.0
+    preconditioning_heating_rate: float = 0.05  # °C/min baseline before learning
+    preconditioning_cooling_rate: float = 0.05
     heating_limit: float | None = None
     cooling_limit: float | None = None
     heating_limit_entity: str | None = None
@@ -298,7 +304,9 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     for zone in zone_models:
         for field in ZONE_ENTITY_FIELDS:
             domains = (
-                VANE_DOMAINS
+                ("calendar",)
+                if field == "calendar_entity"
+                else VANE_DOMAINS
                 if field == "vane_entity"
                 else ("binary_sensor",)
                 if field == "occupancy_entity"
@@ -311,6 +319,10 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
             _entity(entity, ("binary_sensor",))
         if zone.group_id and zone.group_id not in group_ids:
             raise ValueError("invalid_reference")
+        _range(zone.preconditioning_max_minutes, 0, 360)
+        _range(zone.preconditioning_buffer_minutes, 0, 60)
+        _range(zone.preconditioning_heating_rate, 0.005, 0.5)
+        _range(zone.preconditioning_cooling_rate, 0.005, 0.5)
         _range(zone.weight, 0.1, 10)
         _range(zone.hysteresis, 0.1, 2)
         _range(zone.max_age_seconds, 0, 86400)

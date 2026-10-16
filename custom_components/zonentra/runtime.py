@@ -63,6 +63,7 @@ from .roomstate import (
     vane_mode,
     window_state,
 )
+from .runtime_bookings import BookingRuntimeMixin
 from .runtime_commands import CommandRuntimeMixin
 from .runtime_helpers import _origin, _setpoint
 from .runtime_shading import ShadingRuntimeMixin
@@ -96,7 +97,7 @@ ZONE_LIMIT_KEYS = (
 )
 
 
-class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
+class BuildingRuntime(BookingRuntimeMixin, ShadingRuntimeMixin, CommandRuntimeMixin):
     """Observe one building, evaluate its plans and dispatch enabled controls."""
 
     def __init__(
@@ -168,6 +169,15 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
         self.forecast_error: str | None = None
         self.day_type = "unknown"
         self._cancel_forecast_retry = None
+        self.booking_events: dict = {}
+        self.booking_updated: dict = {}
+        self.booking_errors: dict = {}
+        self.booking_plans: dict = {}
+        self._booking_checks: list = []
+        self._calendar_refreshing = False
+        self.thermal_rates: dict = {}
+        self.thermal_samples: dict = {}
+        self.thermal_store = None
         # Coordination and manual overrides survive reloads, not HA restarts.
         self.overrides = {}
         self.last_transitions = {}
@@ -187,6 +197,17 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
     def refresh(self, event=None) -> None:
         """Refresh configured state values on an input event, without polling."""
         now = dt_util.utcnow()
+        if (
+            event is not None
+            and hasattr(event, "data")
+            and event.data.get("entity_id")
+            in {
+                zone.calendar_entity
+                for zone in self.building.zones
+                if zone.calendar_entity
+            }
+        ):
+            self.hass.async_create_task(self.async_update_bookings())
         sources = {}
         observations = {}
         for entity_id in self.building.entity_ids:
@@ -311,8 +332,8 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
                 self.zone_demands[zone.id].demand
                 if zone.id in self.zone_demands
                 else "unknown",
-                heating_margin,
-                cooling_margin,
+                0 if self.booking_plans[zone.id].active else heating_margin,
+                0 if self.booking_plans[zone.id].active else cooling_margin,
             )
             # Thermostat mode: off asks nothing, heat/cool only one direction.
             demand = room_demand(self.thermostat(zone.id).hvac_mode, demand)
@@ -345,6 +366,7 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
             if item.kind == "hvac" and item.id not in indoor_units:
                 indoor_units[item.id] = observe_unit(item, sources.get(item.entity_id))
         self.indoor_units = indoor_units
+        self._learn_booking_rates(now)
         self.group_observations = group_observations
         self.mode_comparisons = {
             group_id: compare_modes(
@@ -414,6 +436,7 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
             if item.waiting_until
         )
         deadlines.extend(due for due, _, _ in self.pending_offs)
+        deadlines.extend(self._booking_checks)
         deadlines.extend(self._motion_checks)
         deadlines.extend(self._setpoint_checks)
         deadlines.extend(self._window_checks)
@@ -445,6 +468,7 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
             settings.presence_entity, sources.get(settings.presence_entity)
         )
         checks, result = [], {}
+        self._booking_checks = []
         for zone in self.building.zones:
             entity = zone.occupancy_entity
             motion, memory, check = motion_state(
@@ -458,7 +482,9 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
             self.motion_memories[zone.id] = memory
             if check:
                 checks.append(check)
-            result[zone.id] = occupancy(self.presence, motion)
+            result[zone.id] = self._booking_occupancy(
+                zone, occupancy(self.presence, motion), sources, now
+            )
         self.zone_occupancy = result
         self._motion_checks = checks
 
@@ -544,6 +570,11 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
     # without it a reload forgot hysteresis, manual overrides, anti-cycling
     # and pending commands, and running units could be switched off.
     CARRIED = (
+        "booking_events",
+        "booking_updated",
+        "booking_errors",
+        "booking_plans",
+        "thermal_rates",
         "zone_demands",
         "coordination_memories",
         "overrides",
@@ -577,6 +608,28 @@ class BuildingRuntime(ShadingRuntimeMixin, CommandRuntimeMixin):
         """Take over the in-memory state of the runtime this one replaces."""
         for name in self.CARRIED:
             setattr(self, name, getattr(previous, name))
+        calendars = {
+            zone.calendar_entity for zone in self.building.zones if zone.calendar_entity
+        }
+        for name in ("booking_events", "booking_updated", "booking_errors"):
+            setattr(
+                self,
+                name,
+                {
+                    key: value
+                    for key, value in getattr(self, name).items()
+                    if key in calendars
+                },
+            )
+        previous_calendars = {
+            zone.id: zone.calendar_entity for zone in previous.building.zones
+        }
+        self.booking_plans = {
+            zone.id: self.booking_plans[zone.id]
+            for zone in self.building.zones
+            if zone.id in self.booking_plans
+            and zone.calendar_entity == previous_calendars.get(zone.id)
+        }
         # Removed/disabled equipment must not retain delayed hardware commands.
         equipment = {(item.id, item.entity_id) for item in self.building.equipment}
         self.pending_offs = [

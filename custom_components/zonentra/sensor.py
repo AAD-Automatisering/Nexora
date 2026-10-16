@@ -12,6 +12,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 
 from . import ZonentraConfigEntry, central_presence, entry_type
+from .bookings import outdoor_band
 from .const import DOMAIN
 from .entity import zone_context
 from .models import Equipment, Zone
@@ -90,6 +91,8 @@ def _zone_entities(hass, entry) -> list:
     # zone or building presence; setpoint and fan need indoor units.
     if options.get("occupancy_entity") or central_presence(hass):
         entities.append(PresenceSensor(entry, zone, **shared))
+    if options.get("calendar_entity"):
+        entities.append(BookingSensor(entry, zone, **shared))
     if options.get("indoor_units"):
         entities.append(RegulatedSetpointSensor(entry, zone, **shared))
         entities.append(AutoFanSensor(entry, zone, **shared))
@@ -494,6 +497,62 @@ class ZoneStateSensor(ZonentraDiagnosticSensor):
             for item in runtime.building.equipment
             if item.zone_id == self._zone.id and item.kind == "hvac"
         ]
+
+
+class BookingSensor(ZoneStateSensor):
+    """Booking preparation and its temperature/outdoor-dependent estimate."""
+
+    key = "booking"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "not_configured",
+        "unknown",
+        "idle",
+        "scheduled",
+        "preparing",
+        "meeting",
+    ]
+    _attr_icon = "mdi:calendar-clock"
+    _attr_translation_key = "booking"
+
+    @property
+    def native_value(self):
+        plan = self.runtime.booking_plans.get(self._zone.id)
+        return plan.status if plan else "unknown"
+
+    @property
+    def extra_state_attributes(self):
+        runtime = self.runtime
+        plan = runtime.booking_plans.get(self._zone.id)
+        outside = runtime._booking_outdoor_temperature()
+        values = {
+            "calendar_error": runtime.booking_errors.get(
+                next(
+                    (
+                        zone.calendar_entity
+                        for zone in runtime.building.zones
+                        if zone.id == self._zone.id
+                    ),
+                    None,
+                )
+            ),
+            "outdoor_temperature": outside,
+            "outdoor_band": outdoor_band(outside),
+            "regulation_enabled": runtime.regulated(self._zone.id),
+        }
+        if plan:
+            values.update(
+                {
+                    "meeting_start": _iso(plan.start),
+                    "meeting_end": _iso(plan.end),
+                    "preparation_start": _iso(plan.prepare_at),
+                    "lead_minutes": round(plan.lead_minutes, 1),
+                    "direction": plan.direction,
+                    "estimated_rate_c_per_minute": plan.rate,
+                    "learned_rate": plan.learned,
+                }
+            )
+        return values
 
 
 class PresenceSensor(ZoneStateSensor):
