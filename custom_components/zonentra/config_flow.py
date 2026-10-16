@@ -25,6 +25,7 @@ from .migration import (
     LIMIT_FIELDS,
     NEW_BUILDING_DEFAULTS,
     PARAMETER_FIELDS,
+    PRECONDITIONING_FIELDS,
     migrate_options,
 )
 from .models import (
@@ -64,6 +65,19 @@ def choice(options):
     return selector.SelectSelector({"options": options, "mode": "dropdown"})
 
 
+def preconditioning_fields() -> dict:
+    return {
+        vol.Optional("preconditioning_max_minutes"): numeric(0, 360, 1, "min"),
+        vol.Optional("preconditioning_buffer_minutes"): numeric(0, 60, 1, "min"),
+        vol.Optional("preconditioning_heating_rate"): numeric(
+            0.005, 0.5, 0.005, "°C/min"
+        ),
+        vol.Optional("preconditioning_cooling_rate"): numeric(
+            0.005, 0.5, 0.005, "°C/min"
+        ),
+    }
+
+
 def building_fields(limits: bool = True) -> dict:
     """Central building settings, shared by the central and legacy flows.
 
@@ -71,16 +85,11 @@ def building_fields(limits: bool = True) -> dict:
     only the legacy entry keeps them in the form (``limits``).
     """
     fields = {
+        **preconditioning_fields(),
         vol.Optional("outdoor_temperature_entity"): entity_selector("sensor"),
         vol.Optional("outdoor_max_age_seconds"): numeric(0, 86400, 1, "s"),
         vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
         vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
-        vol.Optional("heating_limit_entity"): entity_selector(
-            ["sensor", "number", "input_number"]
-        ),
-        vol.Optional("cooling_limit_entity"): entity_selector(
-            ["sensor", "number", "input_number"]
-        ),
         vol.Optional("hysteresis"): numeric(0.1, 2, unit="°C"),
         vol.Optional("sensor_validation"): choice(list(VALIDATION_STRATEGIES)),
         vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
@@ -130,8 +139,6 @@ CENTRAL_SECTIONS = {
     "general": (
         "outdoor_temperature_entity",
         "outdoor_max_age_seconds",
-        "heating_limit_entity",
-        "cooling_limit_entity",
         "hysteresis",
         "sensor_validation",
         "max_age_seconds",
@@ -161,6 +168,7 @@ CENTRAL_SECTIONS = {
         "screen_override_minutes",
     ),
     "forecast": ("weather_entity",),
+    "preconditioning": PRECONDITIONING_FIELDS,
 }
 NEW_CENTRAL_FIELDS = ("outdoor_temperature_entity",)
 
@@ -180,6 +188,7 @@ def building_defaults() -> dict:
         **{
             key: getattr(default_settings, key)
             for key in (
+                *PRECONDITIONING_FIELDS,
                 "outdoor_max_age_seconds",
                 "manual_override_enabled",
                 "manual_override_duration_minutes",
@@ -209,15 +218,16 @@ def multi(domain):
 
 
 ZONE_DEFAULTS = {
-    "preconditioning_max_minutes": 180,
-    "preconditioning_buffer_minutes": 10,
-    "preconditioning_heating_rate": 0.05,
-    "preconditioning_cooling_rate": 0.05,
     "weight": 1.0,
     "use_building_limits": True,
     "use_building_parameters": True,
+    "use_building_preconditioning": True,
 }
-ZONE_FLAGS = ("use_building_limits", "use_building_parameters")
+ZONE_FLAGS = (
+    "use_building_limits",
+    "use_building_parameters",
+    "use_building_preconditioning",
+)
 
 
 def zone_fields(groups: list[dict]) -> dict:
@@ -237,14 +247,7 @@ def zone_fields(groups: list[dict]) -> dict:
         vol.Optional("use_building_parameters"): selector.BooleanSelector(),
         vol.Optional("occupancy_entity"): entity_selector("binary_sensor"),
         vol.Optional("calendar_entity"): entity_selector("calendar"),
-        vol.Optional("preconditioning_max_minutes"): numeric(0, 360, 1, "min"),
-        vol.Optional("preconditioning_buffer_minutes"): numeric(0, 60, 1, "min"),
-        vol.Optional("preconditioning_heating_rate"): numeric(
-            0.005, 0.5, 0.005, "°C/min"
-        ),
-        vol.Optional("preconditioning_cooling_rate"): numeric(
-            0.005, 0.5, 0.005, "°C/min"
-        ),
+        vol.Optional("use_building_preconditioning"): selector.BooleanSelector(),
         vol.Optional("humidity_entity"): entity_selector("sensor"),
         vol.Optional("co2_entity"): entity_selector("sensor"),
         vol.Optional("contact_entities"): multi("binary_sensor"),
@@ -266,21 +269,8 @@ def zone_fields(groups: list[dict]) -> dict:
 
 
 def zone_parameter_fields(record: dict) -> dict:
-    """Local limits/parameters, only for the blocks not taken from the building."""
+    """Local parameters, only when not taken from the building."""
     fields = {}
-    if not record.get("use_building_limits", True):
-        fields.update(
-            {
-                # Static comfort/eco/away limits of a zone are set on its
-                # device (0.10); here only limits that follow an entity.
-                vol.Optional("heating_limit_entity"): entity_selector(
-                    ["sensor", "number", "input_number"]
-                ),
-                vol.Optional("cooling_limit_entity"): entity_selector(
-                    ["sensor", "number", "input_number"]
-                ),
-            }
-        )
     if not record.get("use_building_parameters", True):
         fields.update(
             {
@@ -289,6 +279,8 @@ def zone_parameter_fields(record: dict) -> dict:
                 vol.Optional("max_age_seconds"): numeric(0, 86400, 1, "s"),
             }
         )
+    if not record.get("use_building_preconditioning", True):
+        fields.update(preconditioning_fields())
     return fields
 
 
@@ -302,7 +294,12 @@ def merge_zone(previous: dict, submitted: dict) -> dict:
     """New zone settings; earlier local limits/parameters stay dormant."""
     dormant = {
         key: previous[key]
-        for key in (*LIMIT_FIELDS, *BAND_FIELDS, *PARAMETER_FIELDS)
+        for key in (
+            *LIMIT_FIELDS,
+            *BAND_FIELDS,
+            *PARAMETER_FIELDS,
+            *PRECONDITIONING_FIELDS,
+        )
         if key in previous
     }
     record = {"id": previous["id"], **dormant, **clean(submitted)}
@@ -338,7 +335,7 @@ def check_zone(hass, record: dict, entry_id: str | None = None, partial=False) -
     previous = next((dict(e.options) for e in entries if e.entry_id == entry_id), {})
     others = [dict(e.options) for e in entries if e.entry_id != entry_id]
     candidate = dict(record)
-    if partial:  # Local limits/parameters follow in the next step.
+    if partial:  # Local sensor parameters follow in the next step.
         candidate.update({flag: True for flag in ZONE_FLAGS})
     try:
         build_model(
@@ -364,7 +361,7 @@ def check_zone(hass, record: dict, entry_id: str | None = None, partial=False) -
 
 
 class ZoneFormMixin:
-    """Two-step zone form: settings, then local limits/parameters if needed."""
+    """Zone settings, followed by local sensor parameters when needed."""
 
     zone: dict
 
@@ -656,26 +653,12 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                     vol.Optional("use_building_parameters"): selector.BooleanSelector(),
                     vol.Optional("occupancy_entity"): entity_selector("binary_sensor"),
                     vol.Optional("calendar_entity"): entity_selector("calendar"),
-                    vol.Optional("preconditioning_max_minutes"): numeric(
-                        0, 360, 1, "min"
-                    ),
-                    vol.Optional("preconditioning_buffer_minutes"): numeric(
-                        0, 60, 1, "min"
-                    ),
-                    vol.Optional("preconditioning_heating_rate"): numeric(
-                        0.005, 0.5, 0.005, "°C/min"
-                    ),
-                    vol.Optional("preconditioning_cooling_rate"): numeric(
-                        0.005, 0.5, 0.005, "°C/min"
-                    ),
+                    vol.Optional(
+                        "use_building_preconditioning"
+                    ): selector.BooleanSelector(),
+                    **preconditioning_fields(),
                     vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
                     vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
-                    vol.Optional("heating_limit_entity"): entity_selector(
-                        ["sensor", "number", "input_number"]
-                    ),
-                    vol.Optional("cooling_limit_entity"): entity_selector(
-                        ["sensor", "number", "input_number"]
-                    ),
                     vol.Optional("humidity_entity"): entity_selector("sensor"),
                     vol.Optional("co2_entity"): entity_selector("sensor"),
                     vol.Optional("contact_entities"): selector.EntitySelector(
@@ -729,12 +712,14 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
             defaults = {
                 "heating_limit": 21.0,
                 "cooling_limit": 24.0,
+                **{key: getattr(zone, key) for key in PRECONDITIONING_FIELDS},
                 "weight": zone.weight,
                 "hysteresis": zone.hysteresis,
                 "max_age_seconds": zone.max_age_seconds,
                 "sensor_validation": zone.sensor_validation,
                 "use_building_limits": True,
                 "use_building_parameters": True,
+                "use_building_preconditioning": True,
             }
         elif category == "group":
             group = EquipmentGroup(id="suggestion", name="suggestion")
@@ -752,7 +737,11 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
             defaults.update(
                 {
                     key: central[key]
-                    for key in (*LIMIT_FIELDS, *PARAMETER_FIELDS)
+                    for key in (
+                        *LIMIT_FIELDS,
+                        *PARAMETER_FIELDS,
+                        *PRECONDITIONING_FIELDS,
+                    )
                     if key in central
                 }
             )
@@ -772,6 +761,11 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
             for flag, block, keys in (
                 ("use_building_limits", "limits", LIMIT_FIELDS),
                 ("use_building_parameters", "parameters", PARAMETER_FIELDS),
+                (
+                    "use_building_preconditioning",
+                    "preconditioning",
+                    PRECONDITIONING_FIELDS,
+                ),
             ):
                 self._visible_zone_blocks[block] = not values[flag]
                 if values[flag]:
@@ -810,6 +804,11 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                 for flag, block, keys in (
                     ("use_building_limits", "limits", LIMIT_FIELDS),
                     ("use_building_parameters", "parameters", PARAMETER_FIELDS),
+                    (
+                        "use_building_preconditioning",
+                        "preconditioning",
+                        PRECONDITIONING_FIELDS,
+                    ),
                 ):
                     record.setdefault(flag, previous_record.get(flag, True))
                     if (
@@ -908,6 +907,7 @@ class CentralOptionsFlow(ZonentraOptionsFlow):
                 "regulation",
                 "screens",
                 "forecast",
+                "preconditioning",
                 "group",
                 "finish",
             ],
@@ -964,6 +964,9 @@ class CentralOptionsFlow(ZonentraOptionsFlow):
 
     async def async_step_forecast(self, user_input=None):
         return await self._section("forecast", user_input)
+
+    async def async_step_preconditioning(self, user_input=None):
+        return await self._section("preconditioning", user_input)
 
     def _model(self, topology):
         # Validate against every zone: a referenced group cannot be removed.

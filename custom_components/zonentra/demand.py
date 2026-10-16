@@ -124,19 +124,7 @@ def comfort_limits(
     if comfort is not None:
         return configured_limit(comfort[0]), configured_limit(comfort[1])
 
-    def limits(entity, static):
-        # Limit entities are settings (number/input_number) that only change on
-        # demand; their age is never evidence of a fault.
-        return (
-            read(sources.get(entity), "limit", now)
-            if entity
-            else configured_limit(static)
-        )
-
-    return (
-        limits(zone.heating_limit_entity, zone.heating_limit),
-        limits(zone.cooling_limit_entity, zone.cooling_limit),
-    )
+    return configured_limit(zone.heating_limit), configured_limit(zone.cooling_limit)
 
 
 def calculate_demand(

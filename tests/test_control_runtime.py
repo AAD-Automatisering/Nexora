@@ -267,7 +267,12 @@ async def test_existing_04_configuration_uses_defaults(hass):
     """29: a 0.4 entry without control settings keeps working unchanged."""
     options = topology()
     entry = await setup_office(hass, options)
-    assert entry.options == options
+    assert entry.options == {
+        **options,
+        "zones": [
+            {**zone, "use_building_preconditioning": True} for zone in options["zones"]
+        ],
+    }
     settings = entry.runtime_data.building.settings
     assert settings.manual_override_enabled is True
     assert settings.manual_override_duration_minutes == 30

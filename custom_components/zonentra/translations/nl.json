@@ -41,10 +41,7 @@
           "vane_heat_value": "Lamel bij verwarmen (omlaag): keuze, getal, of on/off bij een schakelaar",
           "facade": "Gevel van de zonwering (optioneel)",
           "calendar_entity": "Ruimteagenda (optioneel; adaptief verwarmen/koelen vóór afspraken)",
-          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
-          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
-          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
-          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
+          "use_building_preconditioning": "Gebruik centrale instellingen voor afspraakvoorbereiding"
         }
       },
       "zone_parameters": {
@@ -53,11 +50,13 @@
         "data": {
           "heating_limit": "Verwarmingsgrens (°C)",
           "cooling_limit": "Koelgrens (°C)",
-          "heating_limit_entity": "Entiteit voor verwarmingsgrens (optioneel)",
-          "cooling_limit_entity": "Entiteit voor koelgrens (optioneel)",
           "hysteresis": "Temperatuurhysterese (°C)",
           "sensor_validation": "Sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
-          "max_age_seconds": "Maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)"
+          "max_age_seconds": "Maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)",
+          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
+          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
+          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
         }
       }
     },
@@ -98,7 +97,8 @@
           "regulation": "Ruimteregeling",
           "screens": "Zonwering",
           "forecast": "Weersverwachting",
-          "finish": "Opslaan"
+          "finish": "Opslaan",
+          "preconditioning": "Afspraakvoorbereiding"
         }
       },
       "general": {
@@ -107,8 +107,6 @@
         "data": {
           "outdoor_temperature_entity": "Buitentemperatuursensor (hele gebouw)",
           "outdoor_max_age_seconds": "Maximale buitentemperatuurleeftijd (seconden; 0 = uit)",
-          "heating_limit_entity": "Centrale entiteit voor verwarmingsgrens (optioneel)",
-          "cooling_limit_entity": "Centrale entiteit voor koelgrens (optioneel)",
           "hysteresis": "Centrale temperatuurhysterese (°C)",
           "sensor_validation": "Centrale sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
           "max_age_seconds": "Centrale maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)"
@@ -173,8 +171,6 @@
           "occupancy_entity": "Bewegingssensor (optioneel; zonder beweging geldt de eco-band)",
           "heating_limit": "Verwarmingsgrens (°C)",
           "cooling_limit": "Koelgrens (°C)",
-          "heating_limit_entity": "Entiteit voor verwarmingsgrens (optioneel)",
-          "cooling_limit_entity": "Entiteit voor koelgrens (optioneel)",
           "humidity_entity": "Luchtvochtigheid (optioneel)",
           "co2_entity": "CO₂-sensor (optioneel)",
           "contact_entities": "Raam- en deurcontacten (optioneel)",
@@ -189,7 +185,8 @@
           "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
           "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
           "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
-          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "use_building_preconditioning": "Gebruik centrale instellingen voor afspraakvoorbereiding"
         }
       },
       "group": {
@@ -237,8 +234,6 @@
           "outdoor_max_age_seconds": "Maximale buitentemperatuurleeftijd (seconden; 0 = uit)",
           "heating_limit": "Centrale verwarmingsgrens (°C)",
           "cooling_limit": "Centrale koelgrens (°C)",
-          "heating_limit_entity": "Centrale entiteit voor verwarmingsgrens (optioneel)",
-          "cooling_limit_entity": "Centrale entiteit voor koelgrens (optioneel)",
           "hysteresis": "Centrale temperatuurhysterese (°C)",
           "sensor_validation": "Centrale sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
           "max_age_seconds": "Centrale maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)",
@@ -264,7 +259,11 @@
           "screen_override_minutes": "Zonwering: handmatige bediening respecteren (minuten)",
           "weather_entity": "Weersverwachting (optioneel; warme/koude dagen voor zonwering en minder omschakelen tussen verwarmen en koelen)",
           "auto_fan_step": "Automatische ventilator: graden van het doel per ventilatorstand",
-          "sun_entity": "Zonstand-entiteit (standaard sun.sun)"
+          "sun_entity": "Zonstand-entiteit (standaard sun.sun)",
+          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
+          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
+          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
         }
       },
       "zone_settings": {
@@ -290,10 +289,7 @@
           "vane_heat_value": "Lamel bij verwarmen (omlaag): keuze, getal, of on/off bij een schakelaar",
           "facade": "Gevel van de zonwering (optioneel)",
           "calendar_entity": "Ruimteagenda (optioneel; adaptief verwarmen/koelen vóór afspraken)",
-          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
-          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
-          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
-          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
+          "use_building_preconditioning": "Gebruik centrale instellingen voor afspraakvoorbereiding"
         }
       },
       "zone_parameters": {
@@ -302,11 +298,23 @@
         "data": {
           "heating_limit": "Verwarmingsgrens (°C)",
           "cooling_limit": "Koelgrens (°C)",
-          "heating_limit_entity": "Entiteit voor verwarmingsgrens (optioneel)",
-          "cooling_limit_entity": "Entiteit voor koelgrens (optioneel)",
           "hysteresis": "Temperatuurhysterese (°C)",
           "sensor_validation": "Sensorvalidatie (state_based = standaard; update_based alleen voor periodiek rapporterende sensoren)",
-          "max_age_seconds": "Maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)"
+          "max_age_seconds": "Maximale updateleeftijd bij update_based (seconden; genegeerd bij state_based)",
+          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
+          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
+          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
+        }
+      },
+      "preconditioning": {
+        "title": "Afspraakvoorbereiding",
+        "description": "Standaardwaarden voor ruimtes met een agenda. Zet bij een ruimte de centrale afspraakvoorbereiding uit om eigen waarden in te stellen. Geleerde verwarmings- en koeltempos blijven per ruimte bewaard.",
+        "data": {
+          "preconditioning_max_minutes": "Maximale voorbereidingstijd (minuten; standaard 180)",
+          "preconditioning_buffer_minutes": "Veiligheidsmarge voor voorbereiding (minuten; standaard 10)",
+          "preconditioning_heating_rate": "Starttempo verwarmen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)",
+          "preconditioning_cooling_rate": "Starttempo koelen (°C/min; standaard 0,05, aangepast aan buitentemperatuur)"
         }
       }
     },

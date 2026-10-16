@@ -408,7 +408,7 @@ class BuildingRuntime(
             self._cancel_deadline = None
         deadlines = self._command_deadlines(now)
         for zone in self.building.zones:
-            # Only update_based measurements can expire; limit entities never do.
+            # Only update_based room measurements can expire.
             if max_age := max_age_for(zone.sensor_validation, zone.max_age_seconds):
                 for field in ("temperature_entity", "humidity_entity", "co2_entity"):
                     source = sources.get(getattr(zone, field))
@@ -1788,7 +1788,7 @@ class BuildingRuntime(
         if any(o.quality != "observed" for o in self.observations.values()):
             return "degraded"
         if any(
-            (zone.heating_limit is not None or zone.heating_limit_entity)
+            zone.heating_limit is not None
             and self.zone_demands[zone.id].demand == "unknown"
             for zone in self.building.zones
         ):

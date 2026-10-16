@@ -171,7 +171,8 @@ async def test_limits_are_set_on_the_devices_not_in_the_wizard(hass, freezer):
     )
     schema = flow["data_schema"].schema
     assert "heating_limit" not in schema and "eco_heating_limit" not in schema
-    assert "heating_limit_entity" in schema
+    assert "heating_limit_entity" not in schema
+    assert "cooling_limit_entity" not in schema
     flow = await hass.config_entries.options.async_configure(
         flow["flow_id"], {"hysteresis": 0.3}
     )

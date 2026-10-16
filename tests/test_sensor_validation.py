@@ -226,12 +226,12 @@ def test_update_based_recovers_from_stale_to_valid():
     assert_usable(snapshot, demand, decision)
 
 
-def test_limit_entities_never_expire_by_age():
+def test_removed_limit_entities_do_not_replace_static_limits():
     building = office(
         sensor_validation="update_based",
         max_age_seconds=60,
-        heating_limit=None,
-        cooling_limit=None,
+        heating_limit=22,
+        cooling_limit=24,
         heating_limit_entity="input_number.heat",
         cooling_limit_entity="input_number.cool",
     )

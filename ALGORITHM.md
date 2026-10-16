@@ -17,10 +17,10 @@ De pure kern bouwt daaruit per ruimte een `ZoneSnapshot`: temperatuur, twee
 grenzen, optionele vochtigheid/CO₂/buitentemperatuur, aanwezigheid, contacten en
 IDs van gekoppelde HVAC-, vloerverwarmings- en zonweringsapparatuur.
 
-Vooraf lost het model per ruimte de twee centrale keuzes op. Grenzen en grensentiteiten
-komen samen uit het gebouw of uit de ruimte; hysterese en meetleeftijd vormen een
-apart blok. Alleen actieve instellingen worden voor klimaatvraag gebruikt. Inactieve
-lokale waarden zijn nooit een fallback bij ontbrekende centrale grensentiteiten.
+Vooraf lost het model per ruimte de twee centrale keuzes op. Grenzen komen uit
+het gebouw of uit de ruimte; hysterese en meetleeftijd vormen een apart blok.
+Alleen actieve instellingen worden voor klimaatvraag gebruikt. Grenzen worden
+ingesteld op het centrale apparaat of ruimteapparaat, zonder externe grensentiteiten.
 
 Buitentemperatuur komt uitsluitend uit het gebouw, met een eigen maximale leeftijd.
 Eén gevalideerde Reading wordt gedeeld door alle ruimtes. De bron wordt eenmaal
@@ -69,8 +69,8 @@ rapport. De strategie is per ruimte in te stellen, of centraal voor ruimtes die
 de centrale meetparameters gebruiken. `update_based` vereist een maximale
 updateleeftijd groter dan 0. Bij `state_based` wordt `max_age_seconds` bewaard
 maar genegeerd. De strategie geldt voor temperatuur, vochtigheid en CO₂ van de
-ruimte. Grensentiteiten (number/input_number) zijn instellingen en verouderen
-nooit op leeftijd. Buitentemperatuur gebruikt ongewijzigd de eigen
+ruimte. De ingestelde temperatuurgrenzen hebben geen leeftijdcontrole.
+Buitentemperatuur gebruikt ongewijzigd de eigen
 `outdoor_max_age_seconds` (0 = geen leeftijdcontrole).
 
 Beide strategieën blijven unknown/unavailable/restored/assumed-states, ongeldige
@@ -96,9 +96,12 @@ leeftijdtimeout; unavailable/unknown/restored/assumed blijven wel ongeldig.
 Afwezigheid, open ramen, CO₂, vochtigheid en buitenweer beïnvloeden in 0.3 de
 klimaatvraag nog niet: dit is verzamelde context voor volgende modules.
 
-Een gekoppelde grensentiteit gaat vóór de vaste UI-grens. Als die entiteit faalt,
-volgt **geen stilzwijgende fallback** naar de vaste grens. Een eventueel nog
-ontbrekende optionele sensor blokkeert temperatuurvraag niet.
+Externe grensentiteiten worden niet meer ondersteund. Oude koppelingen worden
+bij het laden verwijderd. Een complete vaste comfortband blijft behouden; een
+onvolledige lokale band valt terug op de centrale grenzen. Centrale koppelingen
+zonder complete vaste band krijgen de standaard comfortgrenzen 21 / 24 °C.
+Opgeslagen thermostaatgrenzen blijven gelden volgens de bestaande voorrang.
+Een ontbrekende optionele sensor blokkeert temperatuurvraag niet.
 
 ## Aanwezigheid en beweging (0.8)
 
@@ -109,8 +112,7 @@ Versatile Thermostat:
    `away_cooling_limit`, standaard 16 / 30 °C).
 2. Anders: ruimte heeft een bewegingssensor en de beweging is `inactive` →
    **eco**-band (standaard 19 / 26 °C).
-3. Anders → **comfort**: de normale grenzen (centraal of van de ruimte, inclusief
-   grensentiteiten).
+3. Anders → **comfort**: de normale grenzen, centraal of van de ruimte.
 
 Beweging is `active` zodra de sensor minstens `motion_delay_seconds` (30 s) aan
 staat, en blijft dat `motion_off_delay_minutes` (30 min) nadat hij uitging, mits
@@ -517,7 +519,7 @@ HA-gebruiker (`user_id`) is `manual_setpoint`.
 **Grenzen per ruimte.** Volgorde per grens: de eigen waarde van de ruimte (gezet op
 het ruimteapparaat, bewaard bij de thermostaat), dan een eventuele waarde uit de
 ruimteconfiguratie, dan de centrale waarde (centraal apparaat). Een ruimte zonder
-eigen grens of grensentiteit houdt de centrale comfortgrenzen. Elke band moet
+eigen comfortband houdt de centrale comfortgrenzen. Elke band moet
 voldoen aan verwarmen + 2·hysterese < koelen, beide 5–35 °C.
 
 **Raam.** `window_state`: geen contacten → `not_configured`; geen open contact →
@@ -628,7 +630,12 @@ volgende 24 uur op. `runtime_bookings.py` actualiseert elke vijf minuten en bij
 agenda-statewijzigingen. Alleen start- en eindtijden worden behouden; hele-dagitems
 worden genegeerd, overlappende en aaneengesloten intervallen samengevoegd. Een
 response ouder dan tien minuten of een onbetrouwbare kalenderbron geeft `unknown`
-en valt terug op de gewone aanwezigheidsregeling.
+en kiest eco, of afwezig als het gebouw afwezig is.
+
+De voorbereidingsparameters komen uit de centrale configuratie, tenzij de ruimte
+`use_building_preconditioning = false` gebruikt. Dit betreft maximumtijd, marge
+en beide starttempos. Bestaande expliciete ruimtewaarden blijven lokaal actief;
+nieuwe ruimtes erven standaard centraal. Geleerde tempos blijven per ruimte.
 
 `bookings.plan_booking` schat de tijd tot de comfortband uit de temperatuurafstand
 (tot verwarmingsgrens + hysterese of koelgrens − hysterese), gedeeld door het

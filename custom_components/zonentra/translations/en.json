@@ -41,10 +41,7 @@
           "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch",
           "facade": "Facade of the screens (optional)",
           "calendar_entity": "Room calendar (optional; adaptive heating/cooling before meetings)",
-          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
-          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
-          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
-          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
+          "use_building_preconditioning": "Use central meeting preparation settings"
         }
       },
       "zone_parameters": {
@@ -53,11 +50,13 @@
         "data": {
           "heating_limit": "Heating limit (°C)",
           "cooling_limit": "Cooling limit (°C)",
-          "heating_limit_entity": "Heating limit entity (optional)",
-          "cooling_limit_entity": "Cooling limit entity (optional)",
           "hysteresis": "Temperature hysteresis (°C)",
           "sensor_validation": "Sensor validation (state_based = default; update_based only for periodically reporting sensors)",
-          "max_age_seconds": "Maximum update age for update_based (seconds; ignored by state_based)"
+          "max_age_seconds": "Maximum update age for update_based (seconds; ignored by state_based)",
+          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
+          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
+          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
         }
       }
     },
@@ -98,7 +97,8 @@
           "regulation": "Room regulation",
           "screens": "Screens",
           "forecast": "Weather forecast",
-          "finish": "Save"
+          "finish": "Save",
+          "preconditioning": "Meeting preparation"
         }
       },
       "general": {
@@ -107,8 +107,6 @@
         "data": {
           "outdoor_temperature_entity": "Outdoor temperature sensor (whole building)",
           "outdoor_max_age_seconds": "Maximum outdoor temperature age (seconds; 0 = disabled)",
-          "heating_limit_entity": "Central heating limit entity (optional)",
-          "cooling_limit_entity": "Central cooling limit entity (optional)",
           "hysteresis": "Central temperature hysteresis (°C)",
           "sensor_validation": "Central sensor validation (state_based = default; update_based only for periodically reporting sensors)",
           "max_age_seconds": "Central maximum update age for update_based (seconds; ignored by state_based)"
@@ -173,8 +171,6 @@
           "occupancy_entity": "Motion sensor (optional; without motion the zone uses the eco band)",
           "heating_limit": "Heating limit (°C)",
           "cooling_limit": "Cooling limit (°C)",
-          "heating_limit_entity": "Heating limit entity (optional)",
-          "cooling_limit_entity": "Cooling limit entity (optional)",
           "humidity_entity": "Humidity (optional)",
           "co2_entity": "CO₂ sensor (optional)",
           "contact_entities": "Window and door contacts (optional)",
@@ -189,7 +185,8 @@
           "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
           "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
           "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
-          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "use_building_preconditioning": "Use central meeting preparation settings"
         }
       },
       "group": {
@@ -237,8 +234,6 @@
           "outdoor_max_age_seconds": "Maximum outdoor temperature age (seconds; 0 = disabled)",
           "heating_limit": "Central heating limit (°C)",
           "cooling_limit": "Central cooling limit (°C)",
-          "heating_limit_entity": "Central heating limit entity (optional)",
-          "cooling_limit_entity": "Central cooling limit entity (optional)",
           "hysteresis": "Central temperature hysteresis (°C)",
           "sensor_validation": "Central sensor validation (state_based = default; update_based only for periodically reporting sensors)",
           "max_age_seconds": "Central maximum update age for update_based (seconds; ignored by state_based)",
@@ -264,7 +259,11 @@
           "screen_override_minutes": "Screens: respect manual operation for (minutes)",
           "weather_entity": "Weather forecast (optional; warm/cold days for screens and fewer heat/cool changeovers)",
           "auto_fan_step": "Automatic fan: °C from the target per fan speed step",
-          "sun_entity": "Sun position entity (default sun.sun)"
+          "sun_entity": "Sun position entity (default sun.sun)",
+          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
+          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
+          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
         }
       },
       "zone_settings": {
@@ -290,10 +289,7 @@
           "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch",
           "facade": "Facade of the screens (optional)",
           "calendar_entity": "Room calendar (optional; adaptive heating/cooling before meetings)",
-          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
-          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
-          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
-          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
+          "use_building_preconditioning": "Use central meeting preparation settings"
         }
       },
       "zone_parameters": {
@@ -302,11 +298,23 @@
         "data": {
           "heating_limit": "Heating limit (°C)",
           "cooling_limit": "Cooling limit (°C)",
-          "heating_limit_entity": "Heating limit entity (optional)",
-          "cooling_limit_entity": "Cooling limit entity (optional)",
           "hysteresis": "Temperature hysteresis (°C)",
           "sensor_validation": "Sensor validation (state_based = default; update_based only for periodically reporting sensors)",
-          "max_age_seconds": "Maximum update age for update_based (seconds; ignored by state_based)"
+          "max_age_seconds": "Maximum update age for update_based (seconds; ignored by state_based)",
+          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
+          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
+          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
+        }
+      },
+      "preconditioning": {
+        "title": "Meeting preparation",
+        "description": "Defaults for rooms with a calendar. Disable central meeting preparation in a room to set local values. Learned heating and cooling rates remain separate per room.",
+        "data": {
+          "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
+          "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
+          "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
         }
       }
     },

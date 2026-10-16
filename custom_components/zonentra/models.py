@@ -7,7 +7,13 @@ from dataclasses import field as dataclass_field
 from typing import Any
 
 from .const import KINDS
-from .migration import BAND_FIELDS, LIMIT_FIELDS, PARAMETER_FIELDS, migrate_options
+from .migration import (
+    BAND_FIELDS,
+    LIMIT_FIELDS,
+    PARAMETER_FIELDS,
+    PRECONDITIONING_FIELDS,
+    migrate_options,
+)
 from .observations import STATE_BASED, UPDATE_BASED, VALIDATION_STRATEGIES
 from .presence import PRESENCE_DOMAINS
 from .shading import FACADES
@@ -16,8 +22,6 @@ ZONE_ENTITY_FIELDS = (
     "temperature_entity",
     "occupancy_entity",
     "calendar_entity",
-    "heating_limit_entity",
-    "cooling_limit_entity",
     "humidity_entity",
     "co2_entity",
     "vane_entity",
@@ -45,8 +49,6 @@ class Zone:
     preconditioning_cooling_rate: float = 0.05
     heating_limit: float | None = None
     cooling_limit: float | None = None
-    heating_limit_entity: str | None = None
-    cooling_limit_entity: str | None = None
     humidity_entity: str | None = None
     co2_entity: str | None = None
     contact_entities: tuple[str, ...] = ()
@@ -58,6 +60,7 @@ class Zone:
     sensor_validation: str = STATE_BASED
     use_building_limits: bool = False
     use_building_parameters: bool = False
+    use_building_preconditioning: bool = True
     # 0.10: own eco/away bands when the zone does not use the central limits;
     # None takes the central value.
     eco_heating_limit: float | None = None
@@ -97,12 +100,14 @@ class Equipment:
 
 @dataclass(frozen=True)
 class BuildingSettings:
+    preconditioning_max_minutes: float = 180.0
+    preconditioning_buffer_minutes: float = 10.0
+    preconditioning_heating_rate: float = 0.05
+    preconditioning_cooling_rate: float = 0.05
     outdoor_temperature_entity: str | None = None
     outdoor_max_age_seconds: float = 1800.0
     heating_limit: float | None = None
     cooling_limit: float | None = None
-    heating_limit_entity: str | None = None
-    cooling_limit_entity: str | None = None
     hysteresis: float = 0.3
     max_age_seconds: float = 1800.0
     sensor_validation: str = STATE_BASED
@@ -146,8 +151,8 @@ def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
     values = {}
     own_limits = any(getattr(zone, key) is not None for key in LIMIT_FIELDS)
     if zone.use_building_limits or not own_limits:
-        # 0.10: static limits are set on the device; a zone without its own
-        # limit (entities) keeps the central ones.
+        # Static limits are set on the device; rooms without a local band
+        # inherit the central limits.
         values.update({key: getattr(settings, key) for key in LIMIT_FIELDS})
     values.update(
         {
@@ -158,6 +163,8 @@ def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
     )
     if zone.use_building_parameters:
         values.update({key: getattr(settings, key) for key in PARAMETER_FIELDS})
+    if zone.use_building_preconditioning:
+        values.update({key: getattr(settings, key) for key in PRECONDITIONING_FIELDS})
     return replace(zone, **values)
 
 
@@ -187,8 +194,6 @@ class Building:
                 entity
                 for key in (
                     "outdoor_temperature_entity",
-                    "heating_limit_entity",
-                    "cooling_limit_entity",
                     "presence_entity",
                     "sun_power_entity",
                     "screen_block_entity",
@@ -251,8 +256,6 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         }
     )
     _entity(settings.outdoor_temperature_entity, ("sensor",))
-    for key in ("heating_limit_entity", "cooling_limit_entity"):
-        _entity(getattr(settings, key), ("sensor", "number", "input_number"))
     _range(settings.hysteresis, 0.1, 2)
     _range(settings.max_age_seconds, 0, 86400)
     _range(settings.outdoor_max_age_seconds, 0, 86400)
@@ -283,6 +286,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         raise ValueError("invalid_parameters")
     _validate_sensor_validation(settings)
     _validate_limits(settings)
+    _validate_preconditioning(settings)
     zones, groups, equipment = (
         topology.get(key, []) for key in ("zones", "groups", "equipment")
     )
@@ -293,8 +297,13 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         for item in zones
     )
     for zone in zone_models:
-        if not isinstance(zone.use_building_limits, bool) or not isinstance(
-            zone.use_building_parameters, bool
+        if any(
+            not isinstance(getattr(zone, flag), bool)
+            for flag in (
+                "use_building_limits",
+                "use_building_parameters",
+                "use_building_preconditioning",
+            )
         ):
             raise ValueError("invalid_parameters")
     zone_models = tuple(effective_zone(zone, settings) for zone in zone_models)
@@ -310,8 +319,6 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
                 if field == "vane_entity"
                 else ("binary_sensor",)
                 if field == "occupancy_entity"
-                else ("sensor", "number", "input_number")
-                if field.endswith("limit_entity")
                 else ("sensor",)
             )
             _entity(getattr(zone, field), domains)
@@ -319,10 +326,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
             _entity(entity, ("binary_sensor",))
         if zone.group_id and zone.group_id not in group_ids:
             raise ValueError("invalid_reference")
-        _range(zone.preconditioning_max_minutes, 0, 360)
-        _range(zone.preconditioning_buffer_minutes, 0, 60)
-        _range(zone.preconditioning_heating_rate, 0.005, 0.5)
-        _range(zone.preconditioning_cooling_rate, 0.005, 0.5)
+        _validate_preconditioning(zone)
         _range(zone.weight, 0.1, 10)
         _range(zone.hysteresis, 0.1, 2)
         _range(zone.max_age_seconds, 0, 86400)
@@ -371,6 +375,13 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     )
 
 
+def _validate_preconditioning(config) -> None:
+    _range(config.preconditioning_max_minutes, 0, 360)
+    _range(config.preconditioning_buffer_minutes, 0, 60)
+    _range(config.preconditioning_heating_rate, 0.005, 0.5)
+    _range(config.preconditioning_cooling_rate, 0.005, 0.5)
+
+
 def _validate_bands(config, hysteresis) -> None:
     for band in ("eco", "away"):
         heat = getattr(config, f"{band}_heating_limit")
@@ -392,8 +403,8 @@ def _validate_limits(config) -> None:
     for limit in (config.heating_limit, config.cooling_limit):
         if limit is not None:
             _range(limit, 5, 35)
-    heat = config.heating_limit is not None or config.heating_limit_entity is not None
-    cool = config.cooling_limit is not None or config.cooling_limit_entity is not None
+    heat = config.heating_limit is not None
+    cool = config.cooling_limit is not None
     if heat != cool:
         raise ValueError("invalid_limits")
     if (

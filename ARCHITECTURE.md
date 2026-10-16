@@ -436,7 +436,12 @@ de geïnstalleerde HA-broncode. Geen nieuwe installatie getest met oudere HA-ver
 
 ## Agenda en adaptieve meeting room-voorbereiding
 
-De optionele ruimteagenda is een bron van comfortvraag. `bookings.py` bevat pure
+De optionele ruimteagenda is een bron van comfortvraag. De vier voorbereidingsinstellingen
+(maximumtijd, marge en starttempos) staan centraal in `BuildingSettings`.
+`use_building_preconditioning` kiest per ruimte tussen centrale en lokale waarden,
+onafhankelijk van klimaatgrenzen en sensorparameters. `effective_zone()` lost de
+keuze op; oude expliciete ruimtewaarden blijven bij migratie lokaal actief.
+Agenda-entiteiten en geleerde tempos blijven per ruimte gescheiden. `bookings.py` bevat pure
 normalisatie van afspraakintervallen, de begrensde tijdschatting en het leren van
 verwarmings-/koeltempo per buitenklasse. `runtime_bookings.py` haalt agenda’s op,
 bepaalt voor agendaruimtes de automatische occupancy en houdt timing en leerprofielen bij.

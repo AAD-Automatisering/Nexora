@@ -94,7 +94,7 @@ def test_review_cleared_limit_entities_are_removed_from_zone_parameters():
     assert "cooling_limit_entity" not in second
 
 
-async def test_review_control_local_limit_entities_work(hass):
+async def test_review_removed_local_limit_entities_use_central_limits(hass):
     set_states(hass, "west")
     hass.states.async_set("input_number.heat", "19", CELSIUS)
     hass.states.async_set("input_number.cool", "26", CELSIUS)
@@ -109,10 +109,10 @@ async def test_review_control_local_limit_entities_work(hass):
         ),
     )
     snapshot = central.runtime_data.zone_snapshots["west"]
-    assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (19, 26)
+    assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (22, 24)
     hass.states.async_set("input_number.heat", "18", CELSIUS)
     await hass.async_block_till_done()
-    assert central.runtime_data.zone_snapshots["west"].heating_limit.value == 18
+    assert central.runtime_data.zone_snapshots["west"].heating_limit.value == 22
 
 
 async def test_review_unavailable_cover_is_not_commanded(hass):

@@ -121,6 +121,9 @@ def central_topology(
 
 async def async_setup_entry(hass: HomeAssistant, entry: ZonentraConfigEntry) -> bool:
     """Set up a central, zone or legacy entry."""
+    options = migrate_options(dict(entry.options))
+    if options != dict(entry.options):
+        hass.config_entries.async_update_entry(entry, options=options)
     kind = entry_type(entry)
     if kind == ZONE:
         return await _async_setup_zone(hass, entry)

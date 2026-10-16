@@ -164,30 +164,17 @@ async def test_config_flow_creates_central_then_zone(hass):
             "use_building_parameters": True,
         },
     )
-    assert result["step_id"] == "zone_parameters"
-    # 0.10: fixed limits are set on the zone device; here only limit entities.
-    assert "heating_limit_entity" in result["data_schema"].schema
-    assert "heating_limit" not in result["data_schema"].schema
-    assert "hysteresis" not in result["data_schema"].schema
-    hass.states.async_set("input_number.lab_heat", "19", CELSIUS)
-    hass.states.async_set("input_number.lab_cool", "26", CELSIUS)
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            "heating_limit_entity": "input_number.lab_heat",
-            "cooling_limit_entity": "input_number.lab_cool",
-        },
-    )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"] == {"entry_type": "zone"}
     options = result["result"].options
     assert options["indoor_units"] == ["climate.lab_ac"]
-    assert options["heating_limit_entity"] == "input_number.lab_heat"
+    assert "heating_limit_entity" not in options
+    assert "cooling_limit_entity" not in options
     await hass.async_block_till_done()
     zone = central.runtime_data.building.zones[0]
-    assert (zone.name, zone.heating_limit_entity) == ("Lab", "input_number.lab_heat")
+    assert zone.name == "Lab"
     snapshot = central.runtime_data.zone_snapshots[zone.id]  # Generated ID.
-    assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (19, 26)
+    assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (22, 24)
 
 
 async def test_indoor_unit_cannot_join_two_zones(hass):
@@ -263,6 +250,7 @@ async def test_referenced_group_cannot_be_deleted(hass):
         "regulation",
         "screens",
         "forecast",
+        "preconditioning",
         "group",
         "finish",
     ]

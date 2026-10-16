@@ -158,29 +158,23 @@ def test_fahrenheit_and_optional_context():
     assert calculate_demand(zone, snapshot).demand == "heating_demand"
 
 
-def test_dynamic_limits_and_invalid_band():
+def test_static_limits_and_invalid_band():
     building, sources = scenario()
-    zone = replace(
-        building.zones[0],
-        heating_limit_entity="number.heat",
-        cooling_limit_entity="number.cool",
-    )
-    sources["number.heat"] = SourceState("21", "°C", NOW)
-    sources["number.cool"] = SourceState("24", "°C", NOW)
+    zone = replace(building.zones[0], heating_limit=21, cooling_limit=24)
     assert (
         calculate_demand(zone, collect_zone(building, zone, sources, NOW)).demand
         == "heating_demand"
     )
-    sources["number.cool"] = SourceState("21", "°C", NOW)
+    zone = replace(zone, cooling_limit=21)
     assert (
         calculate_demand(zone, collect_zone(building, zone, sources, NOW)).reason
         == "invalid_limits"
     )
-    sources["number.cool"] = SourceState("unavailable", "°C", NOW)
+    zone = replace(zone, cooling_limit=None)
     assert (
         calculate_demand(zone, collect_zone(building, zone, sources, NOW)).demand
         == "unknown"
-    )  # No static fallback.
+    )
 
 
 def test_weighted_conflicting_demand_example():

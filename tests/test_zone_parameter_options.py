@@ -1,8 +1,15 @@
-"""Visible local parameters can be cleared without deleting dormant settings."""
+"""Device limits replace obsolete entity links; local sensor policy stays editable."""
 
+from copy import deepcopy
+
+import pytest
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.zonentra.const import DOMAIN
+from custom_components.zonentra.config_flow import (
+    building_fields,
+    zone_parameter_fields,
+)
+from custom_components.zonentra.migration import migrate_options
 from tests.test_entry_layout import (
     CELSIUS,
     add_zone,
@@ -13,64 +20,57 @@ from tests.test_entry_layout import (
 
 HEAT = "input_number.west_heat"
 COOL = "input_number.west_cool"
+REMOVED = {"heating_limit_entity": HEAT, "cooling_limit_entity": COOL}
 
 
-async def local_zone(hass, **fields):
+def test_limit_entities_are_absent_from_all_parameter_forms():
+    for limits in (False, True):
+        assert not set(REMOVED).intersection(
+            key.schema for key in building_fields(limits)
+        )
+        for parameters in (False, True):
+            fields = zone_parameter_fields(
+                {"use_building_limits": limits, "use_building_parameters": parameters}
+            )
+            assert not set(REMOVED).intersection(key.schema for key in fields)
+            assert bool(fields) is not parameters
+
+
+@pytest.mark.parametrize(
+    "local", [{}, {"heating_limit": 19}, {"heating_limit": 19, "cooling_limit": 26}]
+)
+def test_old_links_are_removed_without_mutating_input_and_migration_is_idempotent(
+    local,
+):
+    options = {
+        "building": {**REMOVED},
+        "zones": [{"id": "west", "name": "West", **REMOVED, **local}],
+    }
+    original = deepcopy(options)
+    migrated = migrate_options(options)
+    assert migrated == migrate_options(migrated)
+    assert options == original
+    assert migrated["building"] == {"heating_limit": 21, "cooling_limit": 24}
+    zone = migrated["zones"][0]
+    assert not set(REMOVED).intersection(zone)
+    if len(local) == 2:
+        assert zone["heating_limit"] == 19
+        assert zone["cooling_limit"] == 26
+    else:
+        assert zone["use_building_limits"] is True
+
+
+async def test_existing_zone_links_are_cleaned_and_no_longer_observed(hass):
     set_states(hass, "west")
     hass.states.async_set(HEAT, "19", CELSIUS)
     hass.states.async_set(COOL, "26", CELSIUS)
     central = await setup_central(hass)
     zone = await add_zone(
-        hass,
-        zone_options(
-            "west",
-            use_building_limits=False,
-            heating_limit_entity=HEAT,
-            cooling_limit_entity=COOL,
-            **fields,
-        ),
+        hass, zone_options("west", use_building_limits=False, **REMOVED)
     )
-    return central, zone
-
-
-async def parameters(hass, zone, **changes):
-    flow = await hass.config_entries.options.async_init(zone.entry_id)
-    values = {
-        key: value
-        for key, value in zone.options.items()
-        if key
-        not in (
-            "id",
-            "heating_limit_entity",
-            "cooling_limit_entity",
-            "hysteresis",
-            "sensor_validation",
-            "max_age_seconds",
-        )
-    }
-    flow = await hass.config_entries.options.async_configure(
-        flow["flow_id"], {**values, **changes}
-    )
-    assert flow["step_id"] == "zone_parameters"
-    return flow
-
-
-async def test_clearing_local_limit_entities_removes_sources_and_uses_fallback(hass):
-    central, zone = await local_zone(
-        hass, hysteresis=0.4, sensor_validation="update_based", max_age_seconds=600
-    )
-    flow = await parameters(hass, zone)
-    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {})
-    assert flow["type"] == FlowResultType.CREATE_ENTRY
-    await hass.async_block_till_done()
-    assert "heating_limit_entity" not in zone.options
-    assert "cooling_limit_entity" not in zone.options
-    assert zone.options["hysteresis"] == 0.4
-    assert zone.options["sensor_validation"] == "update_based"
-    assert zone.options["max_age_seconds"] == 600
+    assert not set(REMOVED).intersection(zone.options)
     runtime = central.runtime_data
-    assert HEAT not in runtime.building.entity_ids
-    assert COOL not in runtime.building.entity_ids
+    assert not {HEAT, COOL}.intersection(runtime.building.entity_ids)
     snapshot = runtime.zone_snapshots["west"]
     assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (22, 24)
     hass.states.async_set(HEAT, "17", CELSIUS)
@@ -78,67 +78,61 @@ async def test_clearing_local_limit_entities_removes_sources_and_uses_fallback(h
     assert runtime.zone_snapshots["west"].heating_limit.value == 22
 
 
-async def test_hidden_limit_entities_survive_editing_only_local_parameters(hass):
-    _, zone = await local_zone(
-        hass,
-        use_building_parameters=False,
-        hysteresis=0.4,
-        sensor_validation="state_based",
-        max_age_seconds=600,
-    )
-    flow = await parameters(hass, zone, use_building_limits=True)
-    assert "heating_limit_entity" not in flow["data_schema"].schema
-    flow = await hass.config_entries.options.async_configure(
-        flow["flow_id"], {"hysteresis": 0.5}
-    )
-    assert flow["type"] == FlowResultType.CREATE_ENTRY
-    await hass.async_block_till_done()
-    assert zone.options["heating_limit_entity"] == HEAT
-    assert zone.options["cooling_limit_entity"] == COOL
-    assert zone.options["hysteresis"] == 0.5
-    assert "max_age_seconds" not in zone.options
-
-
-async def test_partial_clear_is_validated_before_saving_and_can_be_corrected(hass):
-    _, zone = await local_zone(hass)
-    previous = dict(zone.options)
-    flow = await parameters(hass, zone)
-    flow = await hass.config_entries.options.async_configure(
-        flow["flow_id"], {"heating_limit_entity": HEAT}
-    )
-    assert flow["type"] == FlowResultType.FORM
-    assert flow["errors"] == {"base": "invalid_limits"}
-    assert dict(zone.options) == previous
-    flow = await hass.config_entries.options.async_configure(flow["flow_id"], {})
-    assert flow["type"] == FlowResultType.CREATE_ENTRY
-    await hass.async_block_till_done()
-    assert "heating_limit_entity" not in zone.options
-    assert "cooling_limit_entity" not in zone.options
-
-
-async def test_new_zone_can_clear_a_limit_after_validation_error(hass):
-    set_states(hass, "west")
-    hass.states.async_set(HEAT, "19", CELSIUS)
+@pytest.mark.parametrize("static", [True, False])
+async def test_existing_central_links_are_cleaned_on_reload(hass, static):
     central = await setup_central(hass)
-    flow = await hass.config_entries.flow.async_init(DOMAIN, context={"source": "user"})
-    flow = await hass.config_entries.flow.async_configure(
-        flow["flow_id"], {"next_step_id": "zone"}
+    settings = dict(central.options["building"])
+    if not static:
+        settings.pop("heating_limit")
+        settings.pop("cooling_limit")
+    hass.config_entries.async_update_entry(
+        central,
+        options={**central.options, "building": {**settings, **REMOVED}},
     )
-    flow = await hass.config_entries.flow.async_configure(
+    assert await hass.config_entries.async_reload(central.entry_id)
+    await hass.async_block_till_done()
+    assert not set(REMOVED).intersection(central.options["building"])
+    assert not {HEAT, COOL}.intersection(central.runtime_data.building.entity_ids)
+    settings = central.runtime_data.building.settings
+    assert (settings.heating_limit, settings.cooling_limit) == (
+        (22, 24) if static else (21, 24)
+    )
+
+
+async def test_local_parameter_edits_retain_device_limits_without_entity_step(hass):
+    set_states(hass, "west")
+    central = await setup_central(hass)
+    zone = await add_zone(
+        hass,
+        zone_options(
+            "west",
+            use_building_limits=False,
+            use_building_parameters=False,
+            heating_limit=19,
+            cooling_limit=26,
+            hysteresis=0.4,
+        ),
+    )
+    runtime = central.runtime_data
+    runtime.set_thermostat("west", heating_limit=20, cooling_limit=25)
+    flow = await hass.config_entries.options.async_init(zone.entry_id)
+    flow = await hass.config_entries.options.async_configure(
         flow["flow_id"],
         {
             "name": "West",
             "temperature_entity": "sensor.west_temperature",
             "use_building_limits": False,
-            "use_building_parameters": True,
+            "use_building_parameters": False,
         },
     )
-    flow = await hass.config_entries.flow.async_configure(
-        flow["flow_id"], {"heating_limit_entity": HEAT}
+    assert flow["step_id"] == "zone_parameters"
+    assert not set(REMOVED).intersection(flow["data_schema"].schema)
+    flow = await hass.config_entries.options.async_configure(
+        flow["flow_id"], {"hysteresis": 0.5}
     )
-    assert flow["errors"] == {"base": "invalid_limits"}
-    flow = await hass.config_entries.flow.async_configure(flow["flow_id"], {})
     assert flow["type"] == FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
-    assert "heating_limit_entity" not in flow["result"].options
-    assert HEAT not in central.runtime_data.building.entity_ids
+    assert zone.options["hysteresis"] == 0.5
+    assert zone.options["heating_limit"] == 19
+    snapshot = central.runtime_data.zone_snapshots["west"]
+    assert (snapshot.heating_limit.value, snapshot.cooling_limit.value) == (20, 25)

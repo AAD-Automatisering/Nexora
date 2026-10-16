@@ -94,7 +94,7 @@ def test_shared_weather_uses_building_age_for_all_rooms(topology):
     assert all(s.outdoor_temperature.quality == "stale" for s in snapshots)
 
 
-def test_dynamic_central_limit_failure_has_no_local_fallback(topology):
+def test_removed_central_limit_entity_uses_configured_static_limits(topology):
     topology = central_topology(topology)
     topology["building"].update(heating_limit_entity="number.central_heat")
     topology["zones"][0].update(heating_limit=18, cooling_limit=28)
@@ -105,8 +105,9 @@ def test_dynamic_central_limit_failure_has_no_local_fallback(topology):
         "number.central_heat": SourceState("unavailable", "°C", NOW),
     }
     snapshot = collect_zone(building, zone, sources, NOW)
-    assert calculate_demand(zone, snapshot).demand == "unknown"
-    assert snapshot.heating_limit.quality == "unavailable"
+    assert calculate_demand(zone, snapshot).demand == "heating_demand"
+    assert snapshot.heating_limit.value == 21
+    assert "number.central_heat" not in building.entity_ids
 
 
 def test_migration_moves_unique_weather_and_keeps_room_policy(topology):

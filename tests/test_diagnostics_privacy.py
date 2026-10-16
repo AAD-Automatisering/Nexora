@@ -53,7 +53,9 @@ async def test_central_and_zone_exports_redact_sources_and_equipment_keys(hass):
         assert "**REDACTED**" in encoded
     central_data = await async_get_config_entry_diagnostics(hass, central)
     building = central_data["configuration"]["options"]["building"]
-    assert all(building[key] == "**REDACTED**" for key in sources)
+    removed = {"heating_limit_entity", "cooling_limit_entity"}
+    assert removed.isdisjoint(building)
+    assert all(building[key] == "**REDACTED**" for key in sources.keys() - removed)
     zone_data = await async_get_config_entry_diagnostics(hass, zone)
     assert zone_data["room_regulation"][0]["equipment_id"] == "**REDACTED**"
     assert zone_data["room_regulation"][0]["status"] == "simulation"

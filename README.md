@@ -31,7 +31,8 @@ De runtime heeft geen aanvullende Python-requirements en vereist geen VTherm.
 3. Ga naar **Instellingen → Apparaten & diensten → Integratie toevoegen → Zonentra**
    en kies **Centrale configuratie** (eenmalig): gebouwnaam en buitentemperatuursensor.
 4. Open bij de centrale configuratie **Configureren**: een menu met **Algemeen**,
-   **Aanwezigheid**, **Ruimteregeling**, **Zonwering**, **Weersverwachting** en de
+   **Aanwezigheid**, **Ruimteregeling**, **Zonwering**, **Weersverwachting**,
+   **Afspraakvoorbereiding** en de
    buitenunitgroepen. Pas per onderwerp aan en kies **Opslaan**.
 5. Voeg daarna per ruimte opnieuw **Zonentra** toe en kies **Ruimte**: sensor,
    binnenunits (bestaande climate-entiteiten), buitenunitgroep en optionele context.
@@ -260,7 +261,8 @@ P1/PV en weeroptimalisatie volgen in latere fases.
 ## Klimaatintelligentie configureren
 
 Begin via **Configureren** bij de centrale configuratie (onderwerpen **Algemeen**,
-**Aanwezigheid**, **Ruimteregeling**, **Zonwering** en **Weersverwachting**; de vaste
+**Aanwezigheid**, **Ruimteregeling**, **Zonwering**, **Weersverwachting** en
+**Afspraakvoorbereiding**; de vaste
 grenzen staan op het centrale apparaat):
 
 | Centrale instelling | Gebruik / voorgestelde beginwaarde |
@@ -268,7 +270,6 @@ grenzen staan op het centrale apparaat):
 | Buitentemperatuursensor | Eén sensor voor het hele gebouw, met °C of °F |
 | Maximale leeftijd buitentemperatuur | 1800 s; onafhankelijk van de ruimtesensoren |
 | Verwarmingsgrens / koelgrens | 21 / 24 °C; analysegrenzen, geen apparaat-setpoints |
-| Grensentiteiten | Optionele sensor/number/input_number met °C/°F; gaan vóór vaste grenzen |
 | Temperatuurhysterese | 0,3 °C; ruimte tussen grenzen groter dan tweemaal hysterese |
 | Sensorvalidatie | `state_based` (standaard): geldige state is bruikbaar, geen leeftijdcontrole. `update_based`: alleen voor bronnen die aantoonbaar periodiek rapporteren |
 | Maximale updateleeftijd | 1800 s; alleen actief bij `update_based` (moet dan > 0 zijn) |
@@ -287,7 +288,7 @@ Bewerk daarna een ruimte via **Opties → Ruimte toevoegen of bewerken**:
 | Ruimte-instelling | Gebruik |
 |---|---|
 | Ruimtetemperatuursensor | De externe KNX-temperatuursensor |
-| Centrale klimaatgrenzen gebruiken | Standaard aan. Uit: de volgende stap vraagt alleen om grensentiteiten voor deze ruimte. Vaste grenzen stel je sinds 0.10 in op het apparaat (zie hieronder) |
+| Centrale klimaatgrenzen gebruiken | Standaard aan. Uit: de ruimte gebruikt eigen grenzen, instelbaar op het ruimteapparaat (zie hieronder) |
 | Centrale meetparameters gebruiken | Standaard aan; neemt hysterese, sensorvalidatie en maximale updateleeftijd over |
 | Ruimteweging | Standaard 1; belangrijkere ruimtes kunnen zwaarder meewegen |
 | Buitenunitgroep | Optionele standaard voor HVAC-apparatuur in deze ruimte |
@@ -360,8 +361,7 @@ ruimte eenmalig de centrale grenzen als eigen startwaarden; daarna wijzig je ze 
 het ruimteapparaat en volgen ze het centrale apparaat niet meer. Weer aanzetten wist
 de eigen grenzen.
 
-Een band moet geldig blijven: verwarmen + 2 × hysterese < koelen. Grensentiteiten
-(`input_number` e.d.) stel je nog wel in de wizard in.
+Een band moet geldig blijven: verwarmen + 2 × hysterese < koelen.
 
 ### Weersverwachting (0.12)
 
@@ -430,12 +430,23 @@ Per zonwering (een `cover` met positie) beslist Zonentra, in deze volgorde:
   de laatste commando's; de schakelaar **Zonweringregeling** (standaard uit =
   simulatie: de zonwering beweegt dan niet, de sensor geeft alleen advies).
 
+Externe entiteiten voor verwarmings- en koelgrenzen worden niet meer gebruikt.
+Oude koppelingen worden bij het laden opgeruimd; stel grenzen in op de Zonentra-apparaten.
+
 ### Meeting rooms voorbereiden met een agenda
 
 Koppel bij **Configureren** van elke meeting room de eigen **Ruimteagenda**
 (`calendar`-entiteit). Zet **Ruimteregeling** voor die ruimte aan en laat de
 thermostaat verwarmen en/of koelen toestaan. De voorbereiding gebruikt de
 comfortband die al voor die ruimte geldt; je hoeft geen losse HA-automation te maken.
+
+Stel de maximale voorbereidingstijd, veiligheidsmarge en starttempos centraal in
+via **Configureren → Afspraakvoorbereiding**. Nieuwe ruimtes gebruiken deze waarden
+standaard. Zet bij een ruimte **Gebruik centrale instellingen voor afspraakvoorbereiding**
+uit om in de vervolgstap eigen waarden in te stellen. Bij terugschakelen naar centraal
+blijven lokale waarden bewaard voor later gebruik. Bestaande expliciete ruimtewaarden
+blijven bij de overgang lokaal actief; ruimtes zonder eigen waarden volgen centraal.
+Agenda-entiteiten en geleerde tempos blijven altijd per ruimte gescheiden.
 
 Zonentra leest de afspraken voor de komende 24 uur en bepaalt per ruimte wanneer
 het verwarmen of koelen moet beginnen. De schatting gebruikt het verschil tussen
@@ -458,7 +469,7 @@ eerder dan bij zacht weer; bij hitte kan koelen langer duren.
   5–30 minuten, zonder open raam, handmatige apparaat-override of groepsblokkade.
   Geleerde tempo’s blijven bewaard na een HA-herstart.
 - **Grenzen:** standaard 10 minuten marge en maximaal 180 minuten voorbereiding,
-  per ruimte instelbaar. Voorbeeld: 2,3 °C opwarming met een geleerd wintertempo
+  centraal instelbaar met een afwijking per ruimte. Voorbeeld: 2,3 °C opwarming met een geleerd wintertempo
   van 0,025 °C/min vraagt ongeveer 102 minuten inclusief marge; bij 0,1 °C/min
   in zacht weer ongeveer 33 minuten. De maximale voorbereiding begrenst dit.
 - **Voorbereiding en afspraak:** voorbereiding en lopende afspraken vragen comfort,
