@@ -5,11 +5,10 @@
   ``heat_cool`` (target range = the comfort band; both) and ``off`` (the room
   asks for nothing). A mode never forces the outdoor unit: the group weighs
   all rooms, and a heat-only room waits while its group cools.
-* Like the room's own indoor units (the thermostat replaces them in HomeKit and
-  dashboards): when every unit offers ``auto``, the both-ways mode is shown
-  as ``auto``; ``dry`` and ``fan_only`` and the fan speeds that every unit
-  supports are offered too. With room regulation on, Zonentra runs the units
-  in dry / fan_only and passes the fan speed on.
+* When every indoor unit offers ``auto``, the both-ways mode is shown as
+  ``auto``; supported ``dry`` and ``fan_only`` modes are offered too. Fan speed
+  is handled by room regulation; the thermostat advertises no fan-speed
+  capability, so HomeKit does not create an additional fan control.
 * Presets: ``comfort`` (presence and motion may lower it to eco/away) or a
   fixed eco / away. The thermostat shows the band that applies now: its
   preset becomes away when the building is absent and eco without motion, and
@@ -29,7 +28,6 @@ from homeassistant.components.climate import (
 from homeassistant.const import ATTR_TEMPERATURE, UnitOfTemperature
 
 from .entity import ZoneEntity, zone_context
-from .roomstate import AUTO_FAN, fan_names, thermostat_fan
 from .thermostat import PRESETS, UNIT_MODES, single_target
 
 BASE_FEATURES = (
@@ -60,6 +58,7 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
     _attr_name = None  # The thermostat carries the zone (device) name.
     _attr_translation_key = "thermostat"
     _attr_icon = "mdi:home-thermometer"
+    _attr_supported_features = BASE_FEATURES
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_preset_modes = list(PRESETS)
     _attr_min_temp = 5
@@ -99,34 +98,6 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
         if mode == "heat_cool":
             return self._both(self._options()[0])
         return HVACMode(mode)
-
-    @property
-    def fan_modes(self) -> list[str] | None:
-        if not self.thermostat.fan_control:
-            return None  # 0.13.5: the fan is left to the room controller.
-        return self._fan_modes()
-
-    def _fan_modes(self) -> list[str] | None:
-        """``auto`` plus the units' speeds under Home Assistant's standard
-        names (low, middle, medium, high), so HomeKit shows a fan with a speed
-        slider. ``auto`` is the units' own or Zonentra's automatic fan."""
-        names = list(fan_names(self._options()[1]))
-        return [AUTO_FAN, *names] if names else None
-
-    @property
-    def fan_mode(self) -> str | None:
-        if not self.fan_modes:
-            return None
-        # 0.13.5: none chosen is the automatic fan.
-        return thermostat_fan(
-            self.runtime.fan_choice(self._zone_id), self._options()[1]
-        )
-
-    @property
-    def supported_features(self) -> ClimateEntityFeature:
-        if self.fan_modes:
-            return BASE_FEATURES | ClimateEntityFeature.FAN_MODE
-        return BASE_FEATURES
 
     @property
     def preset_mode(self) -> str:
@@ -272,9 +243,6 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         self._change(hvac_mode=self._stored(hvac_mode))
-
-    async def async_set_fan_mode(self, fan_mode: str) -> None:
-        self._change(fan_mode=fan_mode)
 
     async def async_set_preset_mode(self, preset_mode: str) -> None:
         self._change(preset=preset_mode)

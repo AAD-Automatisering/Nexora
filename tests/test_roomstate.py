@@ -11,7 +11,6 @@ from custom_components.zonentra.roomstate import (
     fan_names,
     fan_speeds,
     safety_state,
-    thermostat_fan,
     unit_fan,
     update_trend,
     vane_command,
@@ -191,9 +190,6 @@ def test_fan_names_both_ways():
     assert unit_fan("75%", fans) == "75%"  # A stored unit speed still works.
     assert unit_fan("turbo", fans) is None
     assert unit_fan(None, fans) is None
-    assert thermostat_fan("25%", fans) == "low"
-    assert thermostat_fan("off", fans) == "off"
-    assert thermostat_fan(None, fans) is None
 
 
 def test_auto_fan_without_speeds():

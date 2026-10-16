@@ -53,7 +53,7 @@ Wachttijden, apparaatbeschikbaarheid en beveiligingen blijven gelden.
 
 | Functie | Gebruik |
 |---|---|
-| Thermostaat | Per ruimte temperatuur, modus en eventueel ventilator kiezen |
+| Thermostaat | Per ruimte temperatuur en modus kiezen; zonder ventilatorsnelheidsbediening |
 | Aanwezigheid | Gebouwaanwezigheid en ruimtebeweging kiezen comfort, eco of afwezig |
 | Raamcontact | Een open raam stopt ruimteregeling na de ingestelde vertraging |
 | Ventilator | Automatisch bij ingeschakelde ruimteregeling; per ruimte uit te zetten |
@@ -90,9 +90,11 @@ niet bevestigde stabiele doelstand begint na een herstart opnieuw te tellen.
 
 Werk bij via HACS, herstart Home Assistant en herlaad de browser.
 
-- **0.13.6 / HomeKit:** reset bestaande Zonentra-thermostaten eenmalig met
-  `homekit.reset_accessory` zodat modi en ventilatorfuncties opnieuw worden ingelezen.
-  Dit is ook nodig wanneer je de automatische ventilatorfunctie wijzigt.
+- **HomeKit:** Zonentra-thermostaten bieden geen ventilatorsnelheidsbediening meer
+  aan. Na bijwerken en herstart kun je bestaande thermostaten eenmalig met
+  `homekit.reset_accessory` resetten om een eerder aangemaakte ventilatorbediening
+  te verwijderen. De automatische ventilatorregeling en de schakelaar daarvoor
+  blijven beschikbaar in Home Assistant.
 - **Vóór 0.7:** houd rekening met de standaard ingeschakelde actieve standregeling;
   zet bestaande automations voor de groepsmodus uit voordat Zonentra die overneemt.
 - **Vóór 0.6:** een oud enkel configuratie-item blijft alleen simuleren. Noteer de

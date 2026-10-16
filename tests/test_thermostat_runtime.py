@@ -3,6 +3,7 @@
 from datetime import timedelta
 
 import pytest
+from homeassistant.components.climate import ClimateEntityFeature
 from homeassistant.core import Context
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
@@ -406,17 +407,9 @@ async def test_thermostat_offers_the_units_options(hass, freezer):
         "fan_only",
         "off",
     ]
-    # Plus Zonentra's automatic fan (0.10), as the units have none of their own;
-    # the speeds under HA's standard names for HomeKit (0.13.2).
-    assert thermostat.attributes["fan_modes"] == [
-        "auto",
-        "low",
-        "middle",
-        "medium",
-        "high",
-    ]
-    # 0.13.5: no fan mode chosen is Zonentra's automatic fan.
-    assert thermostat.attributes["fan_mode"] == "auto"
+    # Fan-speed control is not advertised to HA/HomeKit.
+    assert "fan_modes" not in thermostat.attributes
+    assert "fan_mode" not in thermostat.attributes
     assert runtime.thermostat("west").hvac_mode == "heat_cool"  # Stored as such.
 
     # Fan only with room regulation: after restart protection the unit runs
@@ -445,7 +438,7 @@ async def test_thermostat_offers_the_units_options(hass, freezer):
     assert runtime.thermostat("west").fan_until is not None
     await later(hass, freezer, minutes=31)
     assert runtime.thermostat("west").fan_mode is None  # Automatic again.
-    assert hass.states.get(climate_id).attributes["fan_mode"] == "auto"
+    assert "fan_mode" not in hass.states.get(climate_id).attributes
 
 
 async def test_manual_target_is_temporary(hass, freezer):
@@ -501,19 +494,36 @@ async def test_reload_keeps_memory_and_running_units(hass, freezer):
 
 async def test_thermostat_keeps_its_features_while_a_unit_is_unavailable(hass, freezer):
     """0.13.6: HomeKit fixes an accessory's features when it starts; the
-    thermostat keeps the units' last known modes and fan speeds."""
+    thermostat keeps its last known modes without exposing fan speeds."""
     central, zone = await office(hass, freezer)
     await unit(hass, "off", **KNX)
     climate_id = entity(hass, "climate", f"{zone.entry_id}_thermostat")
     before = hass.states.get(climate_id).attributes
-    assert before["fan_modes"] == ["auto", "low", "middle", "medium", "high"]
+    assert "fan_modes" not in before
     hass.states.async_set(UNIT, "unavailable", {})
     await hass.async_block_till_done()
     after = hass.states.get(climate_id).attributes
-    assert after["fan_modes"] == before["fan_modes"]
+    assert "fan_modes" not in after
     assert after["hvac_modes"] == before["hvac_modes"]
     assert after["supported_features"] == before["supported_features"]
     # Remembered with the thermostat: also right after a restart.
     stored = central.runtime_data.thermostat("west")
     assert "fan_only" in stored.unit_hvac_modes
     assert stored.unit_fan_modes == ("off", "25%", "50%", "75%", "100%")
+
+
+async def test_fan_speed_is_never_exposed_even_when_automatic_fan_is_enabled(
+    hass, freezer
+):
+    central, zone = await office(hass, freezer)
+    await unit(hass, "off", **KNX)
+    climate_id = entity(hass, "climate", f"{zone.entry_id}_thermostat")
+    expected = hass.states.get(climate_id).attributes["supported_features"]
+    for enabled in (False, True):
+        central.runtime_data.set_thermostat("west", fan_control=enabled)
+        await hass.async_block_till_done()
+        attributes = hass.states.get(climate_id).attributes
+        assert "fan_modes" not in attributes
+        assert "fan_mode" not in attributes
+        assert not attributes["supported_features"] & ClimateEntityFeature.FAN_MODE
+        assert attributes["supported_features"] == expected

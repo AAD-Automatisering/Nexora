@@ -546,7 +546,7 @@ minimale aantijd; er gaat niets aan tot het raam dicht is.
 onveranderde waarde wordt na 600 s opnieuw bemonsterd, zodat de helling terugloopt
 naar nul. Alleen in het geheugen.
 
-**Automatische ventilator.** Geen gekozen ventilatorstand op de thermostaat = `auto`
+**Automatische ventilator.** Geen opgeslagen ventilatorstand = `auto`
 (0.13.5); een vaste stand geldt `manual_override_duration_minutes` (`fan_until`).
 Zonentra's eigen automaat alleen als de units zelf geen `auto` hebben. Afstand =
 verwarmen: grens + hysterese − T; koelen: T − (grens − hysterese). Stand = de
@@ -554,11 +554,14 @@ verwarmen: grens + hysterese − T; koelen: T − (grens − hysterese). Stand =
 0,5 °C) (zonder `off`), begrensd op de hoogste; zonder
 verwarmen of koelen de laagste. Gestuurd via `set_fan_mode`, eenmaal per gekozen
 stand en hooguit eens per `setpoint_interval_seconds`.
-**Ventilatornamen (0.13.2).** `fan_names`: de 1–4 echte standen van de units (zonder
-`off`/`auto`) heten op de thermostaat `low`, (`middle`), (`medium`), `high`, zodat
-HomeKit Bridge er een ventilator met snelheid van maakt; meer standen houden hun
-naam. `unit_fan` vertaalt terug naar de stand van de unit (een opgeslagen oude
-unitnaam werkt nog), `thermostat_fan` omgekeerd.
+**Ventilatorbediening.** De Zonentra-climate-entiteit publiceert geen `FAN_MODE`,
+`fan_mode` of `fan_modes`, zodat HomeKit geen ventilatorsnelheidsbediening aanmaakt.
+Ook de snelheidskeuze op de HA-thermostaat vervalt. De automatische regeling,
+`fan_control`-schakelaar en bestaande tijdelijke interne keuzes blijven werken.
+`fan_names` en `unit_fan` ondersteunen de interne vertaling van bestaande
+opgeslagen keuzes naar unitstanden.
+Een eerder in HomeKit aangemaakte ventilatorservice kan een eenmalige
+`homekit.reset_accessory` van de thermostaat vereisen.
 
 **Lamel.** Draaiende units van de ruimte in `cool`/`dry` → koelstand, in `heat` →
 verwarmstand (`vane_mode`). Via `select.select_option`, `number.set_value` of `switch.turn_on/turn_off`

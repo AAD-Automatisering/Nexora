@@ -197,11 +197,3 @@ def unit_fan(mode: str | None, fan_modes: tuple[str, ...]) -> str | None:
     if mode is None or mode in fan_modes:
         return mode
     return fan_names(fan_modes).get(mode)
-
-
-def thermostat_fan(mode: str | None, fan_modes: tuple[str, ...]) -> str | None:
-    """The thermostat fan name for a unit speed (or a stored old unit name)."""
-    if mode is None:
-        return None
-    names = {speed: name for name, speed in fan_names(fan_modes).items()}
-    return names.get(mode, mode)
