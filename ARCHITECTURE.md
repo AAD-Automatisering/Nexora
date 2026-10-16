@@ -439,7 +439,15 @@ de geïnstalleerde HA-broncode. Geen nieuwe installatie getest met oudere HA-ver
 De optionele ruimteagenda is een bron van comfortvraag. `bookings.py` bevat pure
 normalisatie van afspraakintervallen, de begrensde tijdschatting en het leren van
 verwarmings-/koeltempo per buitenklasse. `runtime_bookings.py` haalt agenda’s op,
-combineert dit met de bestaande occupancy en houdt timing en leerprofielen bij.
+bepaalt voor agendaruimtes de automatische occupancy en houdt timing en leerprofielen bij.
+Een actieve voorbereiding of afspraak vraagt comfort, ook bij gebouwafwezigheid.
+Bij bewezen gebouwafwezigheid stopt comfort 15 minuten na de afspraakstart
+(`booking_no_arrival`); latere aanwezigheid hervat comfort tijdens de afspraak.
+De aankomstdeadline is een runtime-timer en wordt uit de afspraakstart berekend,
+zodat refreshes en reloads de marge niet verlengen. Onbekende of niet ingestelde
+gebouw-aanwezigheid activeert deze afwezigheidsregel niet.
+Buiten dit venster gebruiken deze ruimtes afwezig bij gebouwafwezigheid en anders
+eco, ook bij beweging of een onbruikbare agenda.
 De bestaande demand-, groeps- en HVAC-planners voeren de uiteindelijke regeling uit.
 Een afspraak schakelt geen bediening of beveiliging in.
 

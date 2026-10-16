@@ -647,13 +647,23 @@ Na twee samples wordt het betreffende geleerde tempo gebruikt. Een mode- of
 buitenklassewisseling start een nieuw meetinterval. Geleerde profielen worden
 opgeslagen; lopende meetankers beginnen na een reload opnieuw.
 
-Tijdens `preparing` en `meeting` vraagt de agenda comfort, ook vóórdat gebouwpresentie
-actief wordt. Een gestart voorbereidingsvenster blijft tot het einde actief als de
+Tijdens `preparing` en `meeting` vraagt de agenda comfort, ook als gebouwpresentie
+`absent` is, zodat voorbereiding vóór aankomst mogelijk blijft. Bij `meeting`
+en bewezen gebouwafwezigheid geldt vanaf `start + 15 minuten` weer Afwezig
+(`booking_no_arrival`). De runtime plant ook deze deadline in, begrensd door het
+afspraakeinde. Latere aanwezigheid hervat comfort; opnieuw afwezig na de deadline
+geeft direct Afwezig. De marge wordt niet herstart bij een refresh of reload.
+Onbekende of niet ingestelde gebouw-aanwezigheid wordt niet als afwezig behandeld.
+Overlappende en aansluitende afspraken gelden als één aaneengesloten venster;
+de aankomstmarge begint bij de start van dat venster.
+Een gestart voorbereidingsvenster blijft tot het einde actief als de
 ruimte zijn temperatuur al bereikt; een aangepaste maximumtijd blijft begrenzen.
 De forecast-startmarges worden voor een actieve afspraak niet toegepast. Expliciete
 thermostaatinstellingen en alle bestaande apparaat-/groepsblokkades blijven leidend.
-Zonder beweging gebruikt een ongereserveerde ruimte met bruikbare agenda eco;
-gebouwafwezigheid blijft dan away. Timers evalueren start en einde zonder nieuw
+Buiten `preparing` en `meeting` gebruikt een agendaruimte eco, onafhankelijk van
+beweging, tenzij het gebouw afwezig is. Ook bij een onbekende, verouderde of onbruikbare agenda
+geldt eco (`calendar_unknown`) of de afwezig-band bij gebouwafwezigheid; een herstelde agenda hervat de actuele planning.
+Expliciete presets Eco en Afwezig blijven gelden. Timers evalueren start en einde zonder nieuw
 sensorevent. `BookingSensor` toont alleen planning en schatting, geen afspraakinhoud.
 
 ## Herstel en actieve timing na de vervolg-review

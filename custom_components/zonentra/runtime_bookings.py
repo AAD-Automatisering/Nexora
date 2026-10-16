@@ -22,6 +22,7 @@ from .temperature import convert_temperature
 CALENDAR_REFRESH_MINUTES = 5
 CALENDAR_MAX_AGE_MINUTES = 10
 CALENDAR_HORIZON_HOURS = 24
+BOOKING_ARRIVAL_GRACE_MINUTES = 15
 
 
 class BookingRuntimeMixin:
@@ -152,18 +153,26 @@ class BookingRuntimeMixin:
             self._booking_checks.append(
                 updated + timedelta(minutes=CALENDAR_MAX_AGE_MINUTES)
             )
+        if plan.status == "meeting" and occupancy.presence == "absent":
+            arrival_deadline = plan.start + timedelta(
+                minutes=BOOKING_ARRIVAL_GRACE_MINUTES
+            )
+            if now >= arrival_deadline:
+                return replace(occupancy, reason="booking_no_arrival")
+            self._booking_checks.append(min(arrival_deadline, plan.end))
         if plan.active:
-            # Bookings need comfort before people arrive, even if the building
-            # presence is still absent. Explicit thermostat off/away wins later.
+            # Prepare before arrival even while the building is absent.
+            # Explicit thermostat off/eco/away still takes precedence later.
             return replace(occupancy, mode="comfort", reason=f"booking_{plan.status}")
-        if (
-            plan.status != "unknown"
-            and occupancy.mode == "comfort"
-            and occupancy.motion == "not_configured"
-        ):
-            # A room with a calendar but no motion sensor uses eco between meetings.
-            return replace(occupancy, mode="eco", reason="no_booking")
-        return occupancy
+        if occupancy.presence == "absent":
+            return occupancy
+        # Calendar rooms use eco unless a usable booking requests comfort.
+        # Motion/presence remain observable but do not activate an unbooked room.
+        return replace(
+            occupancy,
+            mode="eco",
+            reason="calendar_unknown" if plan.status == "unknown" else "no_booking",
+        )
 
     def _booking_outdoor_temperature(self):
         if self.building.settings.outdoor_temperature_entity:

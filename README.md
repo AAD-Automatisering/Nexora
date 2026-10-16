@@ -461,11 +461,15 @@ eerder dan bij zacht weer; bij hitte kan koelen langer duren.
   per ruimte instelbaar. Voorbeeld: 2,3 °C opwarming met een geleerd wintertempo
   van 0,025 °C/min vraagt ongeveer 102 minuten inclusief marge; bij 0,1 °C/min
   in zacht weer ongeveer 33 minuten. De maximale voorbereiding begrenst dit.
-- **Voorbereiding en afspraak:** de comfortband geldt ook als de gebouw-aanwezigheid
-  nog afwezig meldt. Na afloop volgt de ruimte weer aanwezigheid en beweging.
-  Zonder bewegingssensor gebruikt een ruimte met agenda tussen afspraken eco
-  (of afwezig als het gebouw afwezig is). Met beweging blijft ook ongepland
-  gebruik mogelijk.
+- **Voorbereiding en afspraak:** voorbereiding en lopende afspraken vragen comfort,
+  ook als het gebouw nog afwezig meldt (bijvoorbeeld zolang het alarm aanstaat).
+  Blijft het gebouw afwezig, dan stopt comfort 15 minuten na de afspraakstart
+  en geldt weer Afwezig. Bij latere aankomst tijdens de afspraak hervat Comfort;
+  bij opnieuw afwezig worden na die marge geldt direct weer Afwezig. Een onbekende
+  of niet ingestelde gebouw-aanwezigheid geldt niet als bewezen afwezigheid.
+  Buiten het afspraak-/voorbereidingsvenster geldt afwezig bij gebouw-afwezigheid
+  en anders eco, ongeacht beweging. Na afloop of annulering volgt de ruimte weer die basisstand. Dit geldt bij de automatische
+  regeling (thermostaatpreset Comfort); expliciete presets Eco en Afwezig blijven gelden.
 - **Actualiseren:** agenda’s worden elke vijf minuten en bij een agenda-statewijziging
   opnieuw gelezen. Voorbereidingsstart, afspraakstart en einde krijgen daarnaast
   een timer. Annuleringen en verschuivingen tellen bij de volgende agenda-update
@@ -474,7 +478,8 @@ eerder dan bij zacht weer; bij hitte kan koelen langer duren.
 - **Bediening en blokkades:** een uitgeschakelde ruimteregeling, thermostaat of
   groepsstop wordt door de agenda niet ingeschakeld. Raambeveiliging,
   herstartvertragingen en de gezamenlijke buitenunitmodus blijven gelden. Bij een
-  niet bruikbare agenda valt de ruimte terug op de gewone aanwezigheidsregeling.
+  niet bruikbare agenda gebruikt de ruimte eco (afwezig bij gebouw-afwezigheid); de voorbereidingssensor meldt
+  dan `unknown`. Na herstel wordt de actuele planning opnieuw gevolgd.
 
 De sensor **Afspraakvoorbereiding** op het ruimteapparaat toont de status, de
 volgende afspraak, berekende voorbereidingsstart, voorbereidingstijd en of het

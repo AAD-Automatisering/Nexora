@@ -117,36 +117,117 @@ async def test_winter_prepares_earlier_than_mild_weather(hass):
     assert sensor.attributes["learned_rate"] is False
 
 
+@pytest.mark.parametrize("absent", [False, True])
 async def test_preparation_and_meeting_boundaries_without_temperature_events(
-    hass, freezer
+    hass, freezer, absent
 ):
-    central, _, _ = await office(hass, temperature="21", start=45)
-    runtime = central.runtime_data
-    assert runtime.booking_plans["west"].status == "scheduled"
-    await later(hass, freezer, minutes=10)
-    assert runtime.booking_plans["west"].status == "preparing"
-    await later(hass, freezer, minutes=35)
-    assert runtime.booking_plans["west"].status == "meeting"
-    await later(hass, freezer, minutes=60)
-    assert runtime.booking_plans["west"].status == "idle"
-    assert runtime.zone_bands["west"][0] == "eco"
-
-
-async def test_booking_overrides_absence_until_end_and_cancellation_releases(hass):
-    hass.states.async_set("input_boolean.building_present", "off")
+    hass.states.async_set("input_boolean.building_present", "off" if absent else "on")
     central, _, _ = await office(
-        hass, start=20, presence="input_boolean.building_present"
+        hass, temperature="21", start=45, presence="input_boolean.building_present"
     )
     runtime = central.runtime_data
+    assert runtime.booking_plans["west"].status == "scheduled"
+    assert runtime.zone_bands["west"][0] == ("away" if absent else "eco")
+    await later(hass, freezer, minutes=10)
+    assert runtime.booking_plans["west"].status == "preparing"
     assert runtime.zone_bands["west"] == ("comfort", "booking_preparing")
+    await later(hass, freezer, minutes=35)
+    assert runtime.booking_plans["west"].status == "meeting"
+    assert runtime.zone_bands["west"] == ("comfort", "booking_meeting")
+    await later(hass, freezer, minutes=15)
+    assert runtime.zone_bands["west"] == (
+        ("away", "booking_no_arrival") if absent else ("comfort", "booking_meeting")
+    )
+    await later(hass, freezer, minutes=45)
+    assert runtime.booking_plans["west"].status == "idle"
+    assert runtime.zone_bands["west"][0] == ("away" if absent else "eco")
+
+
+async def test_late_arrival_resumes_comfort_and_departure_restores_away(hass, freezer):
+    hass.states.async_set("input_boolean.building_present", "off")
+    central, _, _ = await office(
+        hass, start=0, presence="input_boolean.building_present"
+    )
+    runtime = central.runtime_data
+    await later(hass, freezer, minutes=14, seconds=59)
+    assert runtime.zone_bands["west"] == ("comfort", "booking_meeting")
+    await later(hass, freezer, seconds=1)
+    assert runtime.zone_bands["west"] == ("away", "booking_no_arrival")
+    # A refresh/reload must not restart the grace period.
+    assert await hass.config_entries.async_reload(central.entry_id)
+    await hass.async_block_till_done()
+    runtime = central.runtime_data
+    assert runtime.zone_bands["west"] == ("away", "booking_no_arrival")
+    hass.states.async_set("input_boolean.building_present", "on")
+    await hass.async_block_till_done()
+    assert runtime.zone_bands["west"] == ("comfort", "booking_meeting")
+    hass.states.async_set("input_boolean.building_present", "off")
+    await hass.async_block_till_done()
+    assert runtime.zone_bands["west"] == ("away", "booking_no_arrival")
+
+
+async def test_short_meeting_ends_before_arrival_grace(hass, freezer):
+    hass.states.async_set("input_boolean.building_present", "off")
+    central, _, _ = await office(
+        hass, start=0, presence="input_boolean.building_present"
+    )
+    calendar_service(hass, {CALENDAR: {"events": [booking(0, 10)]}})
+    await central.runtime_data.async_update_bookings()
+    assert central.runtime_data.zone_bands["west"][0] == "comfort"
+    await later(hass, freezer, minutes=10)
+    assert central.runtime_data.zone_bands["west"] == ("away", "building_absent")
+
+
+@pytest.mark.parametrize("presence", ["on", "unavailable", None])
+async def test_arrival_deadline_requires_proven_building_absence(
+    hass, freezer, presence
+):
+    if presence is not None:
+        hass.states.async_set("input_boolean.building_present", presence)
+    central, _, _ = await office(
+        hass,
+        start=0,
+        presence="input_boolean.building_present" if presence is not None else None,
+    )
+    await later(hass, freezer, minutes=16)
+    assert central.runtime_data.zone_bands["west"] == ("comfort", "booking_meeting")
+
+
+@pytest.mark.parametrize("start", [None, 120, 20, 0])
+async def test_active_booking_prepares_absent_building_and_cancellation_restores_away(
+    hass, start
+):
+    hass.states.async_set("input_boolean.building_present", "off")
+    central, _, _ = await office(
+        hass, start=start, presence="input_boolean.building_present"
+    )
+    runtime = central.runtime_data
+    active_band = (
+        ("comfort", "booking_meeting" if start == 0 else "booking_preparing")
+        if start in (0, 20)
+        else None
+    )
+    assert runtime.zone_bands["west"] == (active_band or ("away", "building_absent"))
+    hass.states.async_set("input_boolean.building_present", "on")
+    await hass.async_block_till_done()
+    expected = (
+        ("comfort", "booking_meeting" if start == 0 else "booking_preparing")
+        if start in (0, 20)
+        else ("eco", "no_booking")
+    )
+    assert runtime.zone_bands["west"] == expected
+    hass.states.async_set("input_boolean.building_present", "off")
+    await hass.async_block_till_done()
+    assert runtime.zone_bands["west"] == (active_band or ("away", "building_absent"))
     calendar_service(hass, {CALENDAR: {"events": []}})
     await runtime.async_update_bookings()
     assert runtime.booking_plans["west"].status == "idle"
-    assert runtime.zone_bands["west"][0] == "away"
+    assert runtime.zone_bands["west"] == ("away", "building_absent")
 
 
-async def test_motion_still_allows_an_unbooked_meeting(hass):
-    hass.states.async_set("binary_sensor.west_motion", "on")
+@pytest.mark.parametrize("motion", ["on", "off", "unavailable"])
+async def test_motion_does_not_activate_an_unbooked_room(hass, motion):
+    hass.states.async_set("binary_sensor.west_motion", motion)
     central, _, _ = await office(
         hass, start=None, occupancy_entity="binary_sensor.west_motion"
     )
@@ -157,7 +238,7 @@ async def test_motion_still_allows_an_unbooked_meeting(hass):
     runtime.motion_memories["west"] = MotionMemory(True)
     runtime.refresh()
     assert runtime.booking_plans["west"].status == "idle"
-    assert runtime.zone_bands["west"][0] == "comfort"
+    assert runtime.zone_bands["west"] == ("eco", "no_booking")
 
 
 async def test_two_room_calendars_do_not_activate_each_other(hass):
@@ -178,7 +259,7 @@ async def test_two_room_calendars_do_not_activate_each_other(hass):
 
 
 @pytest.mark.parametrize("error", ["service", "malformed", "unavailable", "stale"])
-async def test_unusable_calendar_falls_back_to_normal_occupancy(hass, error):
+async def test_unusable_calendar_uses_eco(hass, error):
     central, _, _ = await office(hass, start=20)
     runtime = central.runtime_data
     if error == "service":
@@ -194,8 +275,46 @@ async def test_unusable_calendar_falls_back_to_normal_occupancy(hass, error):
         runtime.booking_updated[CALENDAR] -= timedelta(minutes=11)
         runtime.refresh()
     assert runtime.booking_plans["west"].status == "unknown"
-    assert runtime.zone_bands["west"][0] == "comfort"  # Original no-presence fallback.
+    assert runtime.zone_bands["west"] == ("eco", "calendar_unknown")
     assert not runtime._calendar_refreshing
+
+    calendar_service(hass, {CALENDAR: {"events": [booking(0)]}})
+    hass.states.async_set(CALENDAR, "on")
+    await hass.async_block_till_done()
+    await runtime.async_update_bookings()
+    assert runtime.zone_bands["west"] == ("comfort", "booking_meeting")
+
+
+@pytest.mark.parametrize("presence", ["on", "off", "unavailable"])
+async def test_unbooked_calendar_room_uses_eco_unless_building_absent(hass, presence):
+    hass.states.async_set("input_boolean.building_present", presence)
+    central, _, _ = await office(
+        hass, start=None, presence="input_boolean.building_present"
+    )
+    assert central.runtime_data.zone_bands["west"] == (
+        ("away", "building_absent") if presence == "off" else ("eco", "no_booking")
+    )
+
+
+@pytest.mark.parametrize("preset", ["eco", "away"])
+async def test_booking_respects_explicit_saving_preset(hass, preset):
+    central, _, _ = await office(hass, start=0)
+    runtime = central.runtime_data
+    runtime.set_thermostat("west", preset=preset)
+    assert runtime.booking_plans["west"].active
+    assert runtime.zone_bands["west"] == (preset, "preset")
+
+
+async def test_unknown_calendar_keeps_absent_building_on_away(hass):
+    hass.states.async_set("input_boolean.building_present", "off")
+    central, _, _ = await office(
+        hass, start=20, presence="input_boolean.building_present"
+    )
+    runtime = central.runtime_data
+    runtime.booking_updated[CALENDAR] -= timedelta(minutes=11)
+    runtime.refresh()
+    assert runtime.booking_plans["west"].status == "unknown"
+    assert runtime.zone_bands["west"] == ("away", "building_absent")
 
 
 async def test_calendar_state_change_refreshes_cancelled_booking(hass):
