@@ -756,3 +756,36 @@ blijft de geselecteerde modus een terugval; `activity_source` benoemt of de weer
 gerapporteerd, afgeleid, gemengd of niet beschikbaar is. Thermostaat-uit blijft Off.
 Bekende ventilatornamen en numerieke standen met dezelfde eenheid worden
 oplopend gesorteerd. Opaque of gemengde fabrikantstanden behouden hun volgorde.
+
+## Vloerverwarming met airco-voorrang
+
+Een ingeschakelde Vloerverwarmingregeling stuurt uitsluitend climate-thermostaten
+met een kamertemperatuursetpoint. Een aparte vaste ondergrens (standaard 16 °C)
+geldt centraal, met optionele eigen waarden per ruimte. Deze volgt geen
+Comfort/Eco/Afwezig-band of agenda-voorbereiding. Apparaatstappen worden afgerond;
+onbruikbare feedback of een doel buiten de apparaatgrenzen blokkeert opdrachten.
+Eerst wordt het setpoint bevestigd, daarna mag de vloer naar heat. De eigen
+vloerthermostaat regelt de warmteafgifte. Oude number-koppelingen worden alleen
+geobserveerd. De airco volgt direct de bestaande thermische ruimtevraag; er is
+geen vloerwachttijd of automatische gasbijverwarming.
+
+Bij koeling/dry, thermostaat uit of een bevestigd open raam stopt de actieve
+vloerregeling. Aircokoeling wacht op betrouwbare off-feedback van iedere gekoppelde
+climate-vloerthermostaat. De vloer mag niet verwarmen zolang een gekoppelde airco
+in dezelfde ruimte op cool/dry staat, ook zonder actuele koelvraag. De dispatcher
+controleert dit opnieuw vóór iedere opdracht. Restwarmte in de vloer wordt niet
+geschat. Handmatige wijzigingen worden gedurende de centrale overnameduur
+gevolgd, behalve noodzakelijke stopopdrachten voor raam/uit/koeling.
+De groepsschakelaar blokkeert airco en lamellen; vloerregeling is onafhankelijk.
+Regeling uit laat het laatste vloersetpoint en de apparaatstand staan.
+
+De sensor Opwarming met airco volgt ruimtes met gekoppelde vloer en airco waarvan
+beide regelingen zijn ingeschakeld. Alleen gemelde aircoactiviteit heating,
+preheating of defrosting tijdens warmtevraag telt; alleen de geselecteerde stand
+heat is onvoldoende bewijs. Na 60 minuten onafgebroken gemelde verwarmingsactiviteit
+signaleert de sensor onvoldoende opwarming als de ruimte nog minstens 1 °C onder
+de verwarmingsgrens ligt en minder dan 0,3 °C is gestegen. Er moet na de start
+opnieuw een geldige ruimtetemperatuur zijn gerapporteerd. Zonder nieuwe rapportage
+is de uitkomst onbekend. Onderbreking of wegvallende vraag reset de observatie;
+voldoende stijging begint een nieuwe observatieperiode. Dit is uitsluitend een
+zichtbaar signaal, geen rendementsmeting of automatische verhoging van het gasdoel.

@@ -81,6 +81,31 @@ def _source_validation(runtime) -> list[dict]:
 def _room_context(runtime, zone_ids):
     """Explain screen and booking decisions without raw sensor/calendar content."""
     return {
+        "heating_progress": [
+            {
+                "zone_id": zone_id,
+                "status": progress.status,
+                "since": _iso(progress.memory.since) if progress.memory else None,
+                "temperature_rise_c": progress.rise,
+                "next_check": _iso(progress.next_check),
+            }
+            for zone_id, progress in runtime.heating_progress.items()
+            if zone_id in zone_ids
+        ],
+        "floor_heating": [
+            {
+                "equipment_id": item.id,
+                "zone_id": item.zone_id,
+                **{
+                    key: value
+                    for key, value in runtime.floor_plans.get(item.id, {}).items()
+                    if key != "command"
+                },
+                "manual_until": _iso(runtime.floor_overrides.get(item.id)),
+            }
+            for item in runtime.building.equipment
+            if item.kind == "floor_heating" and item.zone_id in zone_ids
+        ],
         "screen_timing": {
             "minimum_move_minutes": runtime.building.settings.screen_min_move_minutes,
             "open_delay_minutes": runtime.building.settings.screen_open_delay_minutes,

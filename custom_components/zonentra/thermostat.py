@@ -81,6 +81,7 @@ class Thermostat:
     # (briefly) unavailable, so HomeKit and dashboards see stable features.
     unit_hvac_modes: tuple[str, ...] = ()
     unit_fan_modes: tuple[str, ...] = ()
+    floor_regulation: bool = False
 
     @classmethod
     def from_dict(cls, data: Any) -> "Thermostat":
@@ -127,6 +128,7 @@ class Thermostat:
             fan_control=data.get("fan_control") is not False,
             unit_hvac_modes=_names(data.get("unit_hvac_modes")),
             unit_fan_modes=_names(data.get("unit_fan_modes")),
+            floor_regulation=data.get("floor_regulation") is True,
         )
 
     def as_dict(self) -> dict:
@@ -172,7 +174,13 @@ def update_thermostat(
         raise ValueError("invalid_hvac_mode")
     if "preset" in changes and changes["preset"] not in PRESETS:
         raise ValueError("invalid_preset")
-    for key in ("regulation", "window_bypass", "screen_regulation", "fan_control"):
+    for key in (
+        "regulation",
+        "window_bypass",
+        "screen_regulation",
+        "fan_control",
+        "floor_regulation",
+    ):
         if key in changes and not isinstance(changes[key], bool):
             raise ValueError("invalid_parameters")
     for key in BAND_KEYS:

@@ -27,6 +27,7 @@ PRECONDITIONING_FIELDS = (
     "preconditioning_heating_rate",
     "preconditioning_cooling_rate",
 )
+FLOOR_FIELDS = ("floor_heating_limit",)
 NEW_BUILDING_DEFAULTS = {
     "heating_limit": 21.0,
     "cooling_limit": 24.0,
@@ -41,7 +42,7 @@ def migrate_options(options: dict) -> dict:
     result = deepcopy(options)
     _remove_limit_entities(result)
     if "id" in result:
-        _preconditioning_policy(result)
+        _room_policy(result)
     settings = result.get("building", {})
     if _remove_limit_entities(settings):
         for key in LIMIT_FIELDS:
@@ -51,7 +52,7 @@ def migrate_options(options: dict) -> dict:
     ages = []
     for zone in result.get("zones", []):
         _remove_limit_entities(zone)
-        _preconditioning_policy(zone)
+        _room_policy(zone)
         zone.pop("controller_entity", None)
         entity = zone.pop("outdoor_temperature_entity", None)
         if entity:
@@ -81,8 +82,11 @@ def migrate_options(options: dict) -> dict:
     return result
 
 
-def _preconditioning_policy(zone: dict) -> None:
-    """Existing local preparation values remain local; other rooms inherit."""
+def _room_policy(zone: dict) -> None:
+    """Existing local preparation/floor values remain local; other rooms inherit."""
+    zone.setdefault(
+        "use_building_floor_heating", not any(key in zone for key in FLOOR_FIELDS)
+    )
     zone.setdefault(
         "use_building_preconditioning",
         not any(key in zone for key in PRECONDITIONING_FIELDS),

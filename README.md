@@ -4,7 +4,8 @@ Lokale klimaatregeling voor één gebouw met meerdere ruimtes, als Home Assistan
 Custom Integration. Zonentra gebruikt bestaande entiteiten om klimaatvraag te
 berekenen en airco's, ventilatoren, lamellen en zonwering te coördineren.
 Aanwezigheid, raamcontacten, weersverwachtingen en ruimteagenda's kunnen de
-regeling beïnvloeden. Vloerverwarming en gebouwventilatie worden alleen geobserveerd.
+regeling beïnvloeden. Vloerverwarming kan als basisverwarming worden aangestuurd;
+gebouwventilatie wordt alleen geobserveerd.
 
 ## Installatie
 
@@ -31,9 +32,19 @@ Zonentra direct HVAC- en lamelcommando's versturen. Zet deze schakelaar uit
 voordat je binnenunits koppelt als je eerst alleen wilt observeren. Uitgeschakeld
 blokkeert hij alle HVAC- en lamelcommando's voor de groep; plannen blijven zichtbaar.
 
-**Ruimteregeling** en **Zonweringregeling** staan per ruimte standaard uit.
+**Ruimteregeling**, **Vloerverwarmingregeling** en **Zonweringregeling** staan per ruimte standaard uit.
 Controleer eerst de sensoren en schakel daarna de gewenste regeling per ruimte in.
 Zonwering heeft een eigen schakelaar en wordt niet door de HVAC-groepsstop geblokkeerd.
+Vloerverwarming heeft ook een eigen schakelaar. Koppel een climate-thermostaat
+met een gewenste kamertemperatuur. Deze houdt standaard een aparte ondergrens
+van **16 °C** aan; Comfort/Eco/Afwezig en agenda-voorbereiding blijven door de
+**airco** geregeld. De airco wacht niet op de vloer. De ondergrens is instelbaar
+via centrale **Ruimteregeling**, met een afwijking per ruimte. Bij koeling wacht
+de airco op bevestigd uitgeschakelde vloerthermostaten. De vloer blijft uit
+zolang een airco in dezelfde ruimte op cool/dry staat. Uitschakelen van de
+vloerregeling laat de laatste instelling van de vloerthermostaat staan.
+De sensor **Opwarming met airco** signaleert langdurig onvoldoende opwarming;
+hij schakelt geen extra gasverwarming in.
 Laat geen andere regeling dezelfde apparaten tegelijk aansturen.
 
 Koppel elke binnenunit aan één ruimte en aan de werkelijke buitenunitgroep.

@@ -33,7 +33,7 @@
           "humidity_entity": "Humidity (optional)",
           "co2_entity": "CO₂ sensor (optional)",
           "contact_entities": "Window and door contacts (optional)",
-          "floor_heating_entities": "Floor heating (optional)",
+          "floor_heating_entities": "Floor thermostats with room temperature setpoint (climate; legacy number observation only)",
           "shading_entities": "Shading (optional)",
           "ventilation_entities": "Ventilation (optional)",
           "vane_entity": "Vane (optional; select, number or switch entity of the indoor unit)",
@@ -41,7 +41,8 @@
           "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch",
           "facade": "Facade of the screens (optional)",
           "calendar_entity": "Room calendar (optional; adaptive heating/cooling before meetings)",
-          "use_building_preconditioning": "Use central meeting preparation settings"
+          "use_building_preconditioning": "Use central meeting preparation settings",
+          "use_building_floor_heating": "Use central floor heating settings"
         }
       },
       "zone_parameters": {
@@ -56,7 +57,8 @@
           "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
           "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
           "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
-          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "floor_heating_limit": "Floor heating: fixed minimum room temperature (°C; default 16)"
         }
       }
     },
@@ -133,7 +135,8 @@
           "setpoint_max_offset": "Maximum setpoint correction of an indoor unit (°C)",
           "setpoint_interval_seconds": "Minimum time between setpoint changes (seconds)",
           "window_delay_seconds": "Open window: delay before the room stops (seconds)",
-          "auto_fan_step": "Automatic fan: °C from the target per fan speed step"
+          "auto_fan_step": "Automatic fan: °C from the target per fan speed step",
+          "floor_heating_limit": "Floor heating: fixed minimum room temperature (°C; default 16)"
         }
       },
       "screens": {
@@ -189,7 +192,9 @@
           "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
           "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
           "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)",
-          "use_building_preconditioning": "Use central meeting preparation settings"
+          "use_building_preconditioning": "Use central meeting preparation settings",
+          "use_building_floor_heating": "Use central floor heating settings",
+          "floor_heating_limit": "Floor heating: fixed minimum room temperature (°C; default 16)"
         }
       },
       "group": {
@@ -269,7 +274,8 @@
           "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)",
           "screen_min_move_minutes": "Minimum time between automatic movements (minutes; default 30)",
           "screen_open_delay_minutes": "Stable demand before opening (minutes; default 15)",
-          "screen_shade_delay_minutes": "Stable demand before shading (minutes; default 5)"
+          "screen_shade_delay_minutes": "Stable demand before shading (minutes; default 5)",
+          "floor_heating_limit": "Floor heating: fixed minimum room temperature (°C; default 16)"
         }
       },
       "zone_settings": {
@@ -287,7 +293,7 @@
           "humidity_entity": "Humidity (optional)",
           "co2_entity": "CO₂ sensor (optional)",
           "contact_entities": "Window and door contacts (optional)",
-          "floor_heating_entities": "Floor heating (optional)",
+          "floor_heating_entities": "Floor thermostats with room temperature setpoint (climate; legacy number observation only)",
           "shading_entities": "Shading (optional)",
           "ventilation_entities": "Ventilation (optional)",
           "vane_entity": "Vane (optional; select, number or switch entity of the indoor unit)",
@@ -295,7 +301,8 @@
           "vane_heat_value": "Vane when heating (down): option, number, or on/off for a switch",
           "facade": "Facade of the screens (optional)",
           "calendar_entity": "Room calendar (optional; adaptive heating/cooling before meetings)",
-          "use_building_preconditioning": "Use central meeting preparation settings"
+          "use_building_preconditioning": "Use central meeting preparation settings",
+          "use_building_floor_heating": "Use central floor heating settings"
         }
       },
       "zone_parameters": {
@@ -310,7 +317,8 @@
           "preconditioning_max_minutes": "Maximum preparation time (minutes; default 180)",
           "preconditioning_buffer_minutes": "Preparation safety margin (minutes; default 10)",
           "preconditioning_heating_rate": "Initial heating rate (°C/min; default 0.05, adjusted for outdoor temperature)",
-          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)"
+          "preconditioning_cooling_rate": "Initial cooling rate (°C/min; default 0.05, adjusted for outdoor temperature)",
+          "floor_heating_limit": "Floor heating: fixed minimum room temperature (°C; default 16)"
         }
       },
       "preconditioning": {
@@ -497,6 +505,36 @@
           "preparing": "Preparing",
           "meeting": "Meeting in progress"
         }
+      },
+      "floor_heating": {
+        "name": "Floor heating {floor}",
+        "state": {
+          "disabled": "Disabled",
+          "off": "Off",
+          "stopping": "Stopping",
+          "setting_target": "Setting temperature",
+          "starting": "Starting heating",
+          "in_sync": "Heating target set",
+          "command_failed": "Command not confirmed",
+          "manual_override": "Manual override",
+          "unavailable": "Unavailable",
+          "unsupported_entity": "Observation only",
+          "unsupported_modes": "Heating mode not supported",
+          "unsupported_setpoint": "Room temperature setpoint missing",
+          "target_out_of_range": "Target outside device limits",
+          "cannot_stop": "Cannot stop",
+          "room_temperature_unknown": "Room temperature unknown"
+        }
+      },
+      "heating_progress": {
+        "name": "Airco heating progress",
+        "state": {
+          "idle": "Not monitoring",
+          "monitoring": "Monitoring warming",
+          "adequate": "Near heating target",
+          "insufficient": "Insufficient warming",
+          "unknown": "Insufficient measurements"
+        }
       }
     },
     "switch": {
@@ -514,6 +552,9 @@
       },
       "fan_control": {
         "name": "Automatic fan"
+      },
+      "floor_regulation": {
+        "name": "Floor heating control"
       }
     },
     "climate": {

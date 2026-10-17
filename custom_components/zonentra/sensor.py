@@ -15,6 +15,7 @@ from . import ZonentraConfigEntry, central_presence, entry_type
 from .bookings import ThermalRates, outdoor_band, rate_quality
 from .const import DOMAIN
 from .entity import zone_context
+from .floor_heating import MINIMUM_DEFICIT, MINIMUM_RISE, WATCH_MINUTES
 from .models import Equipment, Zone
 from .observations import cover_position, describe
 from .topology import ZONE, zone_equipment
@@ -93,6 +94,8 @@ def _zone_entities(hass, entry) -> list:
         entities.append(PresenceSensor(entry, zone, **shared))
     if options.get("calendar_entity"):
         entities.append(BookingSensor(entry, zone, **shared))
+    if options.get("floor_heating_entities") and options.get("indoor_units"):
+        entities.append(HeatingProgressSensor(entry, zone, **shared))
     if options.get("indoor_units"):
         entities.append(RegulatedSetpointSensor(entry, zone, **shared))
         entities.append(AutoFanSensor(entry, zone, **shared))
@@ -112,6 +115,13 @@ def _zone_entities(hass, entry) -> list:
                     **shared,
                 )
             )
+            continue
+        if record["kind"] == "floor_heating":
+            state = hass.states.get(record["entity_id"])
+            item = Equipment(
+                **{**record, "name": state.name if state else record["name"]}
+            )
+            entities.append(FloorHeatingSensor(entry, item, **shared))
             continue
         if record["kind"] != "hvac":
             continue
@@ -1033,4 +1043,106 @@ class GroupCoordinationSensor(ZonentraDiagnosticSensor):
                 for entry in runtime.command_log
                 if entry["group_id"] == self._group.id
             ][-10:],
+        }
+
+
+class FloorHeatingSensor(ZonentraDiagnosticSensor):
+    """Observed floor thermostat and the reason for floor/airco decisions."""
+
+    _attr_icon = "mdi:heating-coil"
+    _attr_translation_key = "floor_heating"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [
+        "disabled",
+        "off",
+        "stopping",
+        "setting_target",
+        "starting",
+        "in_sync",
+        "command_failed",
+        "manual_override",
+        "unavailable",
+        "unsupported_entity",
+        "unsupported_modes",
+        "unsupported_setpoint",
+        "target_out_of_range",
+        "cannot_stop",
+        "room_temperature_unknown",
+    ]
+    _attr_entity_category = None
+
+    def __init__(self, entry, item, **shared):
+        super().__init__(entry, **shared)
+        self.item = item
+        self._attr_unique_id = f"{entry.entry_id}_{item.id}_floor"
+        self._attr_translation_placeholders = {"floor": item.name}
+
+    def _present(self, runtime):
+        return self.item.id in runtime.floor_plans
+
+    @property
+    def native_value(self):
+        return self.runtime.floor_plans[self.item.id]["status"]
+
+    @property
+    def extra_state_attributes(self):
+        runtime = self.runtime
+        plan = runtime.floor_plans[self.item.id]
+        state = self.hass.states.get(self.item.entity_id)
+        observation = runtime.floor_observations.get(self.item.id)
+        return {
+            **{key: value for key, value in plan.items() if key != "command"},
+            "target_temperature_unit": "°C",
+            "current_target_temperature": state.attributes.get("temperature")
+            if state
+            else None,
+            "current_target_temperature_unit": self.hass.config.units.temperature_unit,
+            "selected_mode": observation.selected_mode if observation else None,
+            "reported_action": observation.reported_action if observation else None,
+            "floor_regulation": runtime.floor_regulated(self.item.zone_id),
+            "manual_until": _iso(runtime.floor_overrides.get(self.item.id)),
+            "last_commands": [
+                {
+                    key: record.get(key)
+                    for key in (
+                        "at",
+                        "service",
+                        "temperature",
+                        "result",
+                        "confirmation",
+                    )
+                }
+                for record in runtime.command_log
+                if record["equipment_id"] == self.item.id
+            ][-5:],
+        }
+
+
+class HeatingProgressSensor(ZoneStateSensor):
+    """Visible warning only: never automatically request additional gas heat."""
+
+    key = "heating_progress"
+    _attr_translation_key = "heating_progress"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["idle", "monitoring", "adequate", "insufficient", "unknown"]
+    _attr_icon = "mdi:thermometer-alert"
+
+    @property
+    def native_value(self):
+        progress = self.runtime.heating_progress.get(self._zone.id)
+        return progress.status if progress else "idle"
+
+    @property
+    def extra_state_attributes(self):
+        progress = self.runtime.heating_progress.get(self._zone.id)
+        memory = progress.memory if progress else None
+        return {
+            "since": _iso(memory.since) if memory else None,
+            "initial_temperature_c": memory.temperature if memory else None,
+            "temperature_rise_c": progress.rise if progress else None,
+            "next_check": _iso(progress.next_check) if progress else None,
+            "observation_minutes": WATCH_MINUTES,
+            "minimum_rise_c": MINIMUM_RISE,
+            "minimum_deficit_c": MINIMUM_DEFICIT,
+            "automatic_gas_boost": False,
         }

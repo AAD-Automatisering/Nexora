@@ -65,6 +65,7 @@ from .roomstate import (
 )
 from .runtime_bookings import BookingRuntimeMixin
 from .runtime_commands import CommandRuntimeMixin
+from .runtime_floor import FloorRuntimeMixin
 from .runtime_helpers import _origin, _setpoint
 from .runtime_shading import ShadingRuntimeMixin
 from .runtime_timing import TimingRuntimeMixin
@@ -99,7 +100,11 @@ ZONE_LIMIT_KEYS = (
 
 
 class BuildingRuntime(
-    BookingRuntimeMixin, ShadingRuntimeMixin, TimingRuntimeMixin, CommandRuntimeMixin
+    FloorRuntimeMixin,
+    BookingRuntimeMixin,
+    ShadingRuntimeMixin,
+    TimingRuntimeMixin,
+    CommandRuntimeMixin,
 ):
     """Observe one building, evaluate its plans and dispatch enabled controls."""
 
@@ -127,6 +132,13 @@ class BuildingRuntime(
         self.outdoor_temperature = Reading(None, "missing")
         self.zone_snapshots = {}
         self.zone_demands = {}
+        self.hvac_demands = {}
+        self.floor_plans = {}
+        self.floor_observations = {}
+        self.floor_overrides = {}
+        self.heating_watches = {}
+        self.heating_progress = {}
+        self._floor_checks = []
         self.group_decisions = {}
         # Indoor unit interpretation; diagnostic only, never physical feedback.
         self.indoor_units = {}
@@ -361,6 +373,8 @@ class BuildingRuntime(
             demand = self._booking_priority(zone, demand, now)
             demands[zone.id] = demand
         self.zone_demands = demands
+        self._command_feedback(now)
+        self._floor_prepare(sources, now)
         for group in self.building.groups:
             mode = observe_mode(group, sources, now)
             current = mode.value if mode.quality == "valid" else "unknown"
@@ -370,7 +384,7 @@ class BuildingRuntime(
         self.group_decisions = {
             decision.group_id: decision
             for decision in evaluate(
-                self.building, self.zone_demands, sources, self.memories, now
+                self.building, self.hvac_demands, sources, self.memories, now
             )
         }
         indoor_units = {}
@@ -406,9 +420,9 @@ class BuildingRuntime(
                 ],
             )
         self._preview_auto_fans()
-        self._command_feedback(now)
         self._plan(transitions, sources, now)
         if self.active_capable:
+            self._floor_control(now)
             self._control(sources, now)
         if self._cancel_deadline:
             self._cancel_deadline()
@@ -460,6 +474,7 @@ class BuildingRuntime(
         deadlines.extend(self._window_checks)
         deadlines.extend(self._manual_checks)
         deadlines.extend(self._screen_checks)
+        deadlines.extend(self._floor_checks)
         for group_id, control in self.mode_controls.items():
             if control.blocked_until:
                 deadlines.append(control.blocked_until)
@@ -600,6 +615,9 @@ class BuildingRuntime(
         "booking_interrupted",
         "thermal_rates",
         "zone_demands",
+        "hvac_demands",
+        "heating_watches",
+        "floor_overrides",
         "coordination_memories",
         "overrides",
         "last_transitions",
@@ -1685,6 +1703,7 @@ class BuildingRuntime(
         entity_id = event.data.get("entity_id")
         old, new = event.data.get("old_state"), event.data.get("new_state")
         self._screen_transition(entity_id, old, new, event, now)
+        self._floor_transition(entity_id, old, new, now)
         transitions = {}
         for item in self.building.equipment:
             if item.kind != "hvac" or item.entity_id != entity_id:
@@ -1770,7 +1789,7 @@ class BuildingRuntime(
             self.group_observations,
             self.indoor_units,
             changed_at,
-            self.zone_demands,
+            self.hvac_demands or self.zone_demands,
             overrides,
             events,
             self.coordination_memories,

@@ -49,6 +49,7 @@ def test_thermostat_prefers_reported_action(selected, reported, expected):
     # Construct the same observation the runtime supplies to the entity.
     item = Equipment("unit", "Unit", "hvac", "climate.unit", "room")
     observation = SimpleNamespace(
+        equipment_id="unit",
         available=True,
         selected_mode=selected,
         reported_action=reported,
@@ -60,6 +61,7 @@ def test_thermostat_prefers_reported_action(selected, reported, expected):
         runtime=SimpleNamespace(
             building=SimpleNamespace(equipment=(item,)),
             indoor_units={"unit": observation},
+            floor_observations={},
         ),
     )
     assert ZonentraThermostat.hvac_action.fget(room) == expected

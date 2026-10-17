@@ -9,6 +9,7 @@ from typing import Any
 from .const import KINDS
 from .migration import (
     BAND_FIELDS,
+    FLOOR_FIELDS,
     LIMIT_FIELDS,
     PARAMETER_FIELDS,
     PRECONDITIONING_FIELDS,
@@ -43,6 +44,7 @@ class Zone:
     temperature_entity: str | None = None
     occupancy_entity: str | None = None
     calendar_entity: str | None = None
+    floor_heating_limit: float = 16.0
     preconditioning_max_minutes: float = 180.0
     preconditioning_buffer_minutes: float = 10.0
     preconditioning_heating_rate: float = 0.05  # °C/min baseline before learning
@@ -61,6 +63,7 @@ class Zone:
     use_building_limits: bool = False
     use_building_parameters: bool = False
     use_building_preconditioning: bool = True
+    use_building_floor_heating: bool = True
     # 0.10: own eco/away bands when the zone does not use the central limits;
     # None takes the central value.
     eco_heating_limit: float | None = None
@@ -100,6 +103,7 @@ class Equipment:
 
 @dataclass(frozen=True)
 class BuildingSettings:
+    floor_heating_limit: float = 16.0
     preconditioning_max_minutes: float = 180.0
     preconditioning_buffer_minutes: float = 10.0
     preconditioning_heating_rate: float = 0.05
@@ -168,6 +172,8 @@ def effective_zone(zone: Zone, settings: BuildingSettings) -> Zone:
         values.update({key: getattr(settings, key) for key in PARAMETER_FIELDS})
     if zone.use_building_preconditioning:
         values.update({key: getattr(settings, key) for key in PRECONDITIONING_FIELDS})
+    if zone.use_building_floor_heating:
+        values.update({key: getattr(settings, key) for key in FLOOR_FIELDS})
     return replace(zone, **values)
 
 
@@ -293,6 +299,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _validate_sensor_validation(settings)
     _validate_limits(settings)
     _validate_preconditioning(settings)
+    _validate_floor_heating(settings)
     zones, groups, equipment = (
         topology.get(key, []) for key in ("zones", "groups", "equipment")
     )
@@ -309,6 +316,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
                 "use_building_limits",
                 "use_building_parameters",
                 "use_building_preconditioning",
+                "use_building_floor_heating",
             )
         ):
             raise ValueError("invalid_parameters")
@@ -333,6 +341,7 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
         if zone.group_id and zone.group_id not in group_ids:
             raise ValueError("invalid_reference")
         _validate_preconditioning(zone)
+        _validate_floor_heating(zone)
         _range(zone.weight, 0.1, 10)
         _range(zone.hysteresis, 0.1, 2)
         _range(zone.max_age_seconds, 0, 86400)
@@ -379,6 +388,10 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     return Building(
         building_id, name, zone_models, group_models, tuple(equipment_models), settings
     )
+
+
+def _validate_floor_heating(config) -> None:
+    _range(config.floor_heating_limit, 5, 25)
 
 
 def _validate_preconditioning(config) -> None:

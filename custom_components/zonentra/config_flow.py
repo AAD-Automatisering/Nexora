@@ -22,6 +22,7 @@ from .const import DOMAIN, KINDS, TOPOLOGY_KEYS
 from .migration import (
     BAND_FIELDS,
     DEVICE_LIMITS,
+    FLOOR_FIELDS,
     LIMIT_FIELDS,
     NEW_BUILDING_DEFAULTS,
     PARAMETER_FIELDS,
@@ -65,6 +66,12 @@ def choice(options):
     return selector.SelectSelector({"options": options, "mode": "dropdown"})
 
 
+def floor_fields() -> dict:
+    return {
+        vol.Optional("floor_heating_limit"): numeric(5, 25, unit="°C"),
+    }
+
+
 def preconditioning_fields() -> dict:
     return {
         vol.Optional("preconditioning_max_minutes"): numeric(0, 360, 1, "min"),
@@ -86,6 +93,7 @@ def building_fields(limits: bool = True) -> dict:
     """
     fields = {
         **preconditioning_fields(),
+        **floor_fields(),
         vol.Optional("outdoor_temperature_entity"): entity_selector("sensor"),
         vol.Optional("outdoor_max_age_seconds"): numeric(0, 86400, 1, "s"),
         vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
@@ -152,6 +160,7 @@ CENTRAL_SECTIONS = {
         "motion_off_delay_minutes",
     ),
     "regulation": (
+        *FLOOR_FIELDS,
         "manual_override_enabled",
         "manual_override_duration_minutes",
         "min_on_seconds",
@@ -195,6 +204,7 @@ def building_defaults() -> dict:
             key: getattr(default_settings, key)
             for key in (
                 *PRECONDITIONING_FIELDS,
+                *FLOOR_FIELDS,
                 "outdoor_max_age_seconds",
                 "manual_override_enabled",
                 "manual_override_duration_minutes",
@@ -231,11 +241,13 @@ ZONE_DEFAULTS = {
     "use_building_limits": True,
     "use_building_parameters": True,
     "use_building_preconditioning": True,
+    "use_building_floor_heating": True,
 }
 ZONE_FLAGS = (
     "use_building_limits",
     "use_building_parameters",
     "use_building_preconditioning",
+    "use_building_floor_heating",
 )
 
 
@@ -257,6 +269,7 @@ def zone_fields(groups: list[dict]) -> dict:
         vol.Optional("occupancy_entity"): entity_selector("binary_sensor"),
         vol.Optional("calendar_entity"): entity_selector("calendar"),
         vol.Optional("use_building_preconditioning"): selector.BooleanSelector(),
+        vol.Optional("use_building_floor_heating"): selector.BooleanSelector(),
         vol.Optional("humidity_entity"): entity_selector("sensor"),
         vol.Optional("co2_entity"): entity_selector("sensor"),
         vol.Optional("contact_entities"): multi("binary_sensor"),
@@ -290,6 +303,8 @@ def zone_parameter_fields(record: dict) -> dict:
         )
     if not record.get("use_building_preconditioning", True):
         fields.update(preconditioning_fields())
+    if not record.get("use_building_floor_heating", True):
+        fields.update(floor_fields())
     return fields
 
 
@@ -308,6 +323,7 @@ def merge_zone(previous: dict, submitted: dict) -> dict:
             *BAND_FIELDS,
             *PARAMETER_FIELDS,
             *PRECONDITIONING_FIELDS,
+            *FLOOR_FIELDS,
         )
         if key in previous
     }
@@ -666,6 +682,10 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                         "use_building_preconditioning"
                     ): selector.BooleanSelector(),
                     **preconditioning_fields(),
+                    **floor_fields(),
+                    vol.Optional(
+                        "use_building_floor_heating"
+                    ): selector.BooleanSelector(),
                     vol.Optional("heating_limit"): numeric(5, 35, unit="°C"),
                     vol.Optional("cooling_limit"): numeric(5, 35, unit="°C"),
                     vol.Optional("humidity_entity"): entity_selector("sensor"),
@@ -722,6 +742,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                 "heating_limit": 21.0,
                 "cooling_limit": 24.0,
                 **{key: getattr(zone, key) for key in PRECONDITIONING_FIELDS},
+                **{key: getattr(zone, key) for key in FLOOR_FIELDS},
                 "weight": zone.weight,
                 "hysteresis": zone.hysteresis,
                 "max_age_seconds": zone.max_age_seconds,
@@ -729,6 +750,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                 "use_building_limits": True,
                 "use_building_parameters": True,
                 "use_building_preconditioning": True,
+                "use_building_floor_heating": True,
             }
         elif category == "group":
             group = EquipmentGroup(id="suggestion", name="suggestion")
@@ -750,6 +772,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                         *LIMIT_FIELDS,
                         *PARAMETER_FIELDS,
                         *PRECONDITIONING_FIELDS,
+                        *FLOOR_FIELDS,
                     )
                     if key in central
                 }
@@ -770,6 +793,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
             for flag, block, keys in (
                 ("use_building_limits", "limits", LIMIT_FIELDS),
                 ("use_building_parameters", "parameters", PARAMETER_FIELDS),
+                ("use_building_floor_heating", "floor_heating", FLOOR_FIELDS),
                 (
                     "use_building_preconditioning",
                     "preconditioning",
@@ -813,6 +837,7 @@ class ZonentraOptionsFlow(OptionsFlowWithReload):
                 for flag, block, keys in (
                     ("use_building_limits", "limits", LIMIT_FIELDS),
                     ("use_building_parameters", "parameters", PARAMETER_FIELDS),
+                    ("use_building_floor_heating", "floor_heating", FLOOR_FIELDS),
                     (
                         "use_building_preconditioning",
                         "preconditioning",

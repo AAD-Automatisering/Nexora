@@ -35,6 +35,8 @@ async def async_setup_entry(hass, entry, async_add_entities) -> None:
             entities.append(WindowBypassSwitch(entry, **context))
         if entry.options.get("shading_entities"):
             entities.append(ScreenRegulationSwitch(entry, **context))
+        if entry.options.get("floor_heating_entities"):
+            entities.append(FloorRegulationSwitch(entry, **context))
         # A switch whose equipment was removed from the zone disappears.
         remove_stale(hass, entry, "switch", entities)
         async_add_entities(entities)
@@ -166,3 +168,25 @@ class ScreenRegulationSwitch(ZoneEntity, SwitchEntity):
 
     async def async_turn_off(self, **kwargs) -> None:
         self._change(screen_regulation=False)
+
+
+class FloorRegulationSwitch(ZoneEntity, SwitchEntity):
+    """Enable independent room-temperature control of floor thermostats."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_icon = "mdi:heating-coil"
+    _attr_translation_key = "floor_regulation"
+
+    def __init__(self, entry, provider, signal, device):
+        super().__init__(entry, provider, signal, device)
+        self._attr_unique_id = f"{entry.entry_id}_floor_regulation"
+
+    @property
+    def is_on(self):
+        return self.thermostat.floor_regulation
+
+    async def async_turn_on(self, **kwargs):
+        self._change(floor_regulation=True)
+
+    async def async_turn_off(self, **kwargs):
+        self._change(floor_regulation=False)

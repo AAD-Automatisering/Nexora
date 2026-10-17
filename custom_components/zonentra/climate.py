@@ -44,8 +44,14 @@ def _zone_units(runtime, zone_id):
         unit
         for item in runtime.building.equipment
         if item.zone_id == zone_id
-        and item.kind == "hvac"
-        and (unit := runtime.indoor_units.get(item.id))
+        and item.kind in ("hvac", "floor_heating")
+        and (
+            unit := (
+                runtime.indoor_units
+                if item.kind == "hvac"
+                else runtime.floor_observations
+            ).get(item.id)
+        )
         and unit.available
     )
 
@@ -144,6 +150,8 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
         actions = {
             unit.reported_action
             if unit.activity is not None
+            else "idle"
+            if unit.equipment_id in runtime.floor_observations
             else {
                 "heat": "heating",
                 "cool": "cooling",
@@ -185,6 +193,10 @@ class ZonentraThermostat(ZoneEntity, ClimateEntity):
                 if reported
                 else "selected_mode"
             ),
+            "hvac_demand_reason": runtime.hvac_demands.get(
+                self._zone_id, demand
+            ).reason,
+            "floor_regulation": thermostat.floor_regulation,
             "active_band": band,
             "active_band_reason": reason,
             "chosen_preset": thermostat.preset,

@@ -174,6 +174,7 @@ async def test_referenced_delete_blocked_and_optional_link_removed(hass, topolog
             "use_building_limits": True,
             "use_building_parameters": True,
             "use_building_preconditioning": True,
+            "use_building_floor_heating": True,
         }
     ]
 

@@ -193,7 +193,21 @@ class CommandRuntimeMixin:
             "correct_running_unit",
             "group_changeover_stop",
         )
-        if domain == "climate" and not group_command:
+        floor = item.kind == "floor_heating"
+        if domain == "climate" and floor:
+            if guard := runtime._floor_guard(item, service, data):
+                entry["result"] = f"blocked: {guard}"
+                return False
+        if (
+            domain == "climate"
+            and not floor
+            and service == "set_hvac_mode"
+            and data.get("hvac_mode") in ("cool", "dry")
+        ):
+            if runtime._floor_cooling_block(item.zone_id):
+                entry["result"] = "blocked: floor_stop_unconfirmed"
+                return False
+        if domain == "climate" and not group_command and not floor:
             if not runtime.regulated(item.zone_id):
                 entry["result"] = "blocked: room_disabled"
                 return False
@@ -212,7 +226,7 @@ class CommandRuntimeMixin:
             if thermostat.hvac_mode == "off" and service != "turn_off":
                 entry["result"] = "blocked: thermostat_off"
                 return False
-        if domain == "climate" and service == "set_hvac_mode":
+        if domain == "climate" and service == "set_hvac_mode" and not floor:
             block, until = runtime._start_block(
                 data["entity_id"], data.get("hvac_mode"), dt_util.utcnow()
             )

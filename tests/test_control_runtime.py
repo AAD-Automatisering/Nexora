@@ -270,7 +270,12 @@ async def test_existing_04_configuration_uses_defaults(hass):
     assert entry.options == {
         **options,
         "zones": [
-            {**zone, "use_building_preconditioning": True} for zone in options["zones"]
+            {
+                **zone,
+                "use_building_preconditioning": True,
+                "use_building_floor_heating": True,
+            }
+            for zone in options["zones"]
         ],
     }
     settings = entry.runtime_data.building.settings

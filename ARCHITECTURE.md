@@ -12,8 +12,8 @@ apparatuur. De integratie heeft geen aanvullende runtime-dependencies.
 | Configuratie en migratie | `config_flow.py`, `models.py`, `migration.py`, `topology.py` |
 | Bronkwaliteit en klimaatvraag | `observations.py`, `temperature.py`, `demand.py`, `presence.py` |
 | Groepsbeslissingen en simulatie | `engine.py`, `decision.py`, `indoor.py`, `control.py`, `override.py` |
-| Regelplannen | `executor.py`, `thermostat.py`, `roomstate.py`, `shading.py`, `bookings.py`, `forecast.py` |
-| Home Assistant-lifecycle en uitvoering | `__init__.py`, `runtime.py`, `runtime_commands.py`, `runtime_timing.py`, `runtime_helpers.py`, `runtime_shading.py`, `runtime_bookings.py` |
+| Regelplannen | `executor.py`, `thermostat.py`, `roomstate.py`, `shading.py`, `bookings.py`, `forecast.py`, `floor_heating.py` |
+| Home Assistant-lifecycle en uitvoering | `__init__.py`, `runtime.py`, `runtime_commands.py`, `runtime_timing.py`, `runtime_helpers.py`, `runtime_shading.py`, `runtime_bookings.py`, `runtime_floor.py` |
 | Entiteiten en diagnostiek | `entity.py`, `climate.py`, `sensor.py`, `number.py`, `switch.py`, `diagnostics.py` |
 
 Alle modules staan in `custom_components/zonentra`. Pure kernmodules berekenen
@@ -31,9 +31,13 @@ en agenda's worden daarnaast periodiek opgehaald. Unload ruimt listeners en time
 Groepsarbitrage voorkomt tegengestelde warmte-/koelcommando's aan een gedeelde
 buitenunit. Analyse en coördinatie delen `engine.select_group_mode`: eenzijdige
 geldige ruimtevraag wordt gevolgd; alleen tegengestelde vragen gebruiken scoredrempels.
-Vraagtoestanden blijven leidend als hysterese tijdelijk een nul-score oplevert. De groepsschakelaar blokkeert HVAC en lamellen; ruimteregeling en
-zonwering hebben daarnaast hun eigen toestemming. De dispatcher controleert
-blokkades opnieuw vóór verzending. Stoppen, bevestigen, wachten en opnieuw starten
+Vraagtoestanden blijven leidend als hysterese tijdelijk een nul-score oplevert.
+De groepsschakelaar blokkeert HVAC en lamellen; ruimteregeling, zonwering en
+vloerverwarming hebben daarnaast hun eigen toestemming.
+Vloerverwarming houdt een aparte vaste ondergrens aan (standaard 16 °C).
+De airco volgt de thermische ruimtevraag zonder op de vloer te wachten;
+koeling wacht op bevestigde uitschakeling van gekoppelde vloerthermostaten.
+De dispatcher controleert blokkades opnieuw vóór verzending. Stoppen, bevestigen, wachten en opnieuw starten
 vormen een afzonderlijke omschakelfase.
 
 Serviceacceptatie en bevestiging door een entiteitsstate zijn afzonderlijk
