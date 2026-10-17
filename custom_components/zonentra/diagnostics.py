@@ -106,6 +106,30 @@ def _room_context(runtime, zone_ids):
             for item in runtime.building.equipment
             if item.kind == "floor_heating" and item.zone_id in zone_ids
         ],
+        "screen_wind": {
+            "status": runtime.wind.status,
+            "mode": runtime.wind_mode,
+            "entity_id": runtime.building.settings.weather_entity,
+            "speed_kmh": runtime.wind_speed,
+            "gust_kmh": runtime.wind_gust,
+            "speed_limit_kmh": runtime.building.settings.screen_wind_speed_limit,
+            "gust_limit_kmh": runtime.building.settings.screen_wind_gust_limit,
+            "open_required": runtime.wind.open_required,
+            "closing_blocked": runtime.wind.block_closing,
+            "calm_since": _iso(runtime.wind.memory.calm_since),
+            "next_check": _iso(runtime.wind.next_check),
+            "calm_minutes": runtime.building.settings.screen_wind_calm_minutes,
+        },
+        "screen_rain": {
+            "status": runtime.rain.status,
+            "entity_id": runtime.rain_source,
+            "open_required": runtime.rain.open_required,
+            "closing_blocked": runtime.rain.block_closing,
+            "dry_since": _iso(runtime.rain.memory.dry_since),
+            "next_check": _iso(runtime.rain.next_check),
+            "dry_minutes": runtime.building.settings.screen_rain_dry_minutes,
+            "max_age_minutes": runtime.building.settings.screen_rain_max_age_minutes,
+        },
         "screen_timing": {
             "minimum_move_minutes": runtime.building.settings.screen_min_move_minutes,
             "open_delay_minutes": runtime.building.settings.screen_open_delay_minutes,

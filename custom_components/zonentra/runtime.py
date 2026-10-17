@@ -51,6 +51,7 @@ from .observations import (
 )
 from .override import CommandTracker, classify_transition, update_override
 from .presence import MotionMemory, Occupancy, motion_state, occupancy, read_presence
+from .rain import RainMemory, RainProtection
 from .roomstate import (
     AUTO_FAN,
     Trend,
@@ -86,6 +87,7 @@ from .thermostat import (
     safe_modes,
     update_thermostat,
 )
+from .wind import WindMemory, WindProtection
 
 _LOGGER = logging.getLogger(__name__)
 UNIT_RUNNING = ("heat", "cool", "dry", "fan_only")
@@ -173,6 +175,14 @@ class BuildingRuntime(
         self._manual_checks: list = []
         self.vane_applied: dict[str, str] = {}  # zone -> heat / cool position set
         # 0.11 screens: sunshine memory, decisions, moves and manual overrides.
+        self.wind_memory = WindMemory()
+        self.wind_policy = None
+        self.wind = WindProtection("not_configured", self.wind_memory)
+        self.wind_speed = None
+        self.wind_gust = None
+        self.rain_memory = RainMemory()
+        self.rain_source = None
+        self.rain = RainProtection("not_configured", self.rain_memory)
         self.sun_memory = SunMemory()
         self.sunny: bool | None = None
         self.sun_power: float | None = None
@@ -183,6 +193,7 @@ class BuildingRuntime(
         self.screen_store = None
         self.screen_targets: dict = {}
         self.screen_retry_at: dict = {}
+        self.screen_retry_targets: dict = {}
         self.cover_tracker = CommandTracker(confirmation_seconds=240)
         self._screen_checks: list = []
         # 0.12 weather forecast of the coming hours: warm / neutral / cold day.
@@ -633,11 +644,16 @@ class BuildingRuntime(
         "motion_memories",
         "trends",
         "sun_memory",
+        "wind_memory",
+        "wind_policy",
+        "rain_memory",
+        "rain_source",
         "sunny",
         "screen_overrides",
         "screen_last_move",
         "screen_targets",
         "screen_retry_at",
+        "screen_retry_targets",
         "screen_decisions",
         "forecast",
         "forecast_error",

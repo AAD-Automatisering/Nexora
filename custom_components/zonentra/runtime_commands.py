@@ -165,7 +165,9 @@ class CommandRuntimeMixin:
         if item is None:
             entry["result"] = "blocked: equipment_removed"
             return False
-        if domain == "cover" and (guard := runtime._screen_guard(item)):
+        if domain == "cover" and (
+            guard := runtime._screen_guard(item, position=data.get("position"))
+        ):
             entry["result"] = f"blocked: {guard}"
             return False
         group_ids.add(item.group_id)

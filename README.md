@@ -45,6 +45,30 @@ zolang een airco in dezelfde ruimte op cool/dry staat. Uitschakelen van de
 vloerregeling laat de laatste instelling van de vloerthermostaat staan.
 De sensor **Opwarming met airco** signaleert langdurig onvoldoende opwarming;
 hij schakelt geen extra gasverwarming in.
+**Regenbeveiliging** staat standaard aan zodra een weerbron is gekoppeld. De
+actuele toestand van de centrale `weather`-entiteit wordt gebruikt, ook die van
+Pirate Weather. Bij regen/onweer/neerslag gaan ingeschakelde screens direct omhoog,
+zonder de gewone bewegingswachttijden of handmatige pauze. Na **30 minuten droog**
+mag de normale zonregeling weer sluiten, met de gewone sluitvertraging. Een
+blokkeer-entiteit blijft alle bewegingen blokkeren. Onbekende of meer dan 60 minuten
+niet gerapporteerde weerdata staan geen sluiting toe. Na eerder gemelde regen
+blijven de screens dan omhoog. Instelbaar via centrale **Zonwering**; daar kun je
+ook een aparte `weather`- of `binary_sensor`-regenbron kiezen. De screensensor
+verklaart de regenstatus en droogtijd. Pirate Weather kan een lokale bui missen
+of vertraagd melden; een fysieke regensensor reageert op de locatie zelf.
+
+**Windbeveiliging** gebruikt eveneens de centrale weerentiteit. De actuele melding
+`windy`/`windy-variant` haalt screens omhoog. Aparte fabrikantgrenzen voor
+windsnelheid en windstoten kun je in **Zonwering** toevoegen in km/u; er worden
+geen grenswaarden aangenomen. Zonder bekende grenzen werkt alleen de windmelding
+van de weerprovider. Na een alarm wacht Zonentra **30 minuten zonder windmelding**;
+met ingestelde grenzen moeten de beoordeelde waarden ook onder 80% van hun grens
+blijven. Regen en wind moeten beide vrijgeven voordat de zonregeling weer sluit.
+Onbruikbare of verouderde weerdata geven een actief alarm niet vrij. De screensensor
+toont windstatus, werkwijze, actuele waarden en grenzen. Pirate Weather kan lokale
+windstoten missen; deze aanvullende regeling geeft geen garantie voor de windbelasting
+van een specifieke screen.
+
 Laat geen andere regeling dezelfde apparaten tegelijk aansturen.
 
 Koppel elke binnenunit aan één ruimte en aan de werkelijke buitenunitgroep.

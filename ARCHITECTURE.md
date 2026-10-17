@@ -12,7 +12,7 @@ apparatuur. De integratie heeft geen aanvullende runtime-dependencies.
 | Configuratie en migratie | `config_flow.py`, `models.py`, `migration.py`, `topology.py` |
 | Bronkwaliteit en klimaatvraag | `observations.py`, `temperature.py`, `demand.py`, `presence.py` |
 | Groepsbeslissingen en simulatie | `engine.py`, `decision.py`, `indoor.py`, `control.py`, `override.py` |
-| Regelplannen | `executor.py`, `thermostat.py`, `roomstate.py`, `shading.py`, `bookings.py`, `forecast.py`, `floor_heating.py` |
+| Regelplannen | `executor.py`, `thermostat.py`, `roomstate.py`, `shading.py`, `rain.py`, `wind.py`, `bookings.py`, `forecast.py`, `floor_heating.py` |
 | Home Assistant-lifecycle en uitvoering | `__init__.py`, `runtime.py`, `runtime_commands.py`, `runtime_timing.py`, `runtime_helpers.py`, `runtime_shading.py`, `runtime_bookings.py`, `runtime_floor.py` |
 | Entiteiten en diagnostiek | `entity.py`, `climate.py`, `sensor.py`, `number.py`, `switch.py`, `diagnostics.py` |
 
@@ -37,6 +37,10 @@ vloerverwarming hebben daarnaast hun eigen toestemming.
 Vloerverwarming houdt een aparte vaste ondergrens aan (standaard 16 °C).
 De airco volgt de thermische ruimtevraag zonder op de vloer te wachten;
 koeling wacht op bevestigde uitschakeling van gekoppelde vloerthermostaten.
+Actuele regen en wind hebben voor screens een beschermend openingsdoel met een
+droge/rustige wachttijd. Dit deelt de bestaande coverdispatcher en bronlisteners.
+Natte en winderige periodes overleven een herstart; tijd offline telt niet als
+droog- of rustbewijs. Beide voorwaarden moeten vrijgeven voordat screens sluiten.
 De dispatcher controleert blokkades opnieuw vóór verzending. Stoppen, bevestigen, wachten en opnieuw starten
 vormen een afzonderlijke omschakelfase.
 

@@ -789,3 +789,82 @@ opnieuw een geldige ruimtetemperatuur zijn gerapporteerd. Zonder nieuwe rapporta
 is de uitkomst onbekend. Onderbreking of wegvallende vraag reset de observatie;
 voldoende stijging begint een nieuwe observatieperiode. Dit is uitsluitend een
 zichtbaar signaal, geen rendementsmeting of automatische verhoging van het gasdoel.
+
+## Regenbeveiliging van screens
+
+Regenbeveiliging gebruikt de actuele state van `screen_rain_entity` (weather of
+binary_sensor), of bij een lege keuze de centrale `weather_entity`. Zonder bron
+blijft de gewone zonregeling gelden. `screen_rain_protection` staat standaard aan.
+`rainy`, `pouring`, `lightning-rainy`, `hail`, `snowy` en `snowy-rainy` vragen omhoog;
+`lightning` wordt uit voorzorg hetzelfde behandeld, omdat Pirate Weather onweer
+naar die algemene HA-conditie vertaalt. Voor een binary_sensor is on nat en off
+droog. Een voorspelling, neerslagkans of dagsom wordt niet als regen-nu gebruikt.
+
+Bij neerslag krijgt iedere ingeschakelde screen een doel van 100%. Deze opening
+slaat zonne-stabilisatie, minimumtijd tussen bewegingen en handmatige pauzes over.
+Een lopende sluitopdracht wordt vervangen; een reeds lopende opening wordt niet
+herhaald. De centrale blokkeer-entiteit, beschikbaarheid van de cover en de
+ruimteschakelaar blijven leidend. De laatste servicecontrole blokkeert sluiten
+ook als de actuele bron sinds de planning nat of onbekend is geworden.
+
+Na regen blijft het openingsdoel staan tot de bron onafgebroken droog is geweest
+voor `screen_rain_dry_minutes` (standaard 30). Nieuwe regen of onbruikbare data
+reset de droogtijd. Daarna gelden de normale zonvoorwaarden, minimumtijd tussen
+bewegingen en sluitstabilisatie opnieuw. Uitval/restored/assumed/ongeldige states
+of weather-rapporten ouder dan `screen_rain_max_age_minutes` (standaard 60) gelden als
+onbekend. Zonder eerdere regen blokkeert onbekend alleen het sluiten; na regen
+houdt het ook het openingsdoel vast. Rapporten worden bij verlopen opnieuw
+beoordeeld via een deadline, ook zonder nieuwe events. Een binary_sensor volgt
+state-based validatie: een ongewijzigde beschikbare off-state wordt niet oud
+verklaard, omdat fysieke regensensoren vaak alleen veranderingen melden.
+
+Een configuratiereload bewaart de lopende droogtijd. De nat-status wordt lokaal
+opgeslagen voor dezelfde bron; na een volledige herstart begint de droogtijd
+opnieuw, omdat tijd offline geen bewijs van droog weer is. Servicefouten krijgen
+een begrensde herpoging; een mislukte sluiting vertraagt de regenopening niet.
+De screensensor en diagnostiek tonen reden, regenstatus, blokkade en vrijgavetijd.
+
+Pirate Weather levert weersinformatie op afstand; de huidige conditie kan een
+lokale bui missen of later melden. Een gekoppelde fysieke regensensor kan dezelfde
+regeling voeden. Broncontrole: [Pirate Weather 1.9.2 weather.py](https://github.com/Pirate-Weather/pirate-weather-ha/blob/v1.9.2/custom_components/pirateweather/weather.py).
+
+## Windbeveiliging via actuele weergegevens
+
+`screen_wind_protection` staat standaard aan en gebruikt de centrale weather-bron.
+Actuele `windy`/`windy-variant` geeft direct hetzelfde beschermende openingsdoel als
+regen. Dit werkt ook zolang fabrikantgrenzen onbekend zijn; er wordt geen numerieke
+veiligheidsgrens verzonnen. `screen_wind_speed_limit` en `screen_wind_gust_limit`
+zijn afzonderlijk optioneel in km/u. Een ingestelde grens wordt ook beoordeeld:
+wind >= grens of windstoot >= grens vraagt direct omhoog, ongeacht of de andere
+waarde beschikbaar is. De weerprovider-windmelding blijft een extra reden om te
+openen, ook met ingestelde grenzen. Richting, gevel en voorspellingen spelen voor
+dit beschermende doel geen rol.
+
+De weather-attributen `wind_speed` en `wind_gust_speed` gebruiken de gepubliceerde
+`wind_speed_unit`: km/h, m/s, mph, kn of ft/s worden omgerekend naar km/u. Negatieve,
+niet-eindige of ontbrekende waarden en onbekende eenheden zijn geen nulmeting.
+Zonder numerieke grens telt uitsluitend een bekende actuele weerconditie; met
+grenzen moeten alle beoordeelde waarden beschikbaar zijn om sluiten vrij te geven.
+
+Een windalarm blijft staan tot de provider geen windmelding meer geeft en, waar
+grenzen zijn ingesteld, alle beoordeelde waarden <= 80% van hun grens zijn.
+Daarna moet dit onafgebroken `screen_wind_calm_minutes` (standaard 30) aanhouden.
+Ontbrekende, restored, assumed of te oude gegevens (`screen_wind_max_age_minutes`,
+standaard 60) resetten de rustige periode. Zonder eerder alarm blokkeren onbekende
+gegevens alleen sluiten; na alarm blijft ook het openingsdoel staan. Wind gaat
+voor regen in de getoonde beslisreden; beide blokkades moeten vrij zijn voordat
+de normale regeling weer mag zakken. Gewone minimumtijden, handmatige pauze en
+sluitvertraging volgen dezelfde regels als bij regenbeveiliging.
+
+De actieve windstatus wordt lokaal bewaard voor dezelfde weerbron; na herstart
+begint een rustige periode opnieuw. Een configuratiereload bewaart de timer;
+wijziging van bron of windgrenzen start een lopende rustige periode opnieuw.
+Bron, werkwijze, actuele waarden, grenzen en vrijgavetijd zijn zichtbaar in de
+screensensor en de geredigeerde diagnostiek. Een centrale blokkeer-entiteit houdt
+voorrang op alle bewegingen, ook als het weer een windalarm meldt.
+
+Pirate Weather levert actuele weerinformatie op afstand, geen lokale windmeting.
+Een ontbrekende windmelding bewijst daarom geen veilige windbelasting bij de gevel.
+Voor numerieke grenzen blijven de specificaties van de screenfabrikant leidend.
+Bronnen: [Pirate Weather 1.9.2](https://github.com/Pirate-Weather/pirate-weather-ha/blob/v1.9.2/custom_components/pirateweather/weather.py),
+[Home Assistant weather-attributen](https://www.home-assistant.io/integrations/weather/#state-attributes).

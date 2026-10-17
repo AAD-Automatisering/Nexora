@@ -141,7 +141,7 @@
       },
       "screens": {
         "title": "Zonwering",
-        "description": "De zon schijnt volgens het vermogen van de zonnepanelen; wind en regen blijven bij de eigen alarmen van het gebouw (blokkeer-entiteit). De schakelaar Zonweringregeling per ruimte bepaalt of de zonwering echt beweegt.",
+        "description": "Regenbeveiliging gebruikt de actuele toestand van de regenbron, standaard de centrale weerentiteit (ook Pirate Weather). Bij regen/onweer/neerslag direct omhoog; pas na de droogtijd weer zonwering. Omhoog negeert gewone wachttijden en handmatige pauzes. De blokkeer-entiteit blijft alle bewegingen blokkeren. Weerdata op afstand kunnen lokale regen missen of later melden. Windbeveiliging gebruikt actuele wind en windstoten van de centrale weerentiteit, met aparte fabrikantgrenzen in km/u. Zonder bekende fabrikantgrenzen wordt alleen de actuele melding windy/windy-variant gebruikt; dit is geen garantie dat de wind veilig is. Na alarm moeten de beoordeelde waarden gedurende de rustige periode onder 80% van hun grens blijven. Zowel wind- als regenbeveiliging moet vrijgeven voordat screens weer mogen zakken.",
         "data": {
           "sun_power_entity": "Vermogen zonnepanelen (zon schijnt)",
           "sun_power_threshold": "Vermogen waarboven de zon schijnt (W)",
@@ -151,7 +151,16 @@
           "sun_entity": "Zonstand-entiteit (standaard sun.sun)",
           "screen_min_move_minutes": "Minimale tijd tussen automatische bewegingen (minuten; standaard 30)",
           "screen_open_delay_minutes": "Stabiele vraag vóór omhoog (minuten; standaard 15)",
-          "screen_shade_delay_minutes": "Stabiele vraag vóór omlaag (minuten; standaard 5)"
+          "screen_shade_delay_minutes": "Stabiele vraag vóór omlaag (minuten; standaard 5)",
+          "screen_rain_protection": "Regenbeveiliging inschakelen (standaard aan met weerbron)",
+          "screen_rain_entity": "Regenbron (optioneel; weather of binary_sensor; leeg = centrale weerentiteit)",
+          "screen_rain_dry_minutes": "Droogtijd vóór zonwering weer mag zakken (minuten; standaard 30)",
+          "screen_rain_max_age_minutes": "Maximale rapportleeftijd weather-bron (minuten; standaard 60; binary_sensor volgt beschikbaarheid)",
+          "screen_wind_protection": "Windbeveiliging gebruiken (actuele windmelding; grenzen optioneel)",
+          "screen_wind_speed_limit": "Maximale gemiddelde wind (km/u; vul fabrikantgrens in, leeg = niet beoordelen)",
+          "screen_wind_gust_limit": "Maximale windstoot (km/u; vul fabrikantgrens in, leeg = niet beoordelen)",
+          "screen_wind_calm_minutes": "Rustige periode vóór zonwering weer mag zakken (minuten; standaard 30)",
+          "screen_wind_max_age_minutes": "Maximale rapportleeftijd windweerdata (minuten; standaard 60)"
         }
       },
       "forecast": {
@@ -275,7 +284,16 @@
           "screen_min_move_minutes": "Minimale tijd tussen automatische bewegingen (minuten; standaard 30)",
           "screen_open_delay_minutes": "Stabiele vraag vóór omhoog (minuten; standaard 15)",
           "screen_shade_delay_minutes": "Stabiele vraag vóór omlaag (minuten; standaard 5)",
-          "floor_heating_limit": "Vloerverwarming: vaste ondergrens kamertemperatuur (°C; standaard 16)"
+          "floor_heating_limit": "Vloerverwarming: vaste ondergrens kamertemperatuur (°C; standaard 16)",
+          "screen_rain_protection": "Regenbeveiliging inschakelen (standaard aan met weerbron)",
+          "screen_rain_entity": "Regenbron (optioneel; weather of binary_sensor; leeg = centrale weerentiteit)",
+          "screen_rain_dry_minutes": "Droogtijd vóór zonwering weer mag zakken (minuten; standaard 30)",
+          "screen_rain_max_age_minutes": "Maximale rapportleeftijd weather-bron (minuten; standaard 60; binary_sensor volgt beschikbaarheid)",
+          "screen_wind_protection": "Windbeveiliging gebruiken (actuele windmelding; grenzen optioneel)",
+          "screen_wind_speed_limit": "Maximale gemiddelde wind (km/u; vul fabrikantgrens in, leeg = niet beoordelen)",
+          "screen_wind_gust_limit": "Maximale windstoot (km/u; vul fabrikantgrens in, leeg = niet beoordelen)",
+          "screen_wind_calm_minutes": "Rustige periode vóór zonwering weer mag zakken (minuten; standaard 30)",
+          "screen_wind_max_age_minutes": "Maximale rapportleeftijd windweerdata (minuten; standaard 60)"
         }
       },
       "zone_settings": {

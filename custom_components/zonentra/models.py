@@ -141,6 +141,15 @@ class BuildingSettings:
     sun_power_entity: str | None = None
     sun_power_threshold: float = 1000.0  # W
     sun_entity: str = "sun.sun"
+    screen_rain_protection: bool = True
+    screen_rain_entity: str | None = None
+    screen_rain_dry_minutes: float = 30.0
+    screen_rain_max_age_minutes: float = 60.0
+    screen_wind_protection: bool = True
+    screen_wind_speed_limit: float | None = None
+    screen_wind_gust_limit: float | None = None
+    screen_wind_calm_minutes: float = 30.0
+    screen_wind_max_age_minutes: float = 60.0
     screen_block_entity: str | None = None  # configured: only valid off allows moves
     screen_shade_position: float = 0.0  # % (100 = open)
     screen_override_minutes: float = 120.0
@@ -206,12 +215,22 @@ class Building:
                     "presence_entity",
                     "sun_power_entity",
                     "screen_block_entity",
+                    "screen_rain_entity",
                 )
                 if (entity := getattr(self.settings, key))
             ]
             # The sun position only matters with screens (0.11).
             + (
                 [self.settings.sun_entity]
+                + (
+                    [self.settings.weather_entity]
+                    if self.settings.weather_entity
+                    and (
+                        self.settings.screen_rain_protection
+                        or self.settings.screen_wind_protection
+                    )
+                    else []
+                )
                 if any(item.kind == "shading" for item in self.equipment)
                 else []
             )
@@ -284,6 +303,18 @@ def build_model(building_id: str, name: str, topology: dict[str, Any]) -> Buildi
     _entity(settings.sun_power_entity, ("sensor",))
     _entity(settings.sun_entity, ("sun",))
     _entity(settings.screen_block_entity, ("binary_sensor", "input_boolean"))
+    if not isinstance(settings.screen_rain_protection, bool):
+        raise ValueError("invalid_parameters")
+    _entity(settings.screen_rain_entity, ("weather", "binary_sensor"))
+    _range(settings.screen_rain_dry_minutes, 5, 240)
+    _range(settings.screen_rain_max_age_minutes, 5, 180)
+    if not isinstance(settings.screen_wind_protection, bool):
+        raise ValueError("invalid_parameters")
+    for key in ("screen_wind_speed_limit", "screen_wind_gust_limit"):
+        if getattr(settings, key) is not None:
+            _range(getattr(settings, key), 1, 200)
+    _range(settings.screen_wind_calm_minutes, 5, 240)
+    _range(settings.screen_wind_max_age_minutes, 5, 180)
     _range(settings.sun_power_threshold, 0, 1_000_000)
     _range(settings.screen_shade_position, 0, 100)
     _range(settings.screen_override_minutes, 5, 720)

@@ -141,7 +141,7 @@
       },
       "screens": {
         "title": "Screens",
-        "description": "Sunshine from the solar power; wind and rain stay with the building's own alarms (block entity). Each room's Screen regulation switch decides whether screens really move.",
+        "description": "Rain protection uses the current rain-source state, defaulting to the central weather entity (including Pirate Weather). Rain/thunder/precipitation opens screens immediately; shading resumes after the dry hold. Opening bypasses normal delays and manual pauses. The block entity still blocks every move. Remote weather data may miss or report local rain late. Wind protection uses current wind and gust attributes of the central weather entity, with separate manufacturer limits in km/h. Without known manufacturer limits, only the current windy/windy-variant condition is used; this does not establish safe local wind. After an alarm, checked readings must remain at or below 80% of their limits during the calm hold. Both wind and rain must release before shading may lower again.",
         "data": {
           "sun_power_entity": "Solar power sensor (sunshine)",
           "sun_power_threshold": "Solar power above which the sun shines (W)",
@@ -151,7 +151,16 @@
           "sun_entity": "Sun position entity (default sun.sun)",
           "screen_min_move_minutes": "Minimum time between automatic movements (minutes; default 30)",
           "screen_open_delay_minutes": "Stable demand before opening (minutes; default 15)",
-          "screen_shade_delay_minutes": "Stable demand before shading (minutes; default 5)"
+          "screen_shade_delay_minutes": "Stable demand before shading (minutes; default 5)",
+          "screen_rain_protection": "Enable rain protection (default on with weather source)",
+          "screen_rain_entity": "Rain source (optional weather or binary_sensor; empty = central weather entity)",
+          "screen_rain_dry_minutes": "Dry hold before shading may lower again (minutes; default 30)",
+          "screen_rain_max_age_minutes": "Maximum weather report age (minutes; default 60; binary_sensor uses availability)",
+          "screen_wind_protection": "Use wind protection (current wind condition; limits optional)",
+          "screen_wind_speed_limit": "Maximum sustained wind (km/h; enter manufacturer limit, empty = not checked)",
+          "screen_wind_gust_limit": "Maximum wind gust (km/h; enter manufacturer limit, empty = not checked)",
+          "screen_wind_calm_minutes": "Calm hold before shading may lower again (minutes; default 30)",
+          "screen_wind_max_age_minutes": "Maximum wind weather report age (minutes; default 60)"
         }
       },
       "forecast": {
@@ -275,7 +284,16 @@
           "screen_min_move_minutes": "Minimum time between automatic movements (minutes; default 30)",
           "screen_open_delay_minutes": "Stable demand before opening (minutes; default 15)",
           "screen_shade_delay_minutes": "Stable demand before shading (minutes; default 5)",
-          "floor_heating_limit": "Floor heating: fixed minimum room temperature (°C; default 16)"
+          "floor_heating_limit": "Floor heating: fixed minimum room temperature (°C; default 16)",
+          "screen_rain_protection": "Enable rain protection (default on with weather source)",
+          "screen_rain_entity": "Rain source (optional weather or binary_sensor; empty = central weather entity)",
+          "screen_rain_dry_minutes": "Dry hold before shading may lower again (minutes; default 30)",
+          "screen_rain_max_age_minutes": "Maximum weather report age (minutes; default 60; binary_sensor uses availability)",
+          "screen_wind_protection": "Use wind protection (current wind condition; limits optional)",
+          "screen_wind_speed_limit": "Maximum sustained wind (km/h; enter manufacturer limit, empty = not checked)",
+          "screen_wind_gust_limit": "Maximum wind gust (km/h; enter manufacturer limit, empty = not checked)",
+          "screen_wind_calm_minutes": "Calm hold before shading may lower again (minutes; default 30)",
+          "screen_wind_max_age_minutes": "Maximum wind weather report age (minutes; default 60)"
         }
       },
       "zone_settings": {

@@ -48,6 +48,8 @@ def weather(hass, *temperatures, error=None):
 
 async def office(hass, temperature="22.5", **building):
     """West zone (comfort 22-24) with a south screen in the sun."""
+    if hass.states.get(WEATHER) is None:
+        hass.states.async_set(WEATHER, "sunny")
     hass.states.async_set("sensor.west_temperature", temperature, CELSIUS)
     hass.states.async_set("sensor.solar_power", "2500", {"unit_of_measurement": "W"})
     hass.states.async_set("sun.sun", "above_horizon", {"azimuth": 180, "elevation": 50})

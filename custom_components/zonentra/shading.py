@@ -15,7 +15,9 @@ Per screen, in order:
 7. otherwise down when the room is in the warm half of its band, up in the
    cold half (with hysteresis).
 
-Wind/rain alarms stay with KNX; a block entity stops all commands. A person
+Wind and rain protection override these comfort rules in the runtime. Current
+weather or a binary rain sensor opens screens until calm/dry holds end. A
+block entity (for example a KNX motor/wind interlock) stops all commands. A person
 moving a screen (Home Assistant or room controller) is respected for the
 manual override time. HA cover positions: 100 = open (up), 0 = closed (down).
 """

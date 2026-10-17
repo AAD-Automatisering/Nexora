@@ -9,9 +9,11 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 from .executor import ModeCommand
 from .observations import cover_position
+from .rain import RainMemory, RainProtection, current_rain, rain_protection
 from .runtime_helpers import _origin
 from .shading import (
     MIN_STEP,
+    ScreenDecision,
     ScreenMove,
     decide_screen,
     plan_screen_move,
@@ -19,6 +21,7 @@ from .shading import (
     sun_on_facade,
     sunny_state,
 )
+from .wind import WindMemory, WindProtection, speed_kmh, wind_protection
 
 SCREEN_RETRY_SECONDS = 120
 
@@ -46,6 +49,29 @@ class ShadingRuntimeMixin:
         if not isinstance(data, dict):
             return
         now = dt_util.utcnow()
+        rain = data.get("__rain__", {})
+        settings = self.building.settings
+        source = settings.screen_rain_entity or settings.weather_entity
+        if (
+            isinstance(rain, dict)
+            and rain.get("wet") is True
+            and rain.get("entity_id") == source
+        ):
+            # Time offline is not evidence of continuous dry weather.
+            self.rain_source = source
+            self.rain_memory = RainMemory(True)
+        wind = data.get("__wind__", {})
+        if (
+            isinstance(wind, dict)
+            and wind.get("active") is True
+            and wind.get("entity_id") == settings.weather_entity
+        ):
+            self.wind_policy = (
+                settings.weather_entity,
+                settings.screen_wind_speed_limit,
+                settings.screen_wind_gust_limit,
+            )
+            self.wind_memory = WindMemory(True)
         for item in self.building.equipment:
             record = data.get(item.id)
             if item.kind != "shading" or not isinstance(record, dict):
@@ -70,17 +96,34 @@ class ShadingRuntimeMixin:
             return
         self.screen_store.async_delay_save(
             lambda: {
-                item.id: {
-                    "entity_id": item.entity_id,
-                    "last_move": self.screen_last_move[item.id].isoformat()
-                    if item.id in self.screen_last_move
-                    else None,
-                    "override_until": self.screen_overrides[item.id].isoformat()
-                    if item.id in self.screen_overrides
-                    else None,
-                }
-                for item in self.building.equipment
-                if item.kind == "shading"
+                **(
+                    {"__rain__": {"entity_id": self.rain_source, "wet": True}}
+                    if self.rain_memory.wet
+                    else {}
+                ),
+                **(
+                    {
+                        "__wind__": {
+                            "entity_id": self.building.settings.weather_entity,
+                            "active": True,
+                        }
+                    }
+                    if self.wind_memory.active
+                    else {}
+                ),
+                **{
+                    item.id: {
+                        "entity_id": item.entity_id,
+                        "last_move": self.screen_last_move[item.id].isoformat()
+                        if item.id in self.screen_last_move
+                        else None,
+                        "override_until": self.screen_overrides[item.id].isoformat()
+                        if item.id in self.screen_overrides
+                        else None,
+                    }
+                    for item in self.building.equipment
+                    if item.kind == "shading"
+                },
             },
             1,
         )
@@ -157,6 +200,16 @@ class ShadingRuntimeMixin:
                     pending.entity_id, pending.expected_state, "timeout"
                 )
         checks = []
+        self._update_wind(now)
+        if self.wind.next_check:
+            checks.append(self.wind.next_check)
+        if expiry := self._wind_expiry(now):
+            checks.append(expiry)
+        self._update_rain(now)
+        if self.rain.next_check:
+            checks.append(self.rain.next_check)
+        if expiry := self._rain_expiry(now):
+            checks.append(expiry)
         self.sun_power = _power(sources.get(settings.sun_power_entity))
         if settings.sun_power_entity:
             self.sunny, self.sun_memory, check = sunny_state(
@@ -200,25 +253,82 @@ class ShadingRuntimeMixin:
                 occupied=self.zone_bands[zone.id][0] == "comfort"
                 or self.thermostat(zone.id).manual,
             )
+            protective = self.wind.open_required or self.rain.open_required
+            if self.wind.open_required:
+                decision = ScreenDecision(
+                    "open",
+                    100,
+                    "wind"
+                    if self.wind.status == "wind"
+                    else "wind_calming"
+                    if self.wind.status == "calming"
+                    else "wind_unknown",
+                )
+            elif self.rain.open_required:
+                decision = ScreenDecision(
+                    "open",
+                    100,
+                    "rain"
+                    if self.rain.status == "rain"
+                    else "rain_drying"
+                    if self.rain.status == "drying"
+                    else "rain_unknown",
+                )
+            elif (
+                (self.rain.block_closing or self.wind.block_closing)
+                and decision.position is not None
+                and decision.position < 100
+            ):
+                decision = ScreenDecision(
+                    "hold",
+                    None,
+                    "wind_unknown" if self.wind.block_closing else "rain_unknown",
+                )
             override = self.screen_overrides.get(item.id)
             if override is not None and now >= override:
                 del self.screen_overrides[item.id]  # Manual time is over.
                 self._save_screen_state()
                 override = None
             state = self.hass.states.get(item.entity_id)
+            pending = next(
+                (
+                    pending
+                    for pending in self.cover_tracker.pending
+                    if pending.entity_id == item.entity_id
+                ),
+                None,
+            )
+            if protective and pending and pending.expected_state != "100":
+                self._cover_confirmation(
+                    item.entity_id, pending.expected_state, "superseded"
+                )
+                self.cover_tracker.cancel(item.entity_id)
+            current = cover_position(state) if state else None
+            if (
+                protective
+                and state is not None
+                and (state.state == "closing" or current is not None and current < 100)
+            ):
+                # The ordinary 10% position tolerance must not leave wet
+                # fabric partially extended or allow a closing move to finish.
+                current = None
             move = plan_screen_move(
                 decision,
-                cover_position(state) if state else None,
-                self.screen_last_move.get(item.id),
+                current,
+                None if protective else self.screen_last_move.get(item.id),
                 now,
                 enabled=self.active_capable
                 and self.thermostat(zone.id).screen_regulation,
                 blocked=blocked,
-                override_until=override,
+                override_until=None if protective else override,
                 busy=self.cover_tracker.is_pending(item.entity_id, now),
                 interval_seconds=settings.screen_min_move_minutes * 60,
             )
-            retry_at = self.screen_retry_at.get(item.id)
+            retry_at = (
+                self.screen_retry_at.get(item.id)
+                if not protective or self.screen_retry_targets.get(item.id) == 100
+                else None
+            )
             if move.status == "move" and retry_at and now < retry_at:
                 move = ScreenMove("retry", next_check=retry_at)
             if move.status == "move" and (guard := self._screen_guard(item)):
@@ -231,6 +341,7 @@ class ShadingRuntimeMixin:
                 move.status in ("move", "interval", "retry")
                 and self._screen_guard(item) is None
                 and available
+                and not protective
             ):
                 delay = (
                     settings.screen_open_delay_minutes
@@ -274,6 +385,11 @@ class ShadingRuntimeMixin:
         async def send():
             # Register before the service can publish its confirmation state.
             self.cover_tracker.register(item.entity_id, str(position), now)
+            registered = next(
+                pending
+                for pending in self.cover_tracker.pending
+                if pending.entity_id == item.entity_id
+            )
             success = await self._call(
                 "set_cover_position",
                 {"entity_id": item.entity_id, "position": position},
@@ -288,9 +404,12 @@ class ShadingRuntimeMixin:
                 runtime.screen_last_move[item.id] = now
                 runtime._save_screen_state()
                 runtime.screen_retry_at.pop(item.id, None)
+                runtime.screen_retry_targets.pop(item.id, None)
             else:
                 entry["confirmation"] = "not_sent"
-                runtime.cover_tracker.cancel(item.entity_id)
+                if registered in runtime.cover_tracker.pending:
+                    runtime.cover_tracker.cancel(item.entity_id)
+                runtime.screen_retry_targets[item.id] = position
                 runtime.screen_retry_at[item.id] = dt_util.utcnow() + timedelta(
                     seconds=SCREEN_RETRY_SECONDS
                 )
@@ -307,6 +426,191 @@ class ShadingRuntimeMixin:
             ):
                 entry["confirmation"] = status
                 return
+
+    def _wind_configured(self):
+        settings = self.building.settings
+        return settings.screen_wind_protection and (
+            settings.weather_entity is not None
+            or settings.screen_wind_speed_limit is not None
+            or settings.screen_wind_gust_limit is not None
+        )
+
+    @property
+    def wind_mode(self):
+        settings = self.building.settings
+        return (
+            "limits_and_weather"
+            if settings.screen_wind_speed_limit is not None
+            or settings.screen_wind_gust_limit is not None
+            else "weather_condition"
+        )
+
+    def _wind_state(self, now):
+        settings = self.building.settings
+        state = (
+            self.hass.states.get(settings.weather_entity)
+            if settings.weather_entity
+            else None
+        )
+        if (
+            state is None
+            or state.state in ("unknown", "unavailable")
+            or state.attributes.get("restored")
+            or state.attributes.get("assumed_state")
+            or not -5
+            <= (now - state.last_reported).total_seconds()
+            < settings.screen_wind_max_age_minutes * 60
+        ):
+            return None
+        return state
+
+    def _wind_readings(self, now):
+        state = self._wind_state(now)
+        if state is None:
+            return None, None
+        unit = state.attributes.get("wind_speed_unit")
+        return tuple(
+            speed_kmh(state.attributes.get(key), unit)
+            for key in ("wind_speed", "wind_gust_speed")
+        )
+
+    def _wind_expiry(self, now):
+        settings = self.building.settings
+        state = (
+            self.hass.states.get(settings.weather_entity)
+            if settings.weather_entity and self._wind_configured()
+            else None
+        )
+        if state is not None:
+            until = state.last_reported + timedelta(
+                minutes=settings.screen_wind_max_age_minutes
+            )
+            if until > now:
+                return until
+        return None
+
+    def _update_wind(self, now):
+        settings = self.building.settings
+        policy = (
+            settings.weather_entity,
+            settings.screen_wind_speed_limit,
+            settings.screen_wind_gust_limit,
+        )
+        memory = self.wind_memory
+        if policy != self.wind_policy:
+            memory = WindMemory(memory.active)
+        self.wind_policy = policy
+        self.wind_speed, self.wind_gust = self._wind_readings(now)
+        if not self._wind_configured():
+            status = (
+                "disabled" if not settings.screen_wind_protection else "not_configured"
+            )
+            self.wind = WindProtection(status, WindMemory())
+        else:
+            self.wind = wind_protection(
+                self.wind_speed,
+                self.wind_gust,
+                settings.screen_wind_speed_limit,
+                settings.screen_wind_gust_limit,
+                memory,
+                now,
+                settings.screen_wind_calm_minutes,
+                condition=state.state
+                if (state := self._wind_state(now)) is not None
+                else None,
+            )
+        self.wind_memory = self.wind.memory
+        if self.wind_memory != memory:
+            self._save_screen_state()
+
+    def _wind_blocks_closing(self, now):
+        if not self._wind_configured():
+            return False
+        settings = self.building.settings
+        speed, gust = self._wind_readings(now)
+        return wind_protection(
+            speed,
+            gust,
+            settings.screen_wind_speed_limit,
+            settings.screen_wind_gust_limit,
+            self.wind_memory,
+            now,
+            settings.screen_wind_calm_minutes,
+            condition=state.state
+            if (state := self._wind_state(now)) is not None
+            else None,
+        ).block_closing
+
+    def _rain_source(self):
+        settings = self.building.settings
+        return (
+            (settings.screen_rain_entity or settings.weather_entity)
+            if settings.screen_rain_protection
+            else None
+        )
+
+    def _rain_reading(self, now):
+        entity_id = self._rain_source()
+        state = self.hass.states.get(entity_id) if entity_id else None
+        if (
+            state is None
+            or state.attributes.get("restored")
+            or state.attributes.get("assumed_state")
+        ):
+            return None
+        max_age = self.building.settings.screen_rain_max_age_minutes * 60
+        if (
+            entity_id.startswith("weather.")
+            and not -5 <= (now - state.last_reported).total_seconds() < max_age
+        ):
+            return None
+        return current_rain(state.state, entity_id.split(".", 1)[0])
+
+    def _rain_expiry(self, now):
+        entity_id = self._rain_source()
+        state = self.hass.states.get(entity_id) if entity_id else None
+        if state is not None and entity_id.startswith("weather."):
+            expiry = state.last_reported + timedelta(
+                minutes=self.building.settings.screen_rain_max_age_minutes
+            )
+            if expiry > now:
+                return expiry
+        return None
+
+    def _update_rain(self, now):
+        source = self._rain_source()
+        memory = self.rain_memory
+        if source != self.rain_source:
+            memory = RainMemory(memory.wet)
+        self.rain_source = source
+        if source is None:
+            status = (
+                "disabled"
+                if not self.building.settings.screen_rain_protection
+                else "not_configured"
+            )
+            self.rain = RainProtection(status, RainMemory())
+        else:
+            self.rain = rain_protection(
+                self._rain_reading(now),
+                memory,
+                now,
+                self.building.settings.screen_rain_dry_minutes,
+            )
+        self.rain_memory = self.rain.memory
+        if self.rain_memory != memory:
+            self._save_screen_state()
+
+    def _rain_blocks_closing(self, now):
+        if self._rain_source() is None:
+            return False
+        # Re-read live inputs: a rain update may arrive after planning a close.
+        return rain_protection(
+            self._rain_reading(now),
+            self.rain_memory,
+            now,
+            self.building.settings.screen_rain_dry_minutes,
+        ).block_closing
 
     def _screen_block(self) -> str | None:
         """Only a trustworthy off state releases a configured block."""
@@ -325,7 +629,7 @@ class ShadingRuntimeMixin:
             return "block_unknown"
         return "blocked" if state.state == "on" else None
 
-    def _screen_guard(self, item) -> str | None:
+    def _screen_guard(self, item, position=None) -> str | None:
         """Recheck live inputs immediately before dispatching a movement."""
         if (
             not self.active_capable
@@ -334,6 +638,18 @@ class ShadingRuntimeMixin:
             return "screen_disabled"
         if block := self._screen_block():
             return block
+        if (
+            position is not None
+            and position < 100
+            and self._wind_blocks_closing(dt_util.utcnow())
+        ):
+            return "wind_blocked"
+        if (
+            position is not None
+            and position < 100
+            and self._rain_blocks_closing(dt_util.utcnow())
+        ):
+            return "rain_blocked"
         state = self.hass.states.get(item.entity_id)
         if (
             state is None
